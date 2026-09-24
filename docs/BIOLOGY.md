@@ -61,7 +61,8 @@ mannose uptake system is deleted (ΔmanXYZ), so PtsG is the only way glucose get
   enzyme.
 - Each player protein has one job: PtsG carries glucose in, the glucose-processing enzymes
   ferment it, LacY carries lactose in, LacZ (active as a tetramer) splits it, and the
-  amino-acid enzymes and importers supply amino acids. Flagellin has no job in a still flask.
+  amino-acid enzymes and importers supply amino acids. Flagellin does no work here: the other
+  flagellum genes are missing, so no flagellum is built and it stays inside the cell.
 - In the lab, proteins are not degraded. Their concentration falls only by dilution: the count
   never drops between divisions and is split in two at each division.
 - At steady state, synthesis equals removal, so doubling a promoter roughly doubles its
@@ -114,6 +115,13 @@ mannose uptake system is deleted (ΔmanXYZ), so PtsG is the only way glucose get
   and LacZ to be split into glucose and galactose. Without either protein, lactose gives no
   energy.
 - Lactose outside a cell with no LacY changes nothing inside it.
+- Switching a cell from glucose to lactose needs enough LacY and LacZ already made. LacY
+  import needs ATP, so a cell with too little of them runs out of ATP and stops: ×1 for 30 min
+  before removing glucose stops on every seed tested; ×4 for 45 min or more (or ×1 for two
+  hours) keeps growing (8 of 8 seeds). Real E. coli adapts after a lag instead (open item 1).
+  Adding glucose back restarts a stopped cell within about 5 min; the narrator's line for the
+  stopped cell is "Lactose is outside, but there is too little LacY and LacZ to keep ATP up, so
+  the cell has stopped."
 
 ## Drugs
 
@@ -241,7 +249,11 @@ Engineering tests (determinism, replay, mass balance, fuzzing, build checks) are
 Each item gives the short form for students first (the lab's "About this cell" sheet carries
 short forms like these), then the detail for instructors.
 
-1. **Lab strain.** *"Each gene here is on its own switch; real cells regulate them."*
+1. **Lab strain.** *"Each gene here has its own switch, and you set it; real cells switch genes
+   with regulator proteins that sense conditions."* Also: *"Real E. coli keeps its lac genes
+   nearly off while glucose is present; here you control them."* and *"'Off' still leaks a
+   little, so a switched-off gene makes a few proteins."* and *"This strain has no second
+   glucose transporter."*
    There is no lac operon and no regulation in M1. "Off" leaves a 1/1,000 leak; a knockout
    removes the gene (engine only; not offered in the lab). The strain lacks the mannose uptake
    system, so without PtsG no glucose gets in. A backup-transporter option (engine config only
@@ -264,6 +276,12 @@ short forms like these), then the detail for instructors.
    - The ATP pool turns over in ≈ 2.7 s, somewhat slower than in real cells (1–2 s).
    - Glycolysis needs a little ATP to start (priming). A small reserve, the seed, stands for PEP
      and other intermediates. Level 1.3 removes it.
+   - *"ATP falls further here than in real cells, which keep some ATP from stored reserves and
+     slow their ribosomes instead."* When carbon is short the charge drops far lower than in
+     real carbon-limited E. coli (glucose Low: E ≈ 0.04 at 30 min, 0.12 at 2 h, 0.28 at 4 h,
+     at about half the normal growth rate). A starved cell sits at the E floor, 3.5·10⁻⁹ mM of
+     ATP, which the graphs show as "< 0.01 mM". For spring: make translation demand give way to
+     low E sooner, with a test that low glucose keeps E > 0.6 (without breaking the g tests).
 5. **Amino acids.** *"All twenty amino acids are treated as one pool."*
    The pool stands in for charged tRNA. Its carbon cost (0.8 glucose per amino acid) is derived,
    not measured.
@@ -276,7 +294,9 @@ short forms like these), then the detail for instructors.
      elongate more slowly. A new lacZ mRNA therefore takes ≈ 90–100 s here, against 60–85 s in
      Vogel & Jensen's aerobic measurements (test a5).
    - A transcript is charged for its whole final tick.
-7. **Drugs.** *"Drugs act instantly here; there is no uptake and no resistance."*
+7. **Drugs.** *"Drugs act instantly, with no uptake and no resistance; otherwise each acts as
+   rifampicin or chloramphenicol does."* The controls are labelled "Rifampicin-type" and
+   "Chloramphenicol-type"; the badges and narrator use the plain names.
    - Chloramphenicol binds reversibly: at any moment a fraction of ribosomes is stalled, running
      ribosomes keep their speed, and RNA polymerase slows by about a third (extrapolated).
    - Without energy spilling, the energy charge rises under chloramphenicol; this is reported as
@@ -297,7 +317,8 @@ short forms like these), then the detail for instructors.
     galactose are assumed present."*
     LacY runs on the proton gradient, and each lactose costs about ⅓ ATP. There is no LacA.
 12. **Flagellin.** *"Flagellin stays inside the cell: no flagellum is built, and the cell does
-    not swim."*
+    not swim."* The card says: *"Many flagellin molecules form the flagellum a cell swims with;
+    the other flagellum genes are missing here, so it stays inside."*
 13. **No death.** *"Cells in this lab stop growing but do not die."*
     There is only arrest and dormancy. Any time-to-death in later levels is a design choice, not
     a sourced value.
@@ -324,8 +345,15 @@ short forms like these), then the detail for instructors.
    lags, but aerobically. Decide before level 1.7: frame the level as glucose + lactose diauxie
    (glucose pays for building LacY and LacZ), add a small glycogen reserve, or add CRP/ppGpp
    reallocation. It must not be "fixed" by weakening upkeep, because that would break the g
-   tests. Until then the lab's About sheet says: "To grow on lactose, switch the lactose genes
-   on while glucose is still present, because once ATP has run out no new protein can be made."
+   tests. The same gap shows in the free lab: a partly induced cell (LacY and LacZ ×1 for
+   30–60 min) moved to lactose alone runs out of ATP and stops, because LacY import falls with
+   the charge and the fall feeds itself; there is no slow-growth middle ground. Until then the
+   lab's About sheet says: "In this model, set LacY and LacZ to ×4 with glucose present and wait
+   an hour before removing glucose; with fewer, ATP runs out." and "Real E. coli adapts to
+   lactose after a lag; this model does not. Adding glucose back restarts a cell whose ATP has
+   run out." The narrator's `lac.toofew` line names the cause. For spring, take one of the
+   options above (a glycogen reserve, or ppGpp-like demand cuts) so that a partly induced cell
+   grows slowly instead of stopping.
 2. **Values to verify before the spring release:**
    - protein lengths against UniProt E. coli K-12 (PtsG P69786, GapA P0A9B2, LacY P02920, LacZ
      P00722, FliC P04949);

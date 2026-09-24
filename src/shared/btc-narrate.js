@@ -3,13 +3,13 @@
  * Be the Cell: the narrator (LAB_UI §7, which is authoritative).
  *
  * One plain sentence about what the cell is doing now. The narrator reads
- * only BTC.observe.facts (schema 1.1: words, no numbers) and the event
+ * only BTC.observe.facts (schema 1.2: words, no numbers) and the event
  * stream; it never touches the cell. The first rule in the priority list
  * whose condition holds wins.
  *
  *   createMemory(opts)            opts: {phrases, showNames, dt}
  *   ingest(memory, events, tick)  records episode phases, the last commanded gene, divisions,
- *                                 energy episodes and when rifampicin went on
+ *                                 energy episodes, when rifampicin went on and when each drug went off
  *   narrate(facts, memory, tick, levelRules?) → {key, text, gene}   (one reused object)
  *
  * Tone: dry and understated. Molecules never want, try, decide or know
@@ -42,6 +42,7 @@
     fliC: { genePhrase: 'the flagellin gene', noun: 'flagellin', plural: false, slot: 6 },
   });
   const GENE_IDS = Object.freeze(Object.keys(PHRASES));
+  const PREEMPT = ['1', '2', '3', '4', '5', '6', '6b', '6c', '7', '8', '9', '10', '10b', '11', '11b'];
 
   // Priority list (LAB_UI §7.2). Tokens: {G} gene phrase, {n}/{N} noun, {is} is/are, {its} its/their,
   // {it} it/them, {s} verb ending, {Y}/{Z} the LacY/LacZ names. A sentence's first letter is capitalised.
@@ -49,44 +50,50 @@
   const RULES = Object.freeze([
     ['1', 'drug.both', 'Both drugs are on: no new mRNA is started, and ribosomes are stalled.'],
     ['2', 'drug.cm', 'Chloramphenicol stalls ribosomes; the mRNA is still here, but almost no protein is made.'],
-    ['3', 'drug.rif.late', 'Under rifampicin the old mRNA has decayed, so protein synthesis has wound down.'],
+    ['3', 'drug.rif.late', 'Under rifampicin the old mRNA is almost gone, so protein synthesis is winding down.'],
     ['4', 'drug.rif', 'Rifampicin blocks RNA polymerase; mRNA already made is read until it decays.'],
     ['5', 'drug.cm.low', 'Some ribosomes are stalled by chloramphenicol, so protein is made more slowly and growth slows.'],
     ['6', 'drug.rif.low', 'Rifampicin is slowing transcription, so less new mRNA is made.'],
-    ['7', 'starve.nosugar', 'There is no sugar in the medium, so ATP has run down and every machine has stopped.'],
+    ['6b', 'drug.rif.off', 'Rifampicin is gone, so RNA polymerase starts new mRNA again and protein synthesis picks up.'],
+    ['6c', 'drug.cm.off', 'Chloramphenicol is gone, so ribosomes run again on the mRNA that is left and growth picks up.'],
+    ['7', 'starve.nosugar', 'There is no sugar in the medium, so no new ATP is made and every machine that uses ATP slows to a stop.'],
     ['8', 'starve.dormant', 'With no ATP, no new transporters can be made, so no sugar gets in and nothing restarts.'],
     ['9', 'starve.noimport', 'Glucose is outside, but without transporters in the membrane none of it gets in.'],
     ['10', 'starve.fewimport', 'Too little glucose is getting in, so ATP is low and growth has slowed.'],
+    ['10b', 'starve.noenzyme', '{N} {is} too scarce to break down glucose quickly, so ATP is low and growth slows.'],
     ['11', 'recover', 'Sugar is getting in through transporters that were already there, and ATP is coming back.'],
     ['11b', 'gene.noatp', '{G} {is} switched on, but with no ATP nothing is transcribed.'],
     ['12', 'lac.noY', 'Lactose is outside, but without {Y} it does not get in.'],
     ['13', 'lac.noZ', 'Lactose gets in, but without {Z} it is not split.'],
+    ['13b', 'lac.toofew', 'Lactose is outside, but there is too little {Y} and {Z} to keep ATP up, so the cell has stopped.'],
     ['14', 'aa.low', 'Amino acids are running short, so ribosomes are moving more slowly.'],
     ['15', 'divided', 'The cell divided; this daughter received about half of everything.'],
     ['16a', 'gene.waiting', '{G} {is} switched on; RNA polymerase has not started on {it} yet.'],
     ['16b', 'gene.tx', '{G} {is} being transcribed; no protein yet.'],
     ['16c', 'gene.rising', '{N} {is} accumulating; each mRNA is read by many ribosomes before it decays.'],
-    ['16d', 'gene.up', '{G} {is} transcribed more often now, so {n} {is} climbing toward a higher level.'],
-    ['16e', 'gene.down', '{G} {is} transcribed less often now; {n} fall{s} slowly as the cell grows and divides.'],
+    ['16d', 'gene.up', '{G} {is} transcribed more often now, so {its} protein climbs to a higher level.'],
+    ['16e', 'gene.down', '{G} {is} transcribed less often now; {its} protein is diluted as the cell grows.'],
     ['16f', 'gene.leftover', 'Transcription of {G} has stopped, but {its} mRNA is still being translated.'],
     ['16g', 'gene.gone', 'The mRNA for {n} is gone; the protein remains and is shared out at each division.'],
-    ['17a', 'burden.lac', 'With no lactose here, {Z} and {Y} only take up ribosomes, so growth has slowed.'],
-    ['17b', 'burden', 'Ribosomes busy with {n} are not making anything else, so growth has slowed.'],
+    ['17a', 'burden.lac', 'With no lactose here, {n} does no work, and making it slows growth over a few generations.'],
+    ['17b', 'burden', 'Ribosomes busy with {n} are not making other proteins, so growth slows over a few generations.'],
     ['18', 'growth.aa', 'Amino acids from the medium spare the cell from making them, so it grows faster.'],
     ['19', 'growth.lactose', 'The cell is growing on lactose, which {Z} splits into glucose and galactose.'],
+    ['19b', 'growth.both', 'The cell is growing steadily on glucose and lactose.'],
     ['20', 'growth.low', 'Glucose is scarce, so growth is slow.'],
     ['21', 'growth.arrested', 'Growth has stopped.'],
+    ['21b', 'growth.slow', 'Growth is slower than usual.'],
     ['22', 'growth.normal', 'The cell is growing steadily on glucose.'],
   ].map(([n, key, template], i) => Object.freeze({
     n, key, template, order: i,
-    preempt: i <= 11,                                  // rules 1 … 11b
+    preempt: PREEMPT.indexOf(n) >= 0,                  // rules 1 … 11b
     perGene: /\{(G|n|N|is|its|it|s)\}/.test(template),
   })));
   const RULE = {};
   RULES.forEach((r) => { RULE[r.key] = r; });
 
   // Phase durations in simulated seconds (LAB_UI §7.1).
-  const RISING_S = 600, UPDOWN_S = 1200, RECOVER_S = 300, RIF_LATE_S = 600;
+  const RISING_S = 600, UPDOWN_S = 1200, RECOVER_S = 300, RIF_LATE_S = 600, DRUG_OFF_S = 600;
 
   function createMemory(opts) {
     const o = opts || {};
@@ -102,6 +109,8 @@
       sawEnergyLow: false,
       recoverTick: null,
       rifOnTick: null,
+      rifOffTick: null,         // when each drug last went from on to off
+      cmOffTick: null,
       cache: {},
       out: { key: '', text: '', gene: null },
     };
@@ -186,6 +195,10 @@
         if (now && !was) memory.rifOnTick = ev.tick;
         if (!now) memory.rifOnTick = null;
       }
+      const wasOn = !!prev && prev.dose > 0, isOn = !!res && res.dose > 0;
+      const offTick = wasOn && !isOn ? ev.tick : null;
+      if (a.drug === 'rifampicin' && (offTick !== null || isOn)) memory.rifOffTick = offTick;
+      if (a.drug === 'chloramphenicol' && (offTick !== null || isOn)) memory.cmOffTick = offTick;
       return;
     }
     if (typeof a.gene !== 'string') return;              // not a gene command
@@ -221,29 +234,42 @@
     expirePhase(memory, tick);
     const pick = (key, gene) => { out.key = key; out.gene = gene || null; return out; };
     const rif = f.drug.rif, cm = f.drug.cm;
+    // With no ATP, a chloramphenicol line would be false (no mRNA is left); the true cause below wins instead.
+    const cmSays = f.energy !== 'none';
     if (rif === 'full' && memory.rifOnTick === null) memory.rifOnTick = tick;    // switched on in the config, or before memory existed
-    if (rif === 'full' && cm === 'full') return pick('drug.both');
-    if (cm === 'full') return pick('drug.cm');
+    if (rif === 'full' && cm === 'full' && cmSays) return pick('drug.both');
+    if (cm === 'full' && cmSays) return pick('drug.cm');
     if (rif === 'full') return pick((tick - memory.rifOnTick) * dt >= RIF_LATE_S ? 'drug.rif.late' : 'drug.rif');
-    if (cm === 'low') return pick('drug.cm.low');
+    if (cm === 'low' && cmSays) return pick('drug.cm.low');
     if (rif === 'low') return pick('drug.rif.low');
+    if (cm === 'off' && rif === 'off' && f.energy !== 'none' && f.medium !== 'none') {
+      const r = memory.rifOffTick, c = memory.cmOffTick;
+      const rOk = r !== null && (tick - r) * dt <= DRUG_OFF_S, cOk = c !== null && (tick - c) * dt <= DRUG_OFF_S;
+      if (rOk && (!cOk || r > c)) return pick('drug.rif.off');
+      if (cOk) return pick('drug.cm.off');
+    }
     const glucoseOutside = f.medium === 'glucose' || f.medium === 'both';
     if (f.medium === 'none' && f.energy !== 'normal') return pick('starve.nosugar');
     if (glucoseOutside && f.carbon === 'none' && f.glucoseImport !== 'normal') return pick(memory.dormant ? 'starve.dormant' : 'starve.noimport');
-    if (f.glucoseLevel === 'high' && (f.carbon === 'glucose' || f.carbon === 'both') && f.energy === 'low') return pick('starve.fewimport');
+    if (f.glucoseLevel === 'high' && (f.carbon === 'glucose' || f.carbon === 'both') && f.energy !== 'normal') {
+      return f.glucoseStep === 'enzymes' ? pick('starve.noenzyme', 'gly') : pick('starve.fewimport');
+    }
     if (memory.recoverTick !== null && (tick - memory.recoverTick) * dt <= RECOVER_S) return pick('recover');
     if (memory.gene !== null && memory.phase === 'waiting' && f.energy === 'none') return pick('gene.noatp', memory.gene);
     if (f.lactoseBlock === 'no-lacY' && f.medium === 'lactose') return pick('lac.noY');
     if (f.lactoseBlock === 'no-lacZ') return pick('lac.noZ');
+    if (f.medium === 'lactose' && f.lactoseBlock === null && f.energy === 'none') return pick('lac.toofew');
     if (f.aa === 'low') return pick('aa.low');
     if (f.justDivided) return pick('divided');
     if (memory.gene !== null && memory.phase !== null) return pick(GENE_PHASE_KEY[memory.phase], memory.gene);
-    if (f.uselessGene === 'lacZ' || f.uselessGene === 'lacY') return pick('burden.lac');
+    if (f.uselessGene === 'lacZ' || f.uselessGene === 'lacY') return pick('burden.lac', f.uselessGene);
     if (f.uselessGene !== null) return pick('burden', f.uselessGene);
     if (f.aaOutside && f.aaImportOn && f.growth === 'normal') return pick('growth.aa');
     if (f.carbon === 'lactose' && f.growth !== 'arrested') return pick('growth.lactose');
+    if (f.carbon === 'both' && f.growth === 'normal') return pick('growth.both');
     if (f.glucoseLevel === 'low' && f.growth === 'slow') return pick('growth.low');
     if (f.growth === 'arrested') return pick('growth.arrested');
+    if (f.growth === 'slow') return pick('growth.slow');
     return pick('growth.normal');
   }
 

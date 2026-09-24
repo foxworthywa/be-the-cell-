@@ -208,8 +208,11 @@
 
   // Glyph sizes (CSS px), from LAB_UI §2.3.
   const SZ = {
-    glcOut: 3.6, lacOut: 2.6, aaOut: 3.2, rib: 5, poly: 6, prot: 2.5, tetra: 7, atp: 3.4, aa: 2.4, lacIn: 2.2, rnap: 2.5,
+    glcOut: 3.6, lacOut: 2.6, aaOut: 3.2, rib: 5, poly: 4, prot: 2.5, tetra: 7, atp: 3.4, aa: 2.4, lacIn: 2.2, rnap: 2.5,
   };
+  // The watched gene is drawn on top at full strength; the crowd around it is dimmed (LAB_UI §2.7).
+  // Only alpha changes: counts, positions and hit-testing are the same.
+  const CROWD_ALPHA = 0.45, POLY_ALPHA = 0.6;
 
   // ---------------------------------------------------------------------------
   // The view
@@ -292,7 +295,7 @@
       this.canvas.style.width = w + 'px';
       this.canvas.style.height = h + 'px';
       this.ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-      this.geom = G.create(w, h);
+      this.geom = G.create(w, h, this.geom ? this.geom.vertical : undefined);
       this.built.w = -1;
       this.dirty = true;
       this.updateScaleBar();
@@ -620,11 +623,19 @@
       this.drawNucleoid(c, P);
       this.drawGroups(c, P, K.LOCUS, K.LOCUS, 0, tau);
       this.drawGroups(c, P, K.NASCENT, K.NASCENT, 0, tau);
-      this.drawGroups(c, P, K.MRNA_FOCUS, K.MRNA, A, tau);
+      this.drawGroups(c, P, K.MRNA, K.MRNA, A, tau);
+      // The crowd (pooled ribosomes, other genes' proteins, ATP, amino acids) is dimmed so the watched gene reads.
+      c.globalAlpha = CROWD_ALPHA;
       this.drawGroups(c, P, K.RIB, K.RIB_STALLED, A, tau);
-      this.drawGroups(c, P, K.POLY, K.POLY, A, tau);
-      this.drawProteins(c, P, false, A, tau);
+      this.drawProteins(c, P, false, A, tau, true);
       this.drawGroups(c, P, K.ATP, K.LAC_IN, A, tau);
+      c.globalAlpha = 1;
+      this.drawProteins(c, P, false, A, tau, false);
+      // Then the watched gene's mRNA strands on top (with a halo), and its ribosomes, translucent, over them.
+      this.drawGroups(c, P, K.MRNA_FOCUS, K.MRNA_FOCUS, A, tau);
+      c.globalAlpha = POLY_ALPHA;
+      this.drawGroups(c, P, K.POLY, K.POLY, A, tau);
+      c.globalAlpha = 1;
       c.restore();
 
       // Membrane: a bilayer (two strokes), then membrane proteins spanning it.
@@ -681,12 +692,15 @@
       }
     }
 
-    drawProteins(c, P, membrane, A, tau) {
+    /** Proteins: membrane or cytoplasmic; crowd = true for the other genes only, false for the focus gene only, undefined for all. */
+    drawProteins(c, P, membrane, A, tau, crowd) {
       const focus = this.app.focusIndex();
       for (let gi = 0; gi < this.ng; gi++) {
         if (this.gKind[gi] !== K.PROT) continue;
         const gene = this.bgene[this.gStart[gi]];
         if ((PAL.shape[GENE_IDS[gene]] === 'membrane') !== membrane) continue;
+        if (crowd === true && gene === focus) continue;
+        if (crowd === false && gene !== focus) continue;
         this.drawGroup(c, P, gi, A, tau);
         if (gene === focus) this.drawGroup(c, P, gi, A, tau, true);      // accent ring on the focus gene's protein
       }
@@ -694,6 +708,7 @@
 
     drawGroup(c, P, gi, A, tau, ring) {
       const kind = this.gKind[gi], style = this.gStyle[gi], s0 = this.gStart[gi], s1 = this.gEnd[gi];
+      const base = c.globalAlpha;
       const color = P[this.gColor[gi]];
       const stroke = style === 1 || kind === K.NASCENT || kind === K.MRNA || kind === K.MRNA_FOCUS;
       c.beginPath();
@@ -708,8 +723,12 @@
         this.glyph(c, kind, i, x, y);
       }
       if (ring) {
-        c.globalAlpha = 0.75; c.strokeStyle = P.accent; c.lineWidth = 1.2; c.stroke(); c.globalAlpha = 1;
+        c.globalAlpha = base * 0.75; c.strokeStyle = P.accent; c.lineWidth = 1.2; c.stroke(); c.globalAlpha = base;
         return;
+      }
+      if (kind === K.MRNA_FOCUS) {                          // a halo in the cytoplasm colour, so the strand reads over anything
+        c.strokeStyle = P.inside; c.lineWidth = 4; c.lineCap = 'round'; c.lineJoin = 'round';
+        c.stroke();
       }
       if (stroke) {
         c.strokeStyle = color;
@@ -721,7 +740,7 @@
         c.fill();
       }
       if (style === 2) {                                   // ATP: a thin ink outline at 40%
-        c.globalAlpha = 0.4; c.strokeStyle = P.ink; c.lineWidth = 1; c.stroke(); c.globalAlpha = 1;
+        c.globalAlpha = base * 0.4; c.strokeStyle = P.ink; c.lineWidth = 1; c.stroke(); c.globalAlpha = base;
       } else if (style === 3) {                            // stalled: a short bar across each glyph
         c.beginPath();
         for (let i = s0; i < s1; i++) {
@@ -871,6 +890,7 @@
       els.rifBadge.hidden = !(view.drugs.rifampicin > 0);
       els.cmBadge.hidden = !(view.drugs.chloramphenicol > 0);
       this.updateLegend();
+      this.updateOutsideScale();
     }
 
     updateLegend() {
@@ -878,12 +898,24 @@
       const L = this.legendScales;
       if (L[0] === p.P && L[1] === p.ribN && L[2] === p.atpN && L[3] === p.polyN) return;
       L[0] = p.P; L[1] = p.ribN; L[2] = p.atpN; L[3] = p.polyN;
-      const vars = { P: F.count(p.P), R: F.count(p.ribN), A: F.count(p.atpN), F: F.count(p.polyN) };
-      let full = F.fill(C.legend.full, vars);
-      if (p.polyN > 1) full += F.fill(C.legend.focusRibosomes, vars);
+      // The focus polysome's own scale is in the key sheet, so the legend stays at two lines (LAB_UI §2.9).
+      const vars = { P: F.count(p.P), R: F.count(p.ribN), A: F.count(p.atpN) };
+      const full = F.fill(C.legend.full, vars);
       LY.setText(this.els.legendFull, full);
       LY.setText(this.els.legendShort, F.fill(C.legend.short, vars));
       this.els.legend.setAttribute('aria-label', F.fill(C.legend.buttonLabel, { text: full }));
+    }
+
+    /** "outside: 1 dot = N" on the canvas while outside molecules are drawn (LAB_UI §2.9; the scale of the most numerous). */
+    updateOutsideScale() {
+      const el = this.els.outsideScale;
+      if (!el) return;
+      const p = this.plan;
+      const g = p.glcOut + p.glcOutHollow, l = p.lacOut + p.lacOutHollow, a = p.aaOut + p.aaOutHollow;
+      el.hidden = g + l + a === 0;
+      if (el.hidden) return;
+      const N = g >= l && g >= a ? p.glcOutN : l >= a ? p.lacOutN : p.aaOutN;
+      LY.setText(el, F.fill(C.cell.outsideScale, { N: F.count(N) }));
     }
 
     /** The canvas label: narrator sentence plus the focus gene's counts (updated on narrator key change). */
@@ -905,11 +937,15 @@
         name: h('span', { class: 'fb-name' }),
         sym: h('span', { class: 'sym' }),
         counts: h('span', { class: 'fb-counts num' }),
+        countsM: h('span', { class: 'fb-m' }),
+        countsP: h('span', { class: 'fb-p' }),
       };
+      this.fb.counts.appendChild(this.fb.countsM);
+      this.fb.counts.appendChild(this.fb.countsP);
       const btn = h('button', { class: 'fb-row1', type: 'button', onclick: () => this.openPicker() }, [
         this.fb.chip,
         h('span', { class: 'fb-text' }, [h('span', { class: 'fb-title' }, [this.fb.name, ' ', this.fb.sym]), this.fb.counts]),
-        h('span', { class: 'fb-change' }, [C.focus.change, h('span', { class: 'chev', 'aria-hidden': 'true' }, '›')]),
+        h('span', { class: 'fb-change' }, [h('span', { class: 'fb-change-word', text: C.focus.change }), h('span', { class: 'chev', 'aria-hidden': 'true' }, '›')]),
       ]);
       this.fb.btn = btn;
       const ctrl = app.makePromoterControl(() => app.focusGene, 'focus');
@@ -925,7 +961,8 @@
       this.fb.chip.style.background = 'var(--g-' + id + ')';
       LY.setText(this.fb.name, words.name);
       LY.setText(this.fb.sym, words.symbol);
-      LY.setText(this.fb.counts, F.fill(C.focus.counts, { m: F.count(gv.mRNA), n: F.count(gv.nascent), p: F.count(gv.proteinRounded) }));
+      LY.setText(this.fb.countsM, F.fill(C.focus.counts, { m: F.count(gv.mRNA), n: F.count(gv.nascent) }));
+      LY.setText(this.fb.countsP, F.fill(C.focus.protein, { p: F.count(gv.proteinRounded) }));
       const label = F.fill(C.focus.buttonLabel, { name: words.name });
       if (this.fb.btn.getAttribute('aria-label') !== label) this.fb.btn.setAttribute('aria-label', label);
       const pl = F.fill(C.focus.promoterLabel, { name: words.name });

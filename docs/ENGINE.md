@@ -874,7 +874,7 @@ view.scale      { dt_s, substeps }
 5. `'amino-acids'` (s_aa < 0.5)
 6. `'ribosomes'`
 
-**`BTC.observe.facts(cell, out)`** fills `out` (a reused object) with the fields in the table below. **Facts schema 1.1** (`BTC.observe.FACTS_SCHEMA = '1.1'`). Facts contain no numbers: only strings, booleans, `null` and gene ids. They are observe-only, so no physics and no hash depend on them. Every value is computed from the state at the end of the last completed tick, from the last tick's fluxes, and from the event detectors' flags.
+**`BTC.observe.facts(cell, out)`** fills `out` (a reused object) with the fields in the table below. **Facts schema 1.2** (`BTC.observe.FACTS_SCHEMA = '1.2'`). Facts contain no numbers: only strings, booleans, `null` and gene ids. They are observe-only, so no physics and no hash depend on them. Every value is computed from the state at the end of the last completed tick, from the last tick's fluxes, and from the event detectors' flags.
 
 **Reference constants** (btc-params, conf. D, §8): λ_ref = 1.18×10⁻⁴ /s; F_ref = 5.8×10⁵ hexose/s (reference flux into glycolysis, §9.1); U_ref = 1.1×10⁶ glucose/s (13,700 PtsG × 80 /s, the reference import capacity at saturation); lacY_ref = 1.0×10⁴ and lacZ_ref = 2.0×10⁴ monomers (the ×1 steady states in glucose, proto 10,460 and 19,460).
 
@@ -885,18 +885,19 @@ view.scale      { dt_s, substeps }
 | `glucoseLevel` | `'none'`\|`'low'`\|`'high'` | G = 0 → none; 0 < G < 0.1 mM → low; G ≥ 0.1 mM → high. The presets are Low 0.005 mM and High 10 mM |
 | `carbon` | `'none'`\|`'glucose'`\|`'lactose'`\|`'both'` | what is **getting in**: glucose when `flux.glucoseIn` > 0.01·F_ref; lactose when 2·`flux.lactoseSplit` > 0.01·F_ref (hexose equivalents); both when both; otherwise none |
 | `glucoseImport` | `'none'`\|`'low'`\|`'normal'` | import capacity at saturation C_U = P_ptsG·k_pts + uBasal·V: C_U < 0.01·U_ref → none; C_U < 0.25·U_ref → low; otherwise normal |
+| `glucoseStep` | `'import'`\|`'enzymes'` | which capacity holds glucose use back this tick: `'enzymes'` when k.Cgly < k.U (glycolysis capacity below PtsG uptake capacity, §7.6; PTS uptake is matched to glycolysis, C_hex = min(C_gly, C_in)), otherwise `'import'`. The default cell sits near the boundary (C_gly/U ≈ 0.95); the narrator reads it only when ATP is already short |
 | `energy` | `'normal'`\|`'low'`\|`'none'` | E > 0.7 → normal; 0.1 ≤ E ≤ 0.7 → low; E < 0.1 → none. These are the cut-points of `view.energy.state` (`'none'` here is `'depleted'` there) |
 | `aa` | `'ok'`\|`'low'` | a = AA/V < 0.5×10⁶ /fL → low (the `aa_low` threshold and `view.aminoAcids.state`) |
 | `lactoseBlock` | `'no-lacY'`\|`'no-lacZ'`\|`null` | only when `lactose_mM > 0`, else null. P_lacY < 0.01·lacY_ref → no-lacY; otherwise P_lacZ < 0.01·lacZ_ref → no-lacZ; otherwise null. Equivalently: YCap (resp. ZMax) below 1% of the reference-induced capacity. The "off" leak leaves a few monomers (proto LacY 6, LacZ 2 after 10 h), which is far below 1% |
 | `lastCommandedGene` | `{id, state}` or `null` | the gene of the most recent **applied** gene-targeted command (`setPromoter`, `setKnockout`, `setRBS`, `setMRNAHalfLife`, `setDegradation`), any source; `state` is its `geneState` |
-| `uselessGene` | gene id or `null` | the first gene in the order fliC, lacZ, lacY, aaImp that is currently useless **and** has a current ribosome share `genes[i].ribosomes / ribosomes.elongating` > 0.02. Useless: fliC always; lacZ and lacY when `medium` has no lactose; aaImp when `aminoAcids_mM = 0`. It keys on ribosomes **now** translating the gene, not on protein left over, so it clears within about a minute of the mRNA being gone |
+| `uselessGene` | gene id or `null` | the first gene in the order fliC, lacZ, lacY, aaImp that is currently useless **and** has a current ribosome share `genes[i].ribosomes / ribosomes.elongating` above a hysteresis band: a gene becomes the burden above **2.5%** and stays it while above **1.0%** (the previous value is read from the reused `out` object; `facts(cell)` without `out` has no memory and uses 2.5%). One gene's share swings with mRNA bursts (lacZ ×1: about 1–5%), so a single 2% threshold flickered. Useless: fliC always; lacZ and lacY when `medium` has no lactose; aaImp when `aminoAcids_mM = 0`. It keys on ribosomes **now** translating the gene, not on protein left over, so it clears within about a minute of the mRNA being gone. The app calls facts once per rendered frame, so there the band acts on sampled ticks; that affects only the narrator, never the physics or the hash |
 | `aaOutside` | boolean | `aminoAcids_mM > 0` |
-| `aaImportOn` | boolean | aaImp is not knocked out and its per-copy rate is ≥ its ×1 rate (level ≥ 1, or a rate override ≥ rRef_aaImp) |
+| `aaImportOn` | boolean | the last tick's amino-acid import supplied more than 5% of the amino acids polymerised (`flux.aaImported > 0.05·flux.aaPolymerised`), whatever the promoter level. At the default aaImp level (×¼) with amino acids Present this is about 27%, so it is true; with none outside it is false |
 | `growth` | `'normal'`\|`'slow'`\|`'arrested'` | arrested from `growth_arrest` until `growth_resumed`; otherwise slow when λEMA < 0.8·λ_ref; otherwise normal |
 | `justDivided` | boolean | a `division` event occurred within the last 90 ticks |
 | `limiting` | string | `BTC.observe.limiting(cell)` |
 
-Each value is reached by a scripted scenario in LAB_UI test U-4. Schema 1.1 adds `medium`, `glucoseLevel`, `glucoseImport`, `aaOutside` and `aaImportOn`, defines every threshold above, and changes `uselessGene` from proteome fraction to current ribosome share.
+Each value is reached by a scripted scenario in LAB_UI test U-4. Schema 1.2 adds `glucoseStep`, gives `uselessGene` its 2.5%/1.0% hysteresis band, and bases `aaImportOn` on the import flux instead of the promoter level (review of the M1 build). Schema 1.1 added `medium`, `glucoseLevel`, `glucoseImport`, `aaOutside` and `aaImportOn`, defines every threshold above, and changes `uselessGene` from proteome fraction to current ribosome share.
 
 ---
 
@@ -920,7 +921,7 @@ Each value is reached by a scripted scenario in LAB_UI test U-4. Schema 1.1 adds
 - Deterministic, so a level 1.2 sketch score can be recomputed on a server by replay.
 
 **`BTC.narrate`** (module; **LAB_UI §7 is authoritative**)
-- API: `createMemory()`, `ingest(memory, events, tick)`, `narrate(facts, memory, tick) → {key, text, gene?}`. It reads facts schema 1.1 (§11.5) and the command events' `prev`/`resolved` fields (§11.4).
+- API: `createMemory()`, `ingest(memory, events, tick)`, `narrate(facts, memory, tick) → {key, text, gene?}`. It reads facts schema 1.2 (§11.5) and the command events' `prev`/`resolved` fields (§11.4).
 - The rules, their priority, the sentence templates, the text lint and the display hold are specified in LAB_UI §7 and tested there (U-3, U-4, U-7).
 - **Superseded in v1.1:** the priority summary and the phrase-table seed below are kept only as a record of v1.0. Where they differ from LAB_UI §7, LAB_UI §7 wins; they MUST NOT be implemented from here.
 - The tone is dry and understated, as Alex chose. *(Superseded)* v1.0 priority: drug > no carbon or no energy > lactose block > amino acids low > just divided (brief) > last commanded gene's life cycle > useless-protein burden > growth summary. *(Superseded)* v1.0 phrase table seed:
@@ -1179,6 +1180,10 @@ Its numbers are the acceptance targets that the production engine MUST reproduce
 15. **Unverified values** are flagged in the parameter table (§15 item 2).
 16. **Always shown on screen:** the time compression, the molecules per dot for every species, and the "stands for ~N genes" badges.
 17. **Protein degradation** (hidden until level 1.4) returns the amino acids to the pool; the ATP that proteases spend is not charged.
+18. **ATP under carbon limitation.** With too little carbon the energy charge falls much further here than in real cells (glucose Low: E ≈ 0.04 at 30 min, 0.28 at 4 h; a starved cell reaches the E floor, 3.5·10⁻⁹ mM of ATP, shown as "< 0.01 mM"). Real cells keep their charge high from stored reserves (glycogen) and by slowing their ribosomes (ppGpp). Planned for spring: translation demand gives way to low E sooner.
+19. **No lactose adaptation.** Real *E. coli* moved to lactose adapts after a lag. Here a cell that is switched to lactose with too little LacY and LacZ runs out of ATP and stops (LacY import needs ATP, so the fall feeds itself). The About sheet gives the recipe that works (LacY and LacZ ×4 for an hour with glucose present); adding glucose back restarts a stopped cell. BIOLOGY.md open item 1 lists the options for spring.
+20. **Diauxie.** Real *E. coli* keeps its lac genes nearly off while glucose is present (catabolite repression, inducer exclusion). Here the student sets them, so glucose and lactose can be used together.
+21. **Drug names.** The drugs are "rifampicin-type" and "chloramphenicol-type": each acts only as §7.14 describes (instant, no uptake, no resistance).
 
 ---
 
@@ -1189,7 +1194,7 @@ Its numbers are the acceptance targets that the production engine MUST reproduce
 3. `btc-expression` with a stub metabolism (E fixed at 0.9) → u1 (unit guard, first), a1–a5, b1, c1, j2.
 4. `btc-metabolism` (term table, MPE) and `btc-growth` → e, f, g, h, i, r, L, m1, m2, n2.
 5. `btc-commands`, `btc-events`, log, snapshot, replay → d-1 to d-10.
-6. `btc-observe` (facts schema 1.1), `btc-dots`, `btc-recorder`, `btc-narrate` → c-1, c-2, c-3 and LAB_UI U-3, U-4.
+6. `btc-observe` (facts schema 1.2), `btc-dots`, `btc-recorder`, `btc-narrate` → c-1, c-2, c-3 and LAB_UI U-3, U-4.
 7. `tools/make-presets.js` → d-7; golden hash d-4; perf p1.
 8. `build.js`, `serve.js`, `sw.js`, manifest → b-2; then the M1 UI (separate spec).
 

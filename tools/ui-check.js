@@ -135,14 +135,17 @@ async function main() {
       const stage = document.getElementById('stage').getBoundingClientRect();
       const legend = document.getElementById('legend-short');
       const row2 = document.querySelector('.fb-row2').getBoundingClientRect();
+      const wrap = document.getElementById('stage-wrap').getBoundingClientRect();
+      const leg = document.getElementById('legend').getBoundingClientRect();
       return { stageH: stage.height, short: document.body.hasAttribute('data-short'), legendLines: Math.round(legend.getBoundingClientRect().height / 17),
-        row2Bottom: row2.bottom, row2H: row2.height, vh: window.innerHeight };
+        row2Bottom: row2.bottom, row2H: row2.height, vh: window.innerHeight, legendBottom: Math.round(leg.bottom), wrapBottom: Math.round(wrap.bottom) };
     });
     check('P1b no console errors', r.errors.length === 0, r.errors.join(' | '));
     check('P1b no horizontal scroll', r.worstW <= 0, 'excess ' + r.worstW);
     check('P1b document does not scroll vertically', r.worstH <= 0, 'excess ' + r.worstH);
     check('P1b cell canvas ≥ 220 px tall', p1b.stageH >= 220, Math.round(p1b.stageH) + ' px');
     check('P1b legend is one line', p1b.short && p1b.legendLines <= 1, 'lines ' + p1b.legendLines);
+    check('P1b the legend and Key button are not clipped by the narrator', p1b.legendBottom <= p1b.wrapBottom, JSON.stringify(p1b));
     check('P1b focus-bar promoter row fully visible', p1b.row2H >= 48 && p1b.row2Bottom <= p1b.vh, JSON.stringify(p1b));
     check('P2 (375×553) touch targets ≥ 44×44', r.small.length === 0, r.small.slice(0, 8).join(', '));
     await r.context.close();
@@ -294,6 +297,35 @@ async function main() {
     await page.keyboard.press('Escape');
     check('P7/P9 no console errors', s.errors.length === 0, s.errors.join(' | '));
     await s.context.close();
+
+    // C3: a command still waiting in a saved cell shows as pending after a reload (autosave is off under ?test=1).
+    {
+      const ctx3 = await browser.newContext({ viewport: { width: 360, height: 740 }, isMobile: true, hasTouch: true, deviceScaleFactor: 2 });
+      const pg = await ctx3.newPage();
+      const errs3 = [];
+      pg.on('pageerror', (e) => errs3.push(e.message));
+      await pg.goto('http://localhost:' + port + '/?seed=1&reset=1');
+      await pg.waitForFunction(() => window.__btc && window.__btc.app);
+      await pg.goto('http://localhost:' + port + '/?seed=1');
+      await pg.waitForFunction(() => window.__btc && window.__btc.app);
+      await paint(pg);
+      await pg.locator('[data-tab="medium"]:visible').first().click();
+      await pg.locator('[data-row="glucose"] .seg[data-key="none"]').click();
+      await paint(pg);
+      await pg.reload();
+      await pg.waitForFunction(() => window.__btc && window.__btc.app);
+      await paint(pg);
+      await pg.locator('[data-tab="medium"]:visible').first().click();
+      const c3 = await pg.evaluate(() => ({
+        pending: __btc.cell.pending.length,
+        marks: document.querySelectorAll('[data-row="glucose"] .seg.is-pending').length,
+        markKey: (document.querySelector('[data-row="glucose"] .seg.is-pending') || { getAttribute: () => null }).getAttribute('data-key'),
+        running: __btc.app.loop.running,
+      }));
+      check('C3 a pending command survives a reload and its control shows it pending', c3.pending === 1 && c3.marks === 1 && c3.markKey === 'none' && !c3.running, JSON.stringify(c3));
+      check('C3 no page errors', errs3.length === 0, errs3.join(' | '));
+      await ctx3.close();
+    }
 
     // P11: the single file from file://, desktop, no service worker.
     const ctx = await browser.newContext({ viewport: { width: 1280, height: 800 } });

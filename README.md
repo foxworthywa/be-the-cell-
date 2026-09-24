@@ -21,7 +21,7 @@ and story in [`docs/DESIGN.md`](docs/DESIGN.md) come later. Instructor: Alex Fox
   rise over tens of minutes; switch it off and watch the mRNA vanish and the protein dilute.
 - Change the medium: glucose None, Low or High; lactose; amino acids. It never runs out, and
   there is no oxygen.
-- Add a rifampicin-like or a chloramphenicol-like drug at a Low or Full dose.
+- Add a rifampicin-type or a chloramphenicol-type drug at a Low or Full dose.
 - See the cell drawn from the model: each mRNA, the ribosomes, proteins, ATP and ADP, with
   "1 dot = N" always on screen.
 - Follow graphs of mRNA, protein, ATP, cell size and growth, and a bar showing where ATP is
@@ -82,6 +82,15 @@ Numbers are for the reference cell (glucose High, default dials), measured with 
 - Transcription runs at 35 nt/s and each ribosome at 11.6 amino acids/s, so a new lacZ mRNA
   takes about 90 s.
 - The two bacterial growth laws are not programmed in; they emerge from ribosome allocation.
+
+**Tell students before they start (first phone test):**
+
+- To grow on lactose, set LacY and LacZ to ×4 with glucose still present and wait an hour
+  before removing glucose. With less (for example ×1 for 30 min) ATP runs out and the cell
+  stops; the model has no lag-and-adapt the way real E. coli does. Adding glucose back
+  restarts a stopped cell within a few minutes.
+- When carbon is short, ATP falls much further here than in real cells (the graphs then show
+  "< 0.01 mM"); real cells keep ATP up from reserves and by slowing their ribosomes.
 
 The simplifications, the values still to verify and every parameter with its source are in
 [`docs/BIOLOGY.md`](docs/BIOLOGY.md).

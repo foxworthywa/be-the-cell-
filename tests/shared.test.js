@@ -66,6 +66,25 @@ test('Recorder: samples on ticks, stores their ticks, and on thinning doubles it
   assert.equal(rec.count, n);
 });
 
+test('Recorder (ring mode): the interval never changes; a full buffer drops its oldest half, so the recent past keeps full resolution', () => {
+  const rec = new BTC.Recorder({ every: 5, capacity: 8640, mode: 'ring', channels: [{ name: 'tick', read: (x) => x.tick }] });
+  const fake = { tick: 0 };
+  for (let t = 1; t <= 100000; t++) { fake.tick = t; rec.onTick(fake); }
+  assert.equal(rec.every, 5);
+  assert.ok(rec.count >= 4320 && rec.count <= 8640, 'count ' + rec.count);
+  const ticks = Array.from(rec.ticks.slice(0, rec.count));
+  assert.equal(ticks[ticks.length - 1], 100000);
+  assert.ok(ticks.every((x, i) => i === 0 || x - ticks[i - 1] === 5), 'even 5-tick spacing, ascending');
+  assert.deepEqual(Array.from(rec.series('tick').slice(0, rec.count)), ticks);
+  // The last 600 ticks (10 sim-min) hold 120 samples, and at least 6 h (21,600 ticks) is always kept.
+  assert.equal(ticks.filter((x) => x > 100000 - 600).length, 120);
+  assert.ok(100000 - ticks[0] >= 21600, 'oldest kept ' + ticks[0]);
+  // The default (thin) mode is unchanged: it would have doubled its interval by now.
+  const thin = new BTC.Recorder({ every: 5, capacity: 8640, channels: [{ name: 'tick', read: (x) => x.tick }] });
+  for (let t = 1; t <= 100000; t++) { fake.tick = t; thin.onTick(fake); }
+  assert.ok(thin.every > 5);
+});
+
 test('Recorder: the lab channel set is the 27 channels of LAB_UI §5.1, and recording is deterministic', () => {
   const make = () => {
     const c = new Cell({ seed: 2, start: 'steady' });

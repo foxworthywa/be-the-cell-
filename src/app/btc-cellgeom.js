@@ -35,9 +35,17 @@
     return Math.max(2 * r, (V - cap) / (Math.PI * r * r) + 2 * r);
   }
 
-  /** A geometry for a stage of w × h CSS px. fit() then sets the rod's current size. */
-  function create(w, h) {
-    const vertical = h > w;
+  // Orientation hysteresis: a stage that is nearly square keeps the rod's current orientation.
+  const TURN = 1.1;
+
+  /**
+   * A geometry for a stage of w × h CSS px. fit() then sets the rod's current size.
+   * prevVertical (optional): the orientation so far; it changes only when the other axis is 10% longer.
+   */
+  function create(w, h, prevVertical) {
+    let vertical = h > w;
+    if (prevVertical === true && !(w > TURN * h)) vertical = true;
+    else if (prevVertical === false && !(h > TURN * w)) vertical = false;
     const along = vertical ? h : w, across = vertical ? w : h;
     const fitLen = lengthForVolume(FIT_VOLUME_FL, ROD_RADIUS_UM);
     const fitWidth = 2 * ROD_RADIUS_UM * WIDTH_DRAWN;

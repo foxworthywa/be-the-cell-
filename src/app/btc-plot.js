@@ -136,43 +136,71 @@
       return { lo: 0, hi: ticks[ticks.length - 1], ticks };
     }
 
+    /** Data maximum within the window (and the live values). */
+    dataMax(m) {
+      const i0 = lowerBound(m.ticks, m.count, Math.floor(m.t0 / m.dt));
+      let maxV = 0;
+      for (let s = 0; s < m.nSeries; s++) {
+        const d = m.series[s].data;
+        if (d) for (let i = i0; i < m.count; i++) if (d[i] > maxV) maxV = d[i];
+        if (m.series[s].live > maxV) maxV = m.series[s].live;
+      }
+      return maxV;
+    }
+
+    /**
+     * The side gutters this plot needs for m: left for the y tick labels, right for the
+     * end-of-line labels. The graphs panel takes the largest over all plots and passes it
+     * back as m.gutterL / m.gutterR, so stacked plots share one time axis (LAB_UI §5.2).
+     */
+    gutters(m, out) {
+      const c = this.ctx, o = out || { left: 0, right: 0 };
+      c.font = '12px ' + FONT;
+      const yr = this.yRange(this.dataMax(m));
+      let left = 0;
+      for (const t of yr.ticks) left = Math.max(left, c.measureText(tickLabel(t)).width);
+      o.left = Math.ceil(left) + 8;
+      let right = 10;
+      if (m.nSeries > 1 || this.opts.labelGutter) {
+        c.font = '600 12px ' + FONT;
+        for (let s = 0; s < m.nSeries; s++) right = Math.max(right, c.measureText(m.series[s].label).width + 12);
+      }
+      o.right = Math.ceil(right);
+      return o;
+    }
+
     /**
      * m: {ticks (Int32Array), count, dt, t0, t1 (sim s shown), series: [{data, live, color, label}], nSeries,
-     *     markers: {n, tick, kind, label}, bands: {n, t0, t1, color}, scrubT (sim s or -1)}
+     *     markers: {n, tick, kind, label, prio?}, bands: {n, t0, t1, color, label?}, scrubT (sim s or -1),
+     *     gutterL?, gutterR? (shared side gutters, px)}
      */
     draw(m) {
       const c = this.ctx, P = PAL.current(), W = this.w, H = this.h;
-      let gutter = 10;
-      if (m.nSeries > 1 || this.opts.labelGutter) {
-        c.font = '600 12px ' + FONT;
-        for (let s = 0; s < m.nSeries; s++) gutter = Math.max(gutter, c.measureText(m.series[s].label).width + 12);
-      }
-      const x0 = 2, x1 = W - gutter, y0 = PAD_TOP, y1 = H - PAD_BOTTOM;
+      const own = (m.gutterL === undefined || m.gutterR === undefined) ? this.gutters(m, GUT) : null;
+      const gutterL = own ? own.left : m.gutterL, gutterR = own ? own.right : m.gutterR;
+      const x0 = gutterL, x1 = Math.max(x0 + 20, W - gutterR), y0 = PAD_TOP, y1 = H - PAD_BOTTOM;
       const tEnd = m.tEnd > m.t1 ? m.tEnd : m.t1;
       const span = Math.max(1, tEnd - m.t0);
       const tx = (t) => x0 + ((t - m.t0) / span) * (x1 - x0);
       c.fillStyle = P.panel;
       c.fillRect(0, 0, W, H);
 
-      // Data maximum within the window (and the live values).
       const i0 = lowerBound(m.ticks, m.count, Math.floor(m.t0 / m.dt));
-      let maxV = 0;
-      for (let s = 0; s < m.nSeries; s++) {
-        const d = m.series[s].data;
-        for (let i = i0; i < m.count; i++) if (d[i] > maxV) maxV = d[i];
-        if (m.series[s].live > maxV) maxV = m.series[s].live;
-      }
-      const yr = this.yRange(maxV);
+      const yr = this.yRange(this.dataMax(m));
       const ty = (v) => {
         const u = this.log ? Math.log10(Math.max(1, v)) : v;
         return y1 - ((u - yr.lo) / (yr.hi - yr.lo || 1)) * (y1 - y0);
       };
 
-      // Drug bands and the "low" band.
+      // Drug bands (each labelled at its start) and the "low" band.
+      c.font = '11px ' + FONT; c.textAlign = 'left'; c.textBaseline = 'top';
       for (let b = 0; b < m.bands.n; b++) {
         const a = Math.max(x0, tx(m.bands.t0[b])), e = Math.min(x1, tx(m.bands.t1[b]));
         if (e <= a) continue;
-        c.globalAlpha = 0.1; c.fillStyle = P[m.bands.color[b]]; c.fillRect(a, y0, e - a, y1 - y0); c.globalAlpha = 1;
+        const col = P[m.bands.color[b]];
+        c.globalAlpha = 0.1; c.fillStyle = col; c.fillRect(a, y0, e - a, y1 - y0); c.globalAlpha = 1;
+        const lab = m.bands.label ? m.bands.label[b] : '';
+        if (lab && tx(m.bands.t0[b]) >= x0 && a + 3 + c.measureText(lab).width <= x1) { c.fillStyle = col; c.fillText(lab, a + 3, y0 + 2); }
       }
       if (this.opts.band) {
         const yb = ty(this.opts.band.below);
@@ -181,20 +209,18 @@
         c.fillText(this.opts.band.label, x1 - 4, y1 - 2);
       }
 
-      // Grid and y labels (inside the plot, no wasted margin).
+      // Grid, and y labels in the left gutter (never over the data).
       c.strokeStyle = P.line; c.lineWidth = 1;
       c.beginPath();
       for (const t of yr.ticks) { const y = Math.round(ty(t)) + 0.5; c.moveTo(x0, y); c.lineTo(x1, y); }
+      c.moveTo(x0 - 0.5, y0); c.lineTo(x0 - 0.5, y1);
       c.stroke();
-      c.fillStyle = P.muted; c.font = '12px ' + FONT; c.textAlign = 'left'; c.textBaseline = 'top';
+      c.fillStyle = P.muted; c.font = '12px ' + FONT; c.textAlign = 'right'; c.textBaseline = 'middle';
       const every = this.log && yr.ticks.length > 4 ? 2 : 1;
       for (let k = 0; k < yr.ticks.length; k++) {
-        const t = yr.ticks[k], y = ty(t);
-        if (y + 14 > y1 || (yr.ticks.length - 1 - k) % every) continue;
-        const s = tickLabel(t);
-        c.strokeStyle = P.panel; c.lineWidth = 3; c.lineJoin = 'round';
-        c.strokeText(s, x0 + 3, y + 2);
-        c.fillText(s, x0 + 3, y + 2);
+        if ((yr.ticks.length - 1 - k) % every) continue;
+        const t = yr.ticks[k], y = Math.max(y0 - 4, Math.min(y1, ty(t)));
+        c.fillText(tickLabel(t), x0 - 5, y);
       }
 
       // x axis: sim time.
@@ -223,19 +249,35 @@
       }
       c.stroke();
       c.setLineDash([]);
-      // Command ticks along the top, labelled where there is room ("fliC ×4", "glucose none").
+      // Command ticks along the top. Labels ("fliC ×4", "glucose none") go where there is room,
+      // the more important first: glucose, other medium, drugs, then promoters (prio 4, 3, 2, 1).
       c.fillStyle = P.muted; c.textAlign = 'left'; c.textBaseline = 'top'; c.font = '12px ' + FONT;
-      let freeFrom = -1e9;
+      let nPlaced = 0;
       for (let k = 0; k < m.markers.n; k++) {
         const kind = m.markers.kind[k];
         if (kind !== 2 && kind !== 3) continue;
         const x = tx(m.markers.tick[k] * m.dt);
         if (x < x0 || x > x1) continue;
         c.fillRect(Math.round(x) - 0.5, y0 - 5, 1.5, 5);
-        const label = m.markers.label[k];
-        if (label && x >= freeFrom) {
+      }
+      for (let pr = 4; pr >= 0; pr--) {
+        for (let k = m.markers.n - 1; k >= 0; k--) {          // newest first within a priority
+          const kind = m.markers.kind[k];
+          if (kind !== 2 && kind !== 3) continue;
+          const kp = m.markers.prio ? m.markers.prio[k] : 1;
+          if (kp !== pr) continue;
+          const label = m.markers.label[k];
+          if (!label) continue;
+          const x = tx(m.markers.tick[k] * m.dt);
+          if (x < x0 || x > x1) continue;
           const w = c.measureText(label).width;
-          if (x + 3 + w <= W - 2) { c.fillText(label, x + 3, 1); freeFrom = x + w + 10; }
+          const a = x + 3, e = a + w;
+          if (e > W - 2) continue;
+          let free = true;
+          for (let q = 0; q < nPlaced && free; q++) if (a < PLACED[2 * q + 1] + 8 && e + 8 > PLACED[2 * q]) free = false;
+          if (!free || nPlaced >= PLACED.length / 2) continue;
+          c.fillText(label, a, 1);
+          PLACED[2 * nPlaced] = a; PLACED[2 * nPlaced + 1] = e; nPlaced++;
         }
       }
 
@@ -268,10 +310,11 @@
         this.labelX = Math.min(x1, xl);
       }
 
-      // Direct labels at the line ends, nudged apart so they do not overlap.
+      // Direct labels at the line ends: kept inside the plot, then nudged apart so they do not overlap.
       if (m.nSeries > 1 || this.opts.labelGutter) {
+        const top = y0 + 6, bottom = y1 - 6, gap = 14;
         const order = ORDER;
-        for (let s = 0; s < m.nSeries; s++) order[s] = s;
+        for (let s = 0; s < m.nSeries; s++) { order[s] = s; this.labelY[s] = Math.max(top, Math.min(bottom, this.labelY[s])); }
         for (let a = 1; a < m.nSeries; a++) {
           for (let b = a; b > 0 && this.labelY[order[b]] < this.labelY[order[b - 1]]; b--) {
             const t = order[b]; order[b] = order[b - 1]; order[b - 1] = t;
@@ -279,13 +322,15 @@
         }
         for (let a = 1; a < m.nSeries; a++) {
           const prev = this.labelY[order[a - 1]];
-          if (this.labelY[order[a]] < prev + 14) this.labelY[order[a]] = prev + 14;
+          if (this.labelY[order[a]] < prev + gap) this.labelY[order[a]] = prev + gap;
         }
+        const over = m.nSeries ? this.labelY[order[m.nSeries - 1]] - bottom : 0;
+        if (over > 0) for (let s = 0; s < m.nSeries; s++) this.labelY[s] -= over;     // shift the stack up
         c.textAlign = 'left'; c.textBaseline = 'middle'; c.font = '600 12px ' + FONT;
         for (let s = 0; s < m.nSeries; s++) {
           const ser = m.series[s];
           c.fillStyle = P[ser.color];
-          c.fillText(ser.label, this.labelX + 6, Math.max(y0, Math.min(H - PAD_BOTTOM - 4, this.labelY[s])));
+          c.fillText(ser.label, this.labelX + 6, this.labelY[s]);
         }
       }
 
@@ -307,6 +352,8 @@
   }
 
   const ORDER = new Int32Array(8);
+  const PLACED = new Float64Array(2 * 64);      // command-label intervals placed this draw
+  const GUT = { left: 0, right: 0 };
   const FONT = 'system-ui, -apple-system, "Segoe UI", Roboto, sans-serif';
 
   /** Axis numbers: 12, 1.5, 2.5k style is avoided; counts use the standard format. */

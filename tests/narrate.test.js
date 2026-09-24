@@ -26,10 +26,14 @@ test('c-1 / U-3: every narrator sentence, for every gene, named and hidden, pass
     if (s.text.length > longest.length) longest = s.text;
   }
   t.diagnostic(`${all.length} expansions; longest ${longest.length} characters: "${longest}"`);
+  // Soft check (LAB_UI §7.4): lines over 110 characters may need three lines on a 360 px phone.
+  const over = [...new Set(all.filter((s) => s.text.length > 110).map((s) => `${s.key}/${s.gene} (${s.text.length})`))];
+  t.diagnostic(`over 110 characters: ${over.length ? over.join(', ') : 'none'}`);
   assert.deepEqual(bad, []);
-  // Each rule has a unique key; 30 rules, 1–22 with 11b and 16a–g, 17a–b.
-  assert.equal(new Set(N.RULES.map((r) => r.key)).size, 30);
-  assert.deepEqual(N.RULES.filter((r) => r.preempt).map((r) => r.n), ['1', '2', '3', '4', '5', '6', '7', '8', '9', '10', '11', '11b']);
+  // Each rule has a unique key; 36 rules: 1–22 with 6b–c, 10b, 11b, 13b, 16a–g, 17a–b, 19b and 21b.
+  assert.equal(N.RULES.length, 36);
+  assert.equal(new Set(N.RULES.map((r) => r.key)).size, 36);
+  assert.deepEqual(N.RULES.filter((r) => r.preempt).map((r) => r.n), ['1', '2', '3', '4', '5', '6', '6b', '6c', '7', '8', '9', '10', '10b', '11', '11b']);
 });
 
 test('c-1 / U-3: the lint catches what it must (negative controls), and the LAB_UI examples render exactly', () => {
@@ -48,12 +52,16 @@ test('c-1 / U-3: the lint catches what it must (negative controls), and the LAB_
   assert.equal(say('gene.tx', 'gly'), 'The glucose-processing genes are being transcribed; no protein yet.');
   assert.equal(say('gene.leftover', 'fliC'), 'Transcription of the flagellin gene has stopped, but its mRNA is still being translated.');
   assert.equal(say('gene.gone', 'lacZ'), 'The mRNA for β-galactosidase is gone; the protein remains and is shared out at each division.');
-  assert.equal(say('burden', 'fliC'), 'Ribosomes busy with flagellin are not making anything else, so growth has slowed.');
+  assert.equal(say('burden', 'fliC'), 'Ribosomes busy with flagellin are not making other proteins, so growth slows over a few generations.');
   assert.equal(say('gene.noatp', 'lacY'), 'The lactose permease gene is switched on, but with no ATP nothing is transcribed.');
-  assert.equal(say('gene.down', 'ptsG'), 'The glucose transporter gene is transcribed less often now; the glucose transporter falls slowly as the cell grows and divides.');
+  assert.equal(say('gene.down', 'ptsG'), 'The glucose transporter gene is transcribed less often now; its protein is diluted as the cell grows.');
+  assert.equal(say('gene.up', 'gly'), 'The glucose-processing genes are transcribed more often now, so their protein climbs to a higher level.');
+  assert.equal(say('starve.noenzyme', 'gly'), 'The glucose-processing enzymes are too scarce to break down glucose quickly, so ATP is low and growth slows.');
+  assert.equal(say('starve.noenzyme', 'gly', hidden), 'Protein B is too scarce to break down glucose quickly, so ATP is low and growth slows.');
+  assert.equal(say('lac.toofew', null), 'Lactose is outside, but there is too little LacY and LacZ to keep ATP up, so the cell has stopped.');
   assert.equal(say('gene.tx', 'fliC', hidden), 'Gene G is being transcribed; no protein yet.');
   assert.equal(say('lac.noY', null, hidden), 'Lactose is outside, but without protein E it does not get in.');
-  assert.equal(say('burden.lac', null), 'With no lactose here, LacZ and LacY only take up ribosomes, so growth has slowed.');
+  assert.equal(say('burden.lac', 'lacZ'), 'With no lactose here, β-galactosidase does no work, and making it slows growth over a few generations.');
 });
 
 // ---------------------------------------------------------------------------
@@ -64,11 +72,12 @@ for (const field of Object.keys(OBS.FACT_VALUES)) coverage[field] = new Set();
 function cover(f) {
   coverage['drug.rif'].add(f.drug.rif);
   coverage['drug.cm'].add(f.drug.cm);
-  for (const field of ['medium', 'glucoseLevel', 'carbon', 'glucoseImport', 'energy', 'aa', 'lactoseBlock', 'uselessGene',
+  for (const field of ['medium', 'glucoseLevel', 'carbon', 'glucoseImport', 'glucoseStep', 'energy', 'aa', 'lactoseBlock', 'uselessGene',
     'aaOutside', 'aaImportOn', 'growth', 'justDivided', 'limiting']) coverage[field].add(f[field]);
   coverage.lastCommandedGene.add(f.lastCommandedGene === null ? null : 'gene');
 }
 const keysSeen = new Set();
+const slowButNormal = [];      // M2: the key is never growth.normal while facts.growth is 'slow'
 
 /**
  * Runs one scenario: a steady cell (seed 1 unless given), commands [[tick, cmd], …]
@@ -95,6 +104,7 @@ function play({ seed = 1, config = {}, commands = [], ticks, script }) {
     cover(facts);
     const out = N.narrate(facts, mem, cell.tick);
     keysSeen.add(out.key);
+    if (out.key === 'growth.normal' && facts.growth !== 'normal' && slowButNormal.length < 5) slowButNormal.push(`seed ${seed} tick ${cell.tick} growth ${facts.growth}`);
     if (!keys.length || keys[keys.length - 1].key !== out.key || keys[keys.length - 1].gene !== out.gene) {
       keys.push({ tick: cell.tick, key: out.key, gene: out.gene, text: out.text });
     }
@@ -205,6 +215,71 @@ test('U-4: glucose Low → growth.low after 1 h (not starve.fewimport); ptsG ×�
   const down = few.first('gene.down'), starved = few.first('starve.fewimport');
   assert.ok(down >= 0 && down < 60, few.seq());
   assert.ok(starved > down && starved <= 8 * HOUR, few.seq());
+  assert.ok(!few.keys.some((k) => k.key === 'starve.noenzyme'), 'transporters limit here, not the enzymes: ' + few.seq());
+});
+
+test('U-4: glucose-processing genes Off in High glucose → starve.noenzyme (the enzymes limit), never starve.fewimport', () => {
+  const r = play({ commands: [[0, setP('gly', 'off')]], ticks: 5 * HOUR });
+  const t = r.first('starve.noenzyme');
+  assert.ok(t > 0, r.seq());
+  assert.equal(r.keys.find((k) => k.key === 'starve.noenzyme').gene, 'gly');
+  assert.ok(!r.keys.some((k) => k.key === 'starve.fewimport'), r.seq());
+  assert.equal(r.keyAt(5 * HOUR), 'starve.noenzyme', r.seq());
+});
+
+test('U-4: lac genes ×1 for only 30 min, then lactose only → lac.toofew once ATP is gone; ×4 for an hour never gives it', () => {
+  const lactoseOnly = medium({ glucose_mM: 0 });
+  const few = play({ commands: [[0, setP('lacY', 1)], [0, setP('lacZ', 1)], [0, medium({ lactose_mM: PV.lactosePresent })], [1800, lactoseOnly]], ticks: 1800 + 900 });
+  assert.ok(few.first('lac.toofew', 1800) > 1800, few.seq());
+  assert.equal(few.keyAt(1800 + 900), 'lac.toofew', few.seq());
+  const ok = play({ commands: [[0, setP('lacY', 4)], [0, setP('lacZ', 4)], [0, medium({ lactose_mM: PV.lactosePresent })], [HOUR, lactoseOnly]], ticks: 2 * HOUR });
+  assert.ok(!ok.keys.some((k) => k.key === 'lac.toofew'), ok.seq());
+  assert.equal(ok.keyAt(2 * HOUR), 'growth.lactose', ok.seq());
+});
+
+test('U-4: glucose and lactose both used → growth.both; slow growth with no named cause → growth.slow, not growth.normal', () => {
+  const both = play({ commands: [[0, setP('lacY', 1)], [0, setP('lacZ', 1)], [0, medium({ lactose_mM: PV.lactosePresent })]], ticks: HOUR });
+  assert.equal(both.facts.carbon, 'both');
+  assert.equal(both.keyAt(HOUR), 'growth.both', both.seq());
+  const slow = play({ commands: [[0, setP('aaSyn', 'off')]], ticks: 4 * HOUR });
+  assert.equal(slow.facts.growth, 'slow');
+  assert.equal(slow.keyAt(4 * HOUR), 'growth.slow', slow.seq());
+});
+
+test('U-4: a drug switched off → drug.cm.off / drug.rif.off for 10 min; under chloramphenicol with no ATP the line is not drug.cm', () => {
+  const cm = play({ commands: [[0, drug('chloramphenicol', 1)], [1800, drug('chloramphenicol', 0)]], ticks: 1800 + 900 });
+  assert.ok(cm.first('drug.cm.off', 1800) >= 1800 && cm.first('drug.cm.off', 1800) <= 1802, cm.seq());
+  assert.notEqual(cm.keyAt(1800 + 700), 'drug.cm.off', 'drug.cm.off lasts 10 min');
+  const rif = play({ commands: [[0, drug('rifampicin', 1)], [1800, drug('rifampicin', 0)]], ticks: 1800 + 900 });
+  assert.ok(rif.first('drug.rif.off', 1800) >= 1800 && rif.first('drug.rif.off', 1800) <= 1802, rif.seq());
+  assert.notEqual(rif.keyAt(1800 + 700), 'drug.rif.off');
+  // fliC ×4, then glucose gone (lactose but no LacY), then chloramphenicol: with no ATP there is no mRNA to talk about.
+  const noatp = play({
+    commands: [[0, setP('fliC', 4)], [1800, medium({ glucose_mM: 0, lactose_mM: PV.lactosePresent })], [2400, drug('chloramphenicol', 1)]],
+    ticks: 2 * HOUR,
+  });
+  assert.equal(noatp.facts.energy, 'none');
+  assert.notEqual(noatp.keyAt(2 * HOUR), 'drug.cm', noatp.seq());
+  assert.equal(noatp.keyAt(2 * HOUR), 'lac.noY', noatp.seq());
+});
+
+test('U-4: the burden line does not flicker (uselessGene hysteresis): fliC ×½ and lacZ ×1 stay at least 120 s between changes', () => {
+  for (const [gene, level] of [['fliC', 0.5], ['lacZ', 1]]) {
+    for (const seed of [1, 2, 3, 4]) {
+      const cell = new Cell(mergeConfig({ seed, start: 'steady' }, {}));
+      cell.command(setP(gene, level));
+      const f = OBS.createFacts();
+      let last = null, lastTick = 0, minDwell = Infinity;
+      for (let t = 0; t < 5400; t++) {
+        cell.step();
+        OBS.facts(cell, f);
+        const on = f.uselessGene !== null;
+        if (last !== null && on !== last) { if (cell.tick > 900) minDwell = Math.min(minDwell, cell.tick - lastTick); lastTick = cell.tick; }
+        last = on;
+      }
+      assert.ok(minDwell >= 120, `${gene} ×${level} seed ${seed}: shortest stay ${minDwell} s`);
+    }
+  }
 });
 
 test('U-4: lac genes preinduced 4 h in glucose, then lactose only → growth.lactose once adapted', () => {
@@ -280,6 +355,7 @@ test('U-4: lacY and aaImp as useless genes (fast promoters and strong RBS), and 
 test('U-4: every rule was reached and every facts value occurred (run after the scenarios)', (t) => {
   const missingKeys = N.RULES.map((r) => r.key).filter((k) => !keysSeen.has(k));
   assert.deepEqual(missingKeys, [], 'rules never reached');
+  assert.deepEqual(slowButNormal, [], 'growth.normal while growth was not normal');
   const missing = [];
   for (const [field, values] of Object.entries(OBS.FACT_VALUES)) {
     for (const v of values) if (!coverage[field].has(v)) missing.push(`${field} = ${v}`);

@@ -144,6 +144,10 @@ body[data-layout="compact"] .stage { min-height: 220px; }
 .drug-badge { font-size: 13px; font-weight: 600; padding: 2px 8px; border-radius: 6px; border: 1px solid; }
 .drug-badge.rif { color: var(--drug-rif); background: var(--drug-rif-pale); }
 .drug-badge.cm { color: var(--drug-cm); background: var(--drug-cm-pale); }
+.outside-scale {
+  position: absolute; top: 8px; right: 8px; pointer-events: none; font-size: 12px; color: var(--muted);
+  padding: 1px 6px; border-radius: 6px; background: var(--outside);
+}
 .paused-badge {
   position: absolute; left: 8px; bottom: 8px; max-width: calc(100% - 96px);
   font-size: 13px; font-weight: 600; padding: 3px 9px; border-radius: 6px;
@@ -168,9 +172,14 @@ body[data-layout="compact"] .stage { min-height: 220px; }
 .fb-text { min-width: 0; flex: 1; display: flex; flex-direction: column; line-height: 1.2; }
 .fb-title { font-weight: 600; font-size: 15px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .fb-title .sym { font-size: 13px; }
-.fb-counts { font-size: 13px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.fb-counts { font-size: 13px; color: var(--muted); display: flex; flex-wrap: wrap; column-gap: 12px; min-width: 0; }
+.fb-m, .fb-p { white-space: nowrap; }
+/* Phone portrait: mRNA and protein on their own lines, so the focus bar's height never changes with the counts. */
+body[data-layout="compact"]:not([data-short]) .fb-counts { flex-direction: column; }
 .fb-change { flex: none; font-size: 13px; color: var(--accent); font-weight: 600; display: flex; align-items: center; gap: 2px; }
 .chev { font-size: 20px; line-height: 1; }
+/* Short screens: the chevron alone, so the counts fit on one line and the cell view keeps its 220 px. */
+body[data-short] .fb-change-word { display: none; }
 .fb-row2 { padding: 0 12px 4px; }
 body:not([data-layout="compact"]) .fb-row1 { border-bottom: 0; }
 
@@ -179,7 +188,7 @@ body:not([data-layout="compact"]) .fb-row1 { border-bottom: 0; }
   padding: 3px 12px; border: 0; border-top: 1px solid var(--line); background: var(--panel); text-align: left;
   font-size: 13px; line-height: 1.3; color: var(--muted);
 }
-.legend-full { flex: 1; min-width: 0; }
+.legend-full { flex: 1; min-width: 0; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; max-height: 2.6em; }
 .legend-short { display: none; flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 body[data-short] .legend-full { display: none; }
 body[data-short] .legend-short { display: block; }
@@ -192,9 +201,13 @@ body[data-short] .legend-short { display: block; }
   font-size: 15px; line-height: 1.35; color: var(--ink);
   display: flex; align-items: center;
 }
-/* Compact reserves three lines (the longest sentences wrap to three at 360 px), so the page does not jump. */
-body[data-layout="compact"] .narrator { min-height: 70px; line-height: 1.3; }
-body[data-layout="compact"][data-short] .narrator { min-height: 52px; font-size: 14px; }
+.narrator-text { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 3; overflow: hidden; }
+/* Compact has a fixed height of three lines (the longest sentences wrap to three at 360 px), so a new
+   sentence never resizes the cell view. Short screens keep three lines at a smaller size. */
+body[data-layout="compact"] .narrator { height: 72px; min-height: 0; line-height: 1.3; }
+body[data-layout="compact"][data-short] .narrator { height: 54px; padding-top: 3px; padding-bottom: 3px; font-size: 13px; line-height: 1.2; }
+/* Outside the phone-portrait layout the bottom cells reach into the home-indicator inset. */
+body:not([data-layout="compact"]) .narrator { padding-bottom: calc(6px + var(--safe-b)); }
 body[data-layout="split"] .narrator, body[data-layout="wide"] .narrator, body[data-layout="stack"] .narrator { border-bottom: 1px solid var(--line); }
 
 /* ---- tabs ---- */
@@ -224,6 +237,7 @@ body[data-layout="split"] .pane, body[data-layout="wide"] #pane-genes, body[data
   min-height: 0; overflow-y: auto; overscroll-behavior: contain; -webkit-overflow-scrolling: touch;
   padding: 12px 12px 20px; background: var(--bg); position: relative;
 }
+body:not([data-layout="compact"]) .pane { padding-bottom: calc(20px + var(--safe-b)); }
 body[data-layout="wide"] #pane-graphs { border-top: 1px solid var(--line); padding-top: 10px; }
 .pane-head { display: flex; align-items: baseline; gap: 8px; margin: 2px 2px 10px; }
 .pane-head h2 { font-size: 18px; font-weight: 650; }
@@ -266,9 +280,11 @@ body[data-layout="stack"] .card-list { grid-template-columns: repeat(auto-fill, 
 .st-knocked-out { border-color: var(--bad); color: var(--bad); }
 .card-job { font-size: 14px; color: var(--muted); margin: 0 0 8px 22px; line-height: 1.35; }
 .badge { display: inline-block; font-size: 12px; font-weight: 600; color: var(--ink); background: var(--muted-fill); border-radius: 6px; padding: 0 6px; margin-right: 2px; }
-.card-counts { display: flex; align-items: center; gap: 12px; margin-top: 8px; font-size: 14px; white-space: nowrap; }
+/* Counts on two lines at the left, the sparkline beside them: the same shape at any count, never past the card edge. */
+.card-counts { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; column-gap: 12px; margin-top: 8px; font-size: 14px; line-height: 1.3; }
+.count-m, .count-p { grid-column: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .count-p { font-weight: 600; }
-.spark { width: 88px; height: 28px; margin-left: auto; flex: none; }
+.spark { grid-column: 2; grid-row: 1 / span 2; width: 88px; max-width: 88px; height: 28px; }
 .card-cost { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--muted); min-height: 44px; }
 .share-bar { flex: 1; height: 6px; border-radius: 3px; background: var(--muted-fill); overflow: hidden; min-width: 40px; }
 .share-fill { display: block; height: 100%; width: 0; background: var(--muted); border-radius: 3px; }
@@ -361,6 +377,8 @@ body[data-layout="compact"] .sheet { width: 100%; border-radius: 16px 16px 0 0; 
 .speed-label { font-weight: 600; min-width: 108px; }
 .speed-gloss { flex: 1; color: var(--muted); font-size: 14px; }
 .speed-key { color: var(--muted); font-size: 12px; border: 1px solid var(--line); border-radius: 4px; padding: 0 5px; }
+/* Keyboard shortcuts mean nothing on a touch phone, where the boxes read as checkboxes. */
+@media (hover: none), (pointer: coarse) { .speed-key { display: none; } }
 .big-choice { flex-direction: column; align-items: flex-start; gap: 2px; padding: 10px 16px; min-height: 64px; }
 .choice-title { font-weight: 650; }
 .choice-note { font-weight: 400; font-size: 14px; color: var(--muted); }
@@ -379,7 +397,8 @@ body[data-layout="compact"] .sheet { width: 100%; border-radius: 16px 16px 0 0; 
   background: var(--ink); color: var(--panel); padding: 8px 8px 8px 14px; border-radius: 10px; font-size: 14px;
   box-shadow: 0 4px 16px rgba(0, 0, 0, .25);
 }
-body[data-layout="compact"] .toast { bottom: auto; top: calc(88px + var(--safe-t)); }
+/* Compact: above the tab bar, clear of the cell view. */
+body[data-layout="compact"] .toast { bottom: calc(64px + var(--safe-b)); }
 .toast-action { min-height: 44px; white-space: nowrap; flex: none; background: transparent; color: inherit; border-color: currentColor; }
 .banner {
   position: fixed; z-index: 30; top: calc(8px + var(--safe-t)); left: 8px; right: 8px; margin: 0 auto; max-width: 560px;
@@ -444,12 +463,13 @@ body[data-reduced-motion] * { transition-duration: 0s !important; animation: non
       </div>
       <div id="paused-badge" class="paused-badge"><span id="paused-text"></span></div>
       <div id="scalebar" class="scalebar"><span class="label" data-text="cell.scaleBar"></span><span class="bar"></span></div>
+      <div id="outside-scale" class="outside-scale num" hidden></div>
       <div id="tap-chip" class="tap-chip" role="status" hidden></div>
     </div>
     <div id="focusbar" class="focusbar"></div>
     <button id="legend" class="legend" type="button"><span id="legend-full" class="legend-full"></span><span id="legend-short" class="legend-short"></span><span class="key-pill" data-text="legend.key"></span></button>
   </section>
-  <div id="narrator" class="narrator" aria-live="polite"></div>
+  <div id="narrator" class="narrator" aria-live="polite"><span id="narrator-text" class="narrator-text"></span></div>
   <div id="paneltabs" class="paneltabs" role="tablist">
     <button class="ptab" type="button" role="tab" data-tab="genes" data-text="tabs.genes"></button>
     <button class="ptab" type="button" role="tab" data-tab="medium" data-text="tabs.medium"></button>

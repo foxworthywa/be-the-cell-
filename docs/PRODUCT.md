@@ -14,7 +14,7 @@ M1 is the first thing students touch, and the basis for the first small-group se
 - One screen and one bacterium (an E. coli-like lab strain without oxygen), with 7 genes, each
   on its own promoter dial (Off, ¼, ½, 1, 2, 4).
 - A medium to change (glucose None/Low/High, lactose, amino acids) and two drugs
-  (rifampicin-like, chloramphenicol-like) at Low or Full dose.
+  (rifampicin-type, chloramphenicol-type) at Low or Full dose.
 - A cell view drawn from engine state, gene cards, graphs, an ATP-spending bar and a
   one-sentence narrator.
 - Pause and five speeds (real time to "1 s = 1 h"), "Start over" (the same cell or a new one),

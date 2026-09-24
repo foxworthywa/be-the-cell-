@@ -29,11 +29,14 @@
 
   /** x to 2 significant figures, as a plain decimal string ("0.0050" -> "0.005", 98.4 -> "98", 1234 -> "1,200"). */
   function sig2(x) {
-    if (!(x > 0)) return '0';
+    if (!(x > 0) || x < 1e-90) return '0';
     const p = Math.floor(Math.log10(x)) - 1;
     const r = Math.round(x / Math.pow(10, p)) * Math.pow(10, p);
     if (p >= 0) return commas(r);
-    return String(Number(r.toFixed(-p)));
+    // toFixed, never String(Number(…)): JS prints numbers below 1e-6 in exponent form ("3.5e-9").
+    let s = r.toFixed(-p);
+    if (s.indexOf('.') >= 0) s = s.replace(/0+$/, '').replace(/\.$/, '');
+    return s;
   }
 
   /** A molecule count (LAB_UI §8.3). */

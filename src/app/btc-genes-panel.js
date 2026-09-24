@@ -122,7 +122,8 @@
     }
 
     drawSparks() {
-      const app = this.app, rec = app.rec, P = PAL.current(), view = app.cell.observe();
+      // The recent recorder keeps full resolution, so the last hour stays detailed after a fast run.
+      const app = this.app, rec = app.recRecent || app.rec, P = PAL.current(), view = app.cell.observe();
       const dt = view.scale.dt_s, t1 = view.t_s, t0 = t1 - SPARK_S;
       const i0 = Plot.lowerBound(rec.ticks, rec.count, Math.floor(t0 / dt));
       for (const e of this.cards) {

@@ -33,7 +33,7 @@ Levels, story, prediction sketching, name hiding, the designer mode, oxygen, and
 | Rule | How the lab UI satisfies it |
 |---|---|
 | Every visual is rendered from simulated state | The cell view, plots, cards and narrator read only `cell.observe()`, `BTC.observe.facts()`, events and the Recorder. There are no timers on wall-clock time. Jitter and flux markers are display effects that cannot change any count or position that encodes data (§2.6). |
-| Honest scale | The time compression is always shown in the status strip, and "1 dot = N" is always visible in the cell legend. Width exaggeration and not-to-scale mRNA are disclosed in the legend. "Stands for ~N genes" badges appear on the lumped genes. |
+| Honest scale | The time compression is always shown in the status strip, and "1 dot = N" is always visible: the legend for the cell's contents, and an "outside: 1 dot = N" label on the canvas for the medium. Width exaggeration is disclosed on the scale bar ("1 µm · width ×2"); not-to-scale mRNA is disclosed in the key sheet. "Stands for ~N genes" badges appear on the lumped genes. |
 | Never advance just because time passed | This matters for levels. In M1 the lab starts **paused** and nothing is gated. |
 | Minimal text | One idea per screen and a one-sentence narrator. Longer explanations sit behind tap-to-reveal "About" rows. |
 | No teleology | Every student-facing string lives in one content file and is linted (§11, U-3). |
@@ -80,7 +80,7 @@ classify(w, h):
 **Tab state**
 - The active tab is UI state, remembered in `localStorage` (§10.5).
 - When the layout class changes, a tab that no longer exists maps to the nearest one (Cell → Genes, and Graphs → Genes in `wide`).
-- The **selected gene** is shared across all views (§3.6). Its default is `ptsG`.
+- The **selected gene** is shared across all views (§3.6). Its default is `fliC`, which is Off at the start, so a first-time student sees the Off segment selected and "mRNA 0" (a gene that is already on at steady state shows no change when play is pressed). Saved preferences keep their own choice.
 
 ### 1.2 Compact (phone portrait, 360×740): Cell tab
 
@@ -91,9 +91,9 @@ Height budget, assuming 640 px of usable height in a browser tab (740 px in an i
 | status strip | 68 |
 | HUD slot | 0 in M1 |
 | cell canvas | flexes; **minimum 220** (≈340 at 640 px, ≈440 at 740 px, ≈271 at 553 px, before safe-area insets) |
-| focus bar | 88: a 40 px gene row plus a 48 px promoter row (§2.8) |
-| legend | 36 (2 lines); **18 (1 line) when the viewport is under 600 px tall** (§2.9) |
-| narrator | 52 |
+| focus bar | about 110: a 56 px gene row (name, then mRNA and protein on their own lines, so the height never changes with the counts) plus a 54 px promoter row (§2.8); under 600 px tall the counts share one line and "Change" becomes a chevron, about 98 |
+| legend | 36 (2 lines, clamped so it never grows to 3); **18 (1 line) when the viewport is under 600 px tall** (§2.9) |
+| narrator | **fixed** 72 (3 lines at 15 px); 54 under 600 px tall (3 lines at 13 px). A fixed height, so a new sentence never resizes the cell view |
 | tab bar | 56, plus the safe-area inset |
 
 Fixed regions total 300 px (282 px under 600 px of height), so the canvas never drops below 220 px on any phone of 502 px usable height or more, and the page still never scrolls. If the usable height is below 502 px (very small windows), the canvas keeps its 220 px minimum and the narrator drops to one line with an ellipsis; the full sentence stays in the canvas `aria-label`.
@@ -123,7 +123,7 @@ Fixed regions total 300 px (282 px under 600 px of height), so the canvas never 
 │ 1 dot = 1,000 proteins · 100 ribosomes │ legend (2 lines, 13 px; 1 line
 │ · 100,000 ATP · 1 mRNA  [Key]          │  below 600 px of height)
 ├──────────────────────────────────────┤
-│ The cell is growing steadily on      │  narrator (2 lines reserved)
+│ The cell is growing steadily on      │  narrator (3 lines, fixed height)
 │ glucose.                             │
 ├──────────────────────────────────────┤
 │  [◉ Cell] [ Genes ] [Medium] [Graphs]│  tab bar: icon + label, 56 px
@@ -166,10 +166,10 @@ The status strip, narrator and tab bar stay in place; only the content pane chan
 │ No oxygen: this flask is like the gut.│
 │──────────────────────────────────────│
 │ Drugs  (act instantly; no resistance)│
-│ Rifampicin-like                       │
+│ Rifampicin-type                       │
 │ Blocks RNA polymerase: no new mRNA is │
 │ started.          [•Off][ Low ][Full]│
-│ Chloramphenicol-like                  │
+│ Chloramphenicol-type                  │
 │ Stalls ribosomes: mRNA stays, protein │
 │ is not made.      [•Off][ Low ][Full]│
 │──────────────────────────────────────│
@@ -262,16 +262,16 @@ In `wide`, the right panel is 380 px. The left column splits its height 55/45 be
 
 **Orientation**
 - The rod lies along the stage's long axis: vertical in portrait stages, horizontal in landscape ones.
-- Orientation is fixed per mount and changes only on relayout.
+- Orientation is fixed per mount and changes only on relayout, with hysteresis: a vertical rod turns horizontal only when the stage is more than 10% wider than tall, and back only when it is more than 10% taller than wide (`create(w, h, prevVertical)`), so a few pixels of layout change never flip it.
 
 **Scale**
 - `pxPerUm` is fixed for the session so that growth is visible. It is chosen so that a rod of length `L(2.3 fL)` plus 12% margin fits the long axis.
 - Rod length uses `view.cell.length_um` (true length).
-- Drawn width = `2 × view.cell.width_um` (width exaggerated ×2, disclosed in the legend as "width drawn ×2").
+- Drawn width = `2 × view.cell.width_um` (width exaggerated ×2, disclosed on the scale bar as "1 µm · width ×2").
 - If a cell ever exceeds the fitted length, `pxPerUm` steps down by 15% and the scale bar updates. This does not happen in normal M1 runs.
 
 **Scale bar and disclosure**
-- The scale bar reads "1 µm" and runs along the long axis.
+- The scale bar reads "1 µm · width ×2" and runs along the long axis (the bar measures length, which is to scale).
 - The legend sheet says: "Length to scale; width drawn twice as wide so the inside is readable."
 
 **Cell-local coordinates**
@@ -315,7 +315,7 @@ Every count below is `BTC.dots.count(n, N)`, which is `floor(n/N + 0.5)`. The va
 | Nascent mRNA | strand from the locus, length ∝ progress | gene colour | `genes[i].nascentProgress[j]` | 1 | at gene i's locus, fanned by j |
 | Mature mRNA, focus gene | wavy polyline; length ∝ ℓ, clamped 12–48 px, then scaled down uniformly (floor 8 px) so that Σ(length × 2 px stroke) of all focus strands ≤ 40% of the cell interior's area; not to scale (disclosed) | gene colour | `genes[f].mRNAIds[0 … mRNA)` | 1 | `pos('m:'+id, 0, epoch)`. Keyed by **molecule id**, so the molecule that decays is the dot that disappears |
 | Mature mRNA, other player genes | short straight mark, 6–8 px (length from the hash), 2 px stroke; still one mark per molecule | gene colour | `genes[i].mRNAIds[0 … mRNA)` | 1 | `pos('m:'+id, 0, epoch)`, keyed by molecule id as above |
-| Ribosomes on the focus gene's mRNA | two-lobed glyph (large and small subunit), 6 px | `--ribosome` | `genes[f].ribosomes`, spread over that gene's mRNA and nascent strands | **1**, or **10** when `genes[f].ribosomes` > 400 (back to 1 below 320); the legend then reads "focus ribosomes: 1 dot = 10" | along each strand. Strand j gets `floor(R/S)` glyphs (R = glyph count after scaling), and the remainder goes to strands chosen by `hash(id, epoch)` order |
+| Ribosomes on the focus gene's mRNA | two-lobed glyph (large and small subunit), 4 px, drawn at 60% alpha over the strands so the mRNA shows through | `--ribosome` | `genes[f].ribosomes`, spread over that gene's mRNA and nascent strands | **1**, or **10** when `genes[f].ribosomes` > 400 (back to 1 below 320); the key sheet row "ribosome on the watched mRNA" and the tap chip give the scale | along each strand. Strand j gets `floor(R/S)` glyphs (R = glyph count after scaling), and the remainder goes to strands chosen by `hash(id, epoch)` order |
 | All other ribosomes | same glyph, 5 px. Filled = elongating; hollow = free; a short `--bad` bar across the glyph = stalled | `--ribosome` | `ribosomes.elongating − focus polysome`, `free`, `stalled` | 100 | `pos('rib', k, epoch)` |
 | Membrane proteins (ptsG, lacY, aaImp) | rounded rectangle spanning the bilayer, oriented along the normal, 5×9 px | gene colour | `genes[i].protein` | shared protein scale P | `perimeter(hash01('p:'+id, k, epoch))` |
 | Cytoplasmic proteins (gly, aaSyn) | filled circle, 5 px | gene colour | `genes[i].protein` | P | `pos('p:'+id, k, epoch)` |
@@ -380,7 +380,7 @@ These markers carry rates, not amounts.
 **Per frame, when the cell view is visible and a redraw is due:**
 1. Read `view = cell.observe()` (flyweight; no allocation).
 2. **Rebuild the positions buffer only if something changed:** a count, the epoch, the focus gene, the scale P or the stage size. The buffer is one preallocated `Float32Array(1500 × 2)` plus a `Uint8Array` of kinds and a `Uint16Array` of source indices. An unchanged frame (the usual case when speed is below 1 tick per frame) skips the rebuild and only re-applies jitter.
-3. **Draw in this fixed z-order:** outside fill, outside molecules, cytoplasm, stipple, nucleoid and DNA, nascent strands and RNA polymerase, mature mRNA, pooled ribosomes, focus polysome, proteins, ATP and ADP, amino acids, lactose inside, membrane and membrane proteins, flux markers, septum and ghost.
+3. **Draw in this fixed z-order:** outside fill, outside molecules (55% alpha), cytoplasm, stipple, nucleoid and DNA, nascent strands and RNA polymerase, other genes' mRNA marks, then **the crowd at 45% alpha** (pooled ribosomes, other genes' cytoplasmic proteins, ATP and ADP, amino acids, lactose inside), the focus gene's cytoplasmic proteins at full alpha, **the focus gene's mRNA strands** (a 4 px halo in `--inside` under the 2 px gene-colour stroke), the focus polysome (4 px, 60% alpha), membrane and membrane proteins (full alpha), flux markers, septum and ghost. A focus gene is always set, so the dimmed crowd is the permanent look. Only alpha changes: dot counts, positions and hit-testing do not, so honest scale and the pixel-identical paused frames (P14) still hold. (A "Closer" zoom is deferred: it would change pxPerUm, the scale bar and hit-testing.)
 4. **Batch by (shape, colour):** one `beginPath()`, all subpaths, then a single `fill()` or `stroke()`. That is at most about 30 fill or stroke calls per frame.
 5. **No allocation per frame.** No Path2D objects are created per frame. Glyph subpaths are appended with `moveTo`, `lineTo` and `arc`.
 
@@ -396,7 +396,7 @@ These markers carry rates, not amounts.
 ### 2.8 Focus bar and tap-to-identify
 
 **Focus bar** (below the canvas):
-- row 1 (40 px): colour chip, gene display name, then `mRNA m +n` (the "+n" is labelled "being made" in the key), then `protein P`;
+- row 1 (56 px): colour chip, gene display name, then `mRNA m + n being made` and `protein P` on their own lines (on one line under 600 px tall, where "Change ›" shrinks to "›");
 - tapping row 1 opens a gene picker sheet: 7 rows, 48 px each;
 - row 2 (48 px), **compact layout only**: the focus gene's 6-segment promoter control, the same component as on the gene card (§3.4), labelled "promoter strength for {name}" for screen readers. In the other layouts the Genes panel is visible beside or below the cell, so row 2 is omitted.
 
@@ -413,7 +413,9 @@ This keeps the phone's predict-and-observe loop on one screen: a student switche
 
 `1 dot = 1,000 proteins · 100 ribosomes · 100,000 ATP · 1 mRNA  [Key]`
 
-When the focus polysome is at 1 dot = 10, the legend adds "· focus ribosomes: 1 dot = 10".
+The legend is clamped to 2 lines. The focus polysome's own scale (1 or 10) is not in the legend line, because at 360 px it made a third line that resized the cell view; it is in the key sheet ("ribosome on the watched mRNA · 1 dot = N") and in the tap chip.
+
+**Outside scale.** While outside molecules are drawn, an overlay at the top-right of the canvas reads "outside: 1 dot = 1,000,000" (the scale of the most numerous outside species), so the most visible glyphs on screen always carry their scale.
 
 **Short screens.** When the viewport is under 600 px tall, the legend collapses to one line: the protein scale and the Key button, e.g. `1 dot = 1,000 proteins · … [Key]`. The full legend is always in the key sheet, and the collapsed line still states N for the proteins, the species whose scale changes most often.
 
@@ -425,7 +427,7 @@ When the focus polysome is at 1 dot = 10, the legend adds "· focus ribosomes: 1
 - "width drawn ×2; length to scale";
 - "mRNA drawn coiled, not to scale";
 - "the grey stipple is the rest of the proteome, not counted";
-- "no free glucose inside: PtsG passes it straight to the enzymes";
+- "Glucose from PtsG arrives already tagged (as glucose-6-phosphate) and goes straight to the enzymes, so free glucose is not drawn.";
 - "hollow dot: fewer than half a dot's worth".
 
 ---
@@ -444,9 +446,9 @@ There is one card per gene, in slot order. (Display-order variants, `variant.slo
 | State chip | see §3.3 | `genes[i].geneState` |
 | Job line | one line, ≤ 60 characters | `BTC.content.genes[id].job` |
 | Promoter control | segmented radiogroup `Off · ¼ · ½ · 1 · 2 · 4`, labelled "promoter strength" (visually hidden label; the aria label is spoken). The gene's **default** level has a small tick under it | commands `setPromoter` |
-| Counts | `mRNA m +n` and `protein P`, in tabular numerals | `genes[i].mRNA`, `nascent`, `proteinRounded` |
-| Sparkline | 88×28 canvas: protein (solid) and mRNA (thin, scaled to its own maximum) over the last 60 sim-min | Recorder |
-| Cost | "ribosome share" bar (0–25% full scale) with a percentage | `genes[i].ribosomes / ribosomes.elongating` |
+| Counts | `mRNA m + n being made` and `protein P` on two lines, in tabular numerals, with the sparkline beside them (never past the card edge) | `genes[i].mRNA`, `nascent`, `proteinRounded` |
+| Sparkline | 88×28 canvas: protein (solid) and mRNA (thin, scaled to its own maximum) over the last 60 sim-min | the recent Recorder (§5.1) |
+| Cost | "ribosome share" bar (0–25% full scale) with a percentage; screen-reader label "Share of working ribosomes reading this gene's mRNA" | `genes[i].ribosomes / ribosomes.elongating` |
 | About | tap-to-reveal row, ≤ 2 sentences (e.g. "One PtsG carries about 80 glucose per second. It sits in the inner membrane.") | `BTC.content.genes[id].about` |
 
 **Card sizing**
@@ -466,7 +468,7 @@ There is one card per gene, in slot order. (Display-order variants, `variant.slo
 | 3 | aaImp | Amino-acid importers | (several) | Bring amino acids in from the medium. | yes | ¼ |
 | 4 | lacY | Lactose permease | lacY | Carries lactose across the membrane. | no | Off |
 | 5 | lacZ | β-galactosidase | lacZ | Splits lactose into glucose and galactose. | no | Off |
-| 6 | fliC | Flagellin | fliC | Flagellum building block; no use in a still flask. | no | Off |
+| 6 | fliC | Flagellin | fliC | Flagellum building block; does no work here. | no | Off |
 
 Each entry also carries the phrases the narrator needs:
 - `genePhrase` (e.g. "the flagellin gene" / "the glucose-processing genes");
@@ -484,7 +486,7 @@ When `labConfig.showNames` is false, names become "Gene A"…"Gene G" (by displa
 | transcribing | making mRNA | accent fill (pale) |
 | stalled | stalled | warn fill (pale) with warn-ink text |
 | leftover-mRNA | off · mRNA left | muted fill |
-| protein-only | off · protein left | muted fill |
+| protein-only | off · some protein | muted fill (it is also the state of a gene never touched, which has its leak protein, so the chip does not say "left") |
 | knocked-out | removed | bad outline (not reachable in the M1 UI) |
 
 ### 3.4 Promoter control behaviour
@@ -537,10 +539,10 @@ Values in mM are shown in muted 13 px text under each option.
 
 | Row | Options (dose) | Description (exact text) |
 |---|---|---|
-| Rifampicin-like | Off (0), Low (0.3), Full (1) | "Blocks RNA polymerase: no new mRNA is started. mRNA already made is still read." |
-| Chloramphenicol-like | Off (0), Low (0.3), Full (1) | "Stalls ribosomes: protein is not made, but the mRNA stays." |
+| Rifampicin-type | Off (0), Low (0.3), Full (1) | "Blocks RNA polymerase: no new mRNA is started. mRNA already made is still read." |
+| Chloramphenicol-type | Off (0), Low (0.3), Full (1) | "Stalls ribosomes: protein is not made, but the mRNA stays." |
 
-Footer: "Drugs act instantly here; there is no uptake and no resistance."
+Footer: "Drugs act instantly here; there is no uptake and no resistance." (The "Drugs" heading has no title note; the footer says it once.) The controls say "-type" because the model drugs act only as the engine spec describes; the badges and the narrator use the plain names.
 
 While a drug is on, its row gets a tinted background in its drug token (§8.1).
 
@@ -562,10 +564,10 @@ While a drug is on, its row gets a tinted background in its drug token (§8.1).
 
 ### 4.4 About this cell (sheet)
 
-- Short forms of engine spec §18 items 1–17. Each is one sentence, from `BTC.content.about`.
-- For example: "Each gene here is on its own switch; real cells regulate them."
-- One practical row, placed first under the heading "Lactose": "To grow on lactose, switch the lactose genes on while glucose is still present, because once ATP has run out no new protein can be made." (It speaks to the student; no molecule wants or needs anything, and it passes the lint.)
-- The sheet ends with "Full details: docs/BIOLOGY.md" as plain text (no network link needed offline).
+- First, under the heading "Why a bacterium": "A bacterium is the simplest cell that does it all; your own cells also copy genes into mRNA and read it with ribosomes."
+- Then the practical rows under the heading "Lactose": "In this model, set LacY and LacZ to ×4 with glucose present and wait an hour before removing glucose; with fewer, ATP runs out." and "Real E. coli adapts to lactose after a lag; this model does not. Adding glucose back restarts a cell whose ATP has run out." (A sweep over 8 seeds backs the recipe: ×4 for 45 min or more always survives; ×1 for 30–60 min always stops. They speak to the student; no molecule wants or needs anything, and they pass the lint.)
+- Then "What is simplified": short forms of engine spec §18 items 1–21, one idea per row, from `BTC.content.about`. For example: "Each gene here has its own switch, and you set it; real cells switch genes with regulator proteins that sense conditions."
+- The sheet ends with "Full details are in the instructor notes." as plain text (a repository path means nothing to a student).
 
 ### 4.5 Download this run
 
@@ -594,7 +596,10 @@ That is 27 channels.
 
 **Memory:** 27 × 4096 × 8 B ≈ 0.9 MB.
 
-**Retention:** at every = 5 ticks the buffer holds 5.7 sim-hours before thinning. On each thinning the Recorder keeps every second sample **and doubles its sampling interval** (5 → 10 → 20 ticks), so old and new data stay evenly spaced (engine spec §12). Each sample's tick is stored beside its values, and plots place points by stored tick. The graphs read whatever resolution exists.
+**Retention:** two recorders sample the same 27 channels (they share one `observe()` refresh per tick; recorders are not hashed, so replay and golden tests are unaffected).
+- `app.rec` (capacity 4096, mode `thin`) keeps the whole run: at every = 5 ticks it holds 5.7 sim-hours before thinning. On each thinning it keeps every second sample **and doubles its sampling interval** (5 → 10 → 20 ticks), so old and new data stay evenly spaced (engine spec §12). The "All" window reads it.
+- `app.recRecent` (capacity 8640, mode `ring`) never changes its interval: when full it drops its oldest half (`copyWithin`), so it always holds at least the last 6 sim-hours at every = 5 (27 × 8640 × 8 B ≈ 1.9 MB). The 10-min, 1-h and 6-h windows and the gene-card sparklines read it, so a student who runs at "1 s = 1 h" for a minute and then slows down still sees full detail.
+Each sample's tick is stored beside its values, and plots place points by stored tick.
 
 **Live head:** each plot appends the current `view` value as its last point, so plots feel live even at "1 s = 1 s", where a new sample arrives only every 5 real s.
 
@@ -603,8 +608,8 @@ That is 27 channels.
 | Source event | Marker |
 |---|---|
 | `division` | dashed vertical line on every plot |
-| `command_applied` | a small tick at the top with a short label built from `cmdType` and `resolved`: "fliC ×4", "glucose none", "rifampicin full" |
-| drug intervals | shaded band in the drug colour at 10% alpha, from the on-command to the off-command |
+| `command_applied` | a small tick at the top with a short label built from `cmdType` and `resolved`: "fliC ×4", "glucose none", "rifampicin full". When labels collide, the more important one is kept: glucose, then other medium changes, then drugs, then promoters (newest first within a rank) |
+| drug intervals | shaded band in the drug colour at 10% alpha, from the on-command to the off-command, labelled "rif" or "Cm" at its start |
 
 ### 5.2 Plots (`BTC.Plot`, one canvas each)
 
@@ -612,16 +617,19 @@ That is 27 channels.
 |---|---|---|---|
 | 1 | mRNA (molecules) | selected genes (≤ 3) | lin (default) or log; floor for log is 1, and 0 is drawn on the baseline |
 | 2 | Protein (molecules) | selected genes (≤ 3) | lin or log (log shows dilution after switch-off as a straight descent) |
-| 3 | ATP (mM) | ATP_mM | fixed 0–4. A pale band below 1.05 mM (E = 0.3) is labelled "low" |
+| 3 | ATP (mM) | ATP_mM | fixed 0–4. A pale band below 1.05 mM (E = 0.3) is labelled "low". Readouts below 0.01 mM read "< 0.01 mM" (a starved cell sits at 3.5·10⁻⁹ mM; `format.sig2` never prints exponent notation) |
 | 4 | Cell size (fL) | V_fL | fixed 0–2.5 |
 | 5 | Growth (doublings per hour) | growth_dph | fixed 0–1.5, auto-extended to the next 0.5 above the maximum |
-| 6 | ATP spending now | 100% horizontal stacked bar of `view.ledger.fractions` | – |
+| 6 | ATP spending now | 100% horizontal stacked bar of `view.ledger.fractions`. When the total spent (Σ `ledger.perS`) is below 1% of the reference cell's (fermYield × F_ref ≈ 1.2 million ATP/s), the bar is hidden and the panel says "Almost no ATP is being made or spent." (shares of almost nothing would look like a busy cell) | – |
 
 **Stacked-bar labels:** "making protein" (translation), "other building", "upkeep", "making RNA" (transcription), "making amino acids", "transport". Each segment uses a neutral greyscale step plus a hatch for the "making protein" segment, so it does not compete with the gene colours. Each segment is labelled directly with its name and percentage. Segments narrower than 8% move their label to a line below with a leader.
 
 **Plot anatomy**
 - The title and live value are HTML over the plot's top-left, e.g. "Protein · fliC 34,100".
-- The y-axis has 3 "nice" ticks, labelled inside the plot at the right edge, with no left margin wasted.
+- The y-axis has 3 "nice" ticks, labelled in a left gutter as wide as the widest tick label, never over the data.
+- **One time axis for all plots:** the graphs panel measures every visible plot's left gutter (tick labels) and right gutter (end labels) and passes the largest of each to every plot, so a given time sits at the same x in every stacked plot.
+- End labels are first clamped inside the plot, then nudged 14 px apart; if the stack would pass the bottom it shifts up as a whole.
+- "per h" in the growth readout is joined with non-breaking spaces.
 - The x-axis shows sim time: minutes up to a 60 min window, hours beyond. Axis label: "sim time".
 - Series are 2 px lines in the gene colour, with a direct label (symbol and value) at the right end.
 - Phone plots are 120 px tall; wide-layout plots are 160–200 px.
@@ -680,11 +688,11 @@ This section is **authoritative for the narrator**. Engine spec §12's v1.0 phra
 
 - **`src/shared/btc-narrate.js`** (pure, Node-tested; engine spec §12) holds:
   - `createMemory()`;
-  - `ingest(memory, events, tick)`, which records episode phases, the last commanded gene and its direction, the last division tick, energy episodes and drug-on ticks from the event stream;
+  - `ingest(memory, events, tick)`, which records episode phases, the last commanded gene and its direction, the last division tick, energy episodes, drug-on ticks and drug-off ticks from the event stream;
   - `narrate(facts, memory, tick) → {key, text, gene?}`.
 - **`src/app/btc-narrator-ui.js`** holds `NarratorHold` (pure, with the clock injected) and the DOM binding.
 
-**Facts.** The narrator reads `BTC.observe.facts` **schema 1.1**, which is defined, with every value and threshold, in engine spec §11.5. Summary of the fields the rules below use: `drug.rif` and `drug.cm` (`off`/`low`/`full`, full meaning dose-derived ρ or θ > 0.5); `medium` (what is **outside**); `carbon` (what is **getting in**: flux above 1% of the reference flux); `glucoseLevel`; `glucoseImport` (transporter capacity: `none`/`low`/`normal`); `energy` (`normal` E > 0.7, `low`, `none` E < 0.1); `aa`; `lactoseBlock` (capacity below 1% of the induced reference); `uselessGene` (a useless gene whose **current ribosome share** exceeds 2%); `aaOutside`; `aaImportOn`; `growth` (`normal`/`slow`/`arrested`); `justDivided`. Facts contain no numbers.
+**Facts.** The narrator reads `BTC.observe.facts` **schema 1.2**, which is defined, with every value and threshold, in engine spec §11.5. Summary of the fields the rules below use: `drug.rif` and `drug.cm` (`off`/`low`/`full`, full meaning dose-derived ρ or θ > 0.5); `medium` (what is **outside**); `carbon` (what is **getting in**: flux above 1% of the reference flux); `glucoseLevel`; `glucoseImport` (transporter capacity: `none`/`low`/`normal`); `glucoseStep` (`import` or `enzymes`: which capacity holds glucose use back); `energy` (`normal` E > 0.7, `low`, `none` E < 0.1); `aa`; `lactoseBlock` (capacity below 1% of the induced reference); `uselessGene` (a useless gene whose **current ribosome share** exceeds 2.5%, and stays above 1.0% once named); `aaOutside`; `aaImportOn` (import supplies > 5% of the amino acids used); `growth` (`normal`/`slow`/`arrested`); `justDivided`. Facts contain no numbers.
 
 **Episode phases in memory** (last commanded gene, from events):
 
@@ -704,56 +712,66 @@ The first rule whose condition holds wins. `{G}` is the gene phrase, `{n}` the n
 
 | # | key | condition | sentence |
 |---|---|---|---|
-| 1 | drug.both | drug.rif = full and drug.cm = full | Both drugs are on: no new mRNA is started, and ribosomes are stalled. |
-| 2 | drug.cm | drug.cm = full | Chloramphenicol stalls ribosomes; the mRNA is still here, but almost no protein is made. |
-| 3 | drug.rif.late | drug.rif = full and ≥ 10 min since on | Under rifampicin the old mRNA has decayed, so protein synthesis has wound down. |
+| 1 | drug.both | drug.rif = full and drug.cm = full, energy ≠ none | Both drugs are on: no new mRNA is started, and ribosomes are stalled. |
+| 2 | drug.cm | drug.cm = full, energy ≠ none (with no ATP there is no mRNA left to speak of; the true cause below wins) | Chloramphenicol stalls ribosomes; the mRNA is still here, but almost no protein is made. |
+| 3 | drug.rif.late | drug.rif = full and ≥ 10 min since on | Under rifampicin the old mRNA is almost gone, so protein synthesis is winding down. |
 | 4 | drug.rif | drug.rif = full | Rifampicin blocks RNA polymerase; mRNA already made is read until it decays. |
-| 5 | drug.cm.low | drug.cm = low | Some ribosomes are stalled by chloramphenicol, so protein is made more slowly and growth slows. |
+| 5 | drug.cm.low | drug.cm = low, energy ≠ none | Some ribosomes are stalled by chloramphenicol, so protein is made more slowly and growth slows. |
 | 6 | drug.rif.low | drug.rif = low | Rifampicin is slowing transcription, so less new mRNA is made. |
-| 7 | starve.nosugar | medium = none and energy ≠ normal | There is no sugar in the medium, so ATP has run down and every machine has stopped. |
+| 6b | drug.rif.off | both drugs off, ≤ 10 min since rifampicin went from on (any dose) to off, energy ≠ none, medium ≠ none (the more recent of 6b/6c wins) | Rifampicin is gone, so RNA polymerase starts new mRNA again and protein synthesis picks up. |
+| 6c | drug.cm.off | both drugs off, ≤ 10 min since chloramphenicol went from on to off, energy ≠ none, medium ≠ none | Chloramphenicol is gone, so ribosomes run again on the mRNA that is left and growth picks up. |
+| 7 | starve.nosugar | medium = none and energy ≠ normal | There is no sugar in the medium, so no new ATP is made and every machine that uses ATP slows to a stop. |
 | 8 | starve.dormant | `dormant` active, medium ∈ {glucose, both}, carbon = none, glucoseImport ≠ normal | With no ATP, no new transporters can be made, so no sugar gets in and nothing restarts. |
 | 9 | starve.noimport | medium ∈ {glucose, both}, carbon = none, glucoseImport ≠ normal | Glucose is outside, but without transporters in the membrane none of it gets in. |
-| 10 | starve.fewimport | glucoseLevel = high, carbon ∈ {glucose, both}, energy = low | Too little glucose is getting in, so ATP is low and growth has slowed. |
+| 10 | starve.fewimport | glucoseLevel = high, carbon ∈ {glucose, both}, energy ∈ {low, none}, glucoseStep = import | Too little glucose is getting in, so ATP is low and growth has slowed. |
+| 10b | starve.noenzyme | as rule 10 but glucoseStep = enzymes; gene = gly | {N} {is} too scarce to break down glucose quickly, so ATP is low and growth slows. |
 | 11 | recover | within 5 min of `energy_ok` or `revived` that followed `energy_low` | Sugar is getting in through transporters that were already there, and ATP is coming back. |
 | 11b | gene.noatp | last commanded gene in phase waiting (on, nothing initiated) and energy = none | {G} {is} switched on, but with no ATP nothing is transcribed. |
-| 12 | lac.noY | lactoseBlock = no-lacY and medium = lactose | Lactose is outside, but without LacY it does not get in. |
-| 13 | lac.noZ | lactoseBlock = no-lacZ | Lactose gets in, but without LacZ it is not split. |
+| 12 | lac.noY | lactoseBlock = no-lacY and medium = lactose | Lactose is outside, but without {Y} it does not get in. |
+| 13 | lac.noZ | lactoseBlock = no-lacZ | Lactose gets in, but without {Z} it is not split. |
+| 13b | lac.toofew | medium = lactose, lactoseBlock = null, energy = none | Lactose is outside, but there is too little {Y} and {Z} to keep ATP up, so the cell has stopped. |
 | 14 | aa.low | aa = low | Amino acids are running short, so ribosomes are moving more slowly. |
 | 15 | divided | justDivided (≤ 90 s since `division`) | The cell divided; this daughter received about half of everything. |
 | 16a | gene.waiting | phase waiting | {G} {is} switched on; RNA polymerase has not started on {it} yet. |
 | 16b | gene.tx | phase transcribing | {G} {is} being transcribed; no protein yet. |
 | 16c | gene.rising | phase rising | {N} {is} accumulating; each mRNA is read by many ribosomes before it decays. |
-| 16d | gene.up | phase up | {G} {is} transcribed more often now, so {n} {is} climbing toward a higher level. |
-| 16e | gene.down | phase down | {G} {is} transcribed less often now; {n} fall{s} slowly as the cell grows and divides. |
+| 16d | gene.up | phase up | {G} {is} transcribed more often now, so {its} protein climbs to a higher level. |
+| 16e | gene.down | phase down | {G} {is} transcribed less often now; {its} protein is diluted as the cell grows. |
 | 16f | gene.leftover | phase leftover | Transcription of {G} has stopped, but {its} mRNA is still being translated. |
 | 16g | gene.gone | phase gone | The mRNA for {n} is gone; the protein remains and is shared out at each division. |
-| 17a | burden.lac | uselessGene ∈ {lacZ, lacY} | With no lactose here, LacZ and LacY only take up ribosomes, so growth has slowed. |
-| 17b | burden | uselessGene set | Ribosomes busy with {n} are not making anything else, so growth has slowed. |
+| 17a | burden.lac | uselessGene ∈ {lacZ, lacY}; gene = uselessGene | With no lactose here, {n} does no work, and making it slows growth over a few generations. |
+| 17b | burden | uselessGene set; gene = uselessGene | Ribosomes busy with {n} are not making other proteins, so growth slows over a few generations. |
 | 18 | growth.aa | aaOutside, aaImportOn, growth = normal | Amino acids from the medium spare the cell from making them, so it grows faster. |
 | 19 | growth.lactose | carbon = lactose, growth ≠ arrested | The cell is growing on lactose, which {Z} splits into glucose and galactose. |
+| 19b | growth.both | carbon = both, growth = normal | The cell is growing steadily on glucose and lactose. |
 | 20 | growth.low | glucoseLevel = low, growth = slow | Glucose is scarce, so growth is slow. |
 | 21 | growth.arrested | growth = arrested | Growth has stopped. |
-| 22 | growth.normal | otherwise | The cell is growing steadily on glucose. |
+| 21b | growth.slow | growth = slow | Growth is slower than usual. |
+| 22 | growth.normal | growth = normal (the only case left) | The cell is growing steadily on glucose. |
 
-Rules 11b and 16 apply only to the **last commanded** gene. With `showNames` false, "LacZ" and "LacY" in rules 12, 13, 17a and 19 are replaced by the hidden-name nouns.
+Rules 11b and 16 apply only to the **last commanded** gene. With `showNames` false, "LacZ" and "LacY" in rules 12, 13, 13b and 19 are replaced by the hidden-name nouns. Rule 22 fires only at normal growth, so "steadily" is always true.
 
 **Why the order and conditions are as they are (v1.1):**
 - **Rule 7 before rule 8.** An empty medium is the cause whenever the medium is empty, so the dormancy line (rule 8) cannot mislead a student who set glucose to None: after 10 min without glucose the narrator still says there is no sugar. Rule 8 now fires only when glucose is outside but the transporters are missing (for example a ptsG knockout, or the death spiral), which is where its sentence is true. It never fires in a lactose-only medium.
 - **Rules 8 and 9 need glucoseImport ≠ normal.** Both sentences blame missing transporters, so they fire only when the transporters really are scarce. If glucose stops getting in for another reason (for example a knocked-out glycolysis gene in a test), the narrator falls through to a plainer line such as "Growth has stopped."
 - **Rule 10 needs glucoseLevel = high.** At the Low preset the cell's energy charge is also low (proto E 0.29), so without this condition rule 10 would always hide rule 20. Rule 10 is for transporter-limited cells in plenty of glucose (e.g. ptsG ×¼); rule 20 is for scarce glucose.
 - **Rule 11b** covers the natural dead end: glucose None, lactose Present, then lacY and lacZ switched on. ATP has already collapsed, so nothing is transcribed (engine test h3). Without rule 11b the student sees only rule 12. The About sheet adds the practical advice (§4.4).
-- **Rules 17a and 17b** key on ribosomes translating the gene **now** (engine spec §11.5). After a switch-off they stop within about a minute of the mRNA being gone, while the leftover protein is still diluting; the cost is in making protein, not in holding it.
+- **Rules 10 and 10b split on glucoseStep.** PTS uptake is matched to glycolysis, so with the glucose-processing genes off the transporters are plentiful and the enzymes limit; blaming import there was false (review B-M1/P1). Both accept energy = none as well as low, so a slow, ATP-starved cell never falls through to "growing steadily".
+- **Rule 13b** names the lactose dead end (a partly induced cell moved to lactose alone runs out of ATP). It sits after 11b (so the gene.noatp scenario keeps its line) and before the gene-phase rules, which would otherwise win with a lingering phase. It makes no claim of permanence: near the threshold a cell can recover, and adding glucose always restarts it.
+- **Rules 6b/6c** explain the recovery after a drug is removed, instead of "Growth has stopped." for the first minute and a bare growth line after.
+- **Rules 21b/22.** Slow growth with no named cause says so ("Growth is slower than usual."); rule 19b covers a cell using both sugars.
+- **Rules 17a and 17b** key on ribosomes translating the gene **now** (engine spec §11.5), with a 2.5%/1.0% hysteresis band so the line does not flicker as mRNA comes in bursts. They say growth "slows over a few generations", because the cost shows in the doubling time only after an hour or so. After a switch-off they stop within about a minute of the mRNA being gone, while the leftover protein is still diluting; the cost is in making protein, not in holding it.
 
 **More examples as rendered** (all pass the lint):
 - "The flagellin gene is being transcribed; no protein yet."
 - "The glucose-processing genes are being transcribed; no protein yet."
 - "Transcription of the flagellin gene has stopped, but its mRNA is still being translated."
 - "The mRNA for β-galactosidase is gone; the protein remains and is shared out at each division."
-- "Ribosomes busy with flagellin are not making anything else, so growth has slowed."
+- "Ribosomes busy with flagellin are not making other proteins, so growth slows over a few generations."
 - "The lactose permease gene is switched on, but with no ATP nothing is transcribed."
-- "The glucose transporter gene is transcribed less often now; the glucose transporter falls slowly as the cell grows and divides."
+- "The glucose transporter gene is transcribed less often now; its protein is diluted as the cell grows."
 
-The last one runs to 124 characters. The template-by-gene expansion test keeps every combination ≤ 140.
+The template-by-gene expansion test keeps every combination ≤ 140 and lists (as a diagnostic) every expansion over 110 characters; the longest reachable ones are about 100–117.
 
 ### 7.3 Text rules (lint test c-1, extended)
 
@@ -771,8 +789,8 @@ This regex is the single source for both specs (engine spec test c-1 points here
 
 ### 7.4 Display rules (`NarratorHold`)
 
-- **Placement:** in compact, directly above the tab bar, persistent across tabs. In the other layouts, directly under the cell view. The region reserves 2 lines so the layout does not jump. Text is 15 px, `--ink`, with a 4 px `--accent` left bar.
-- **Hold:** a new key replaces the current line only after the current one has been shown for **≥ 1.5 s of real time**. Rules 1–11b (drugs, starvation and the no-ATP gene line) may pre-empt after 0.5 s.
+- **Placement:** in compact, directly above the tab bar, persistent across tabs. In the other layouts, directly under the cell view. In compact the region has a **fixed** height of 3 lines (15 px, 72 px tall; under 600 px of height 13 px, 54 px tall), clamped with an ellipsis as a backstop, so a new sentence never resizes the cell view. Text is `--ink`, with a 4 px `--accent` left bar.
+- **Hold:** a new key replaces the current line only after the current one has been shown for **≥ 1.5 s of real time**. Rules 1–11b (drugs, drug-off, starvation and the no-ATP gene line, including 6b, 6c and 10b) may pre-empt after 0.5 s.
 - **Queue:** only the most recent candidate is kept, with no backlog. At high speed, intermediate phases can be skipped, and that is acceptable.
 - **Screen readers:** the element has `aria-live="polite"`. Its `textContent` is written **only when the key or the gene changes**. Numbers never appear in it.
 - **Paused:** the narrator keeps its line. Pausing does not add a narrator sentence; the "Paused" badge on the cell does that job.
@@ -1122,6 +1140,7 @@ Every access is wrapped in try/catch. The app MUST behave correctly when storage
 |---|---|
 | `btc.ui.v1` | `{tab, speed, focusGene, graphGenes, window, logScales, theme, reducedMotion}` |
 | `btc.autosave.v1` | `{engineVersion, build, savedAt_tick, snapshot, gen0}` |
+| `btc.lastError` | the last frame error, `{msg, stack, build, tick}` (diagnostics only; nothing reads it yet) |
 
 **When the autosave is written:**
 - on hide and on `pagehide`;
@@ -1133,7 +1152,11 @@ Every access is wrapped in try/catch. The app MUST behave correctly when storage
 **Restore on load**, unless `?reset=1` or `?test=1`:
 - Proceed only if `engineVersion` matches (otherwise discard silently).
 - The restored cell is **paused**. Graph history starts at the restore point, with a "resumed" marker.
-- A toast reads: "Resumed your last cell. [Start over]".
+- Commands still waiting in the restored cell's queue (`cell.pending`, source `user`) are shown as pending on their controls again, so a control never shows the old value and then changes on its own.
+- A toast reads: "Resumed your last cell. [Start over]", but only when the cell was run or changed (snapshot tick > 0, a logged command, or a pending one). An untouched tick-0 cell is saved on every visit, and announcing it was noise.
+- Saved preferences from another build are cleaned on load: unknown genes are dropped from `graphGenes` (fallback `['fliC', 'ptsG']`), and `focusGene`, `window` and `plot4` fall back to their defaults if not recognised.
+
+**Errors in a frame.** `BTC.Loop` wraps each frame in try/catch. On an error it stops (so the button no longer says "Running"), calls `onError`, and the app shows a toast "Something went wrong. Start over, or reload the page." with a Start over action, logs to the console and stores `{msg, stack, build, tick}` under `btc.lastError` (try/catch). The first render at boot is guarded the same way, so the service worker and the debug hook still register.
 
 ---
 
@@ -1148,7 +1171,7 @@ These are added alongside the engine spec's tests.
 | U-1 | `layout.classify`: 360×740 and 375×553 → compact; 768×1024 → stack; 740×360 → split; 1280×800 and 1366×768 → wide; 1024×600 → wide; 600×900 → stack. The short-screen flag (legend on one line) is set for heights < 600 (375×553, 740×360) and not for 360×740 |
 | U-2 | `cellgeom`: 10⁵ hash points from `map(u, v)` all lie strictly inside the capsule; `perimeter(s)` points lie on it within 0.5 px, with unit normals; points are stable (same input, same output) as `length_um` grows (monotone in u) |
 | U-3 | Content lint: every narrator template, expanded for all genes in named and hidden modes, passes the full §7.3 template rules (one sentence, ≤ 140, no digits, no `!`, regex); every other `BTC.content` string passes the reduced rules (≤ 140, no `!`, regex; digits allowed); job lines ≤ 60 characters; every rejection code has text |
-| U-4 | Narrator scenarios: for each rule 1–22 (including 11b), a scripted engine run (commands at exact ticks, fixed seed) produces that key. Key sequences are asserted, not text. Required scenarios:<br>• fliC ×4 at tick 0 → the key sequence contains `gene.tx` (by tick 20) **before** `gene.rising` (after `first_protein`); `gene.waiting` is optional, because the first Poisson draw often initiates in tick 0. `gene.waiting` itself is asserted with lacZ ×¼ from off (μ ≈ 0.006 per tick).<br>• Glucose None → `starve.nosugar` within 10 ticks, and **still** `starve.nosugar` after 15 min (after `dormant` has fired).<br>• ptsG knockout with initial protein 0, glucose High → `starve.noimport` before `dormant`, then `starve.dormant`.<br>• gly knockout with initial protein 0, glucose High → `growth.arrested` (import capacity is normal, so neither transporter line fires).<br>• Glucose None and lactose Present; after E < 0.1, switch lacY ×1 and lacZ ×1 on → `gene.noatp`.<br>• lacZ ×1 on with glucose present; 30 min later glucose None and lactose Present → `lac.noY`. The same with lacY ×1 instead → `lac.noZ`.<br>• fliC ×4 for 2 h, then off → `burden` before the off-command; after it, `facts.uselessGene` becomes `null` within 10 sim-min of `mrna_gone`, and `burden` never appears again in the following 4 h.<br>• lacY ×2 and lacZ ×2 without lactose, 1 h → `burden.lac`.<br>• Glucose Low → `growth.low` after 1 h (not `starve.fewimport`); ptsG ×¼ with glucose High → `gene.down`, then `starve.fewimport` by 8 h.<br>• lacY ×1 and lacZ ×1 preinduced 4 h with glucose, then glucose None and lactose Present → `growth.lactose` once the cell has adapted.<br>• Amino acids Present and aaImp ×1 → `gene.up`, then `growth.aa` once the up phase ends.<br>• aaSyn knockout with initial protein 0, no amino acids → `aa.low`.<br>• Drugs: Cm Full → `drug.cm`; Rif Full → `drug.rif`, then `drug.rif.late` after 10 min; both Full → `drug.both`; Low doses → `drug.cm.low`, `drug.rif.low`.<br>• Glucose None for 20 min, then High → `recover`.<br>Across all scenarios, every value of every facts field (engine spec §11.5, schema 1.1) occurs at least once; the test asserts this coverage table |
+| U-4 | Narrator scenarios: for each of the 36 rules (1–22 with 6b, 6c, 10b, 11b, 13b, 16a–g, 17a–b, 19b, 21b), a scripted engine run (commands at exact ticks, fixed seed) produces that key. Key sequences are asserted, not text. Required scenarios:<br>• fliC ×4 at tick 0 → the key sequence contains `gene.tx` (by tick 20) **before** `gene.rising` (after `first_protein`); `gene.waiting` is optional, because the first Poisson draw often initiates in tick 0. `gene.waiting` itself is asserted with lacZ ×¼ from off (μ ≈ 0.006 per tick).<br>• Glucose None → `starve.nosugar` within 10 ticks, and **still** `starve.nosugar` after 15 min (after `dormant` has fired).<br>• ptsG knockout with initial protein 0, glucose High → `starve.noimport` before `dormant`, then `starve.dormant`.<br>• gly knockout with initial protein 0, glucose High → `growth.arrested` (import capacity is normal, so neither transporter line fires).<br>• Glucose None and lactose Present; after E < 0.1, switch lacY ×1 and lacZ ×1 on → `gene.noatp`.<br>• lacZ ×1 on with glucose present; 30 min later glucose None and lactose Present → `lac.noY`. The same with lacY ×1 instead → `lac.noZ`.<br>• fliC ×4 for 2 h, then off → `burden` before the off-command; after it, `facts.uselessGene` becomes `null` within 10 sim-min of `mrna_gone`, and `burden` never appears again in the following 4 h.<br>• lacY ×2 and lacZ ×2 without lactose, 1 h → `burden.lac`.<br>• Glucose Low → `growth.low` after 1 h (not `starve.fewimport`); ptsG ×¼ with glucose High → `gene.down`, then `starve.fewimport` by 8 h.<br>• lacY ×1 and lacZ ×1 preinduced 4 h with glucose, then glucose None and lactose Present → `growth.lactose` once the cell has adapted.<br>• Amino acids Present and aaImp ×1 → `gene.up`, then `growth.aa` once the up phase ends.<br>• aaSyn knockout with initial protein 0, no amino acids → `aa.low`.<br>• Drugs: Cm Full → `drug.cm`; Rif Full → `drug.rif`, then `drug.rif.late` after 10 min; both Full → `drug.both`; Low doses → `drug.cm.low`, `drug.rif.low`.<br>• Glucose None for 20 min, then High → `recover`.<br>• gly Off with glucose High → `starve.noenzyme`, never `starve.fewimport`; the ptsG ×¼ scenario never gives `starve.noenzyme`.<br>• lacY and lacZ ×1 for 30 min with glucose and lactose, then glucose None → `lac.toofew`; ×4 for an hour never gives it and ends in `growth.lactose`.<br>• lacY and lacZ ×1 with glucose and lactose for 1 h → `growth.both`; aaSyn Off for 4 h → `growth.slow`.<br>• Cm Full for 30 min then Off → `drug.cm.off` at once, gone after 10 min; the same for rifampicin → `drug.rif.off`. fliC ×4, glucose None + lactose at 30 min, Cm Full at 40 min → at 2 h the key is `lac.noY`, not `drug.cm`.<br>• fliC ×½ and lacZ ×1 without lactose, seeds 1–4, 90 min: `uselessGene` never changes twice within 120 sim-s (hysteresis).<br>Across all scenarios the key is never `growth.normal` while `facts.growth` is not `normal`, and every value of every facts field (engine spec §11.5, schema 1.2) occurs at least once; the test asserts this coverage table |
 | U-5 | *(deferred, §14)* Palette: the thresholds of §8.2 (Machado CVD matrices and a CIE Lab ΔE76 implementation live in the test) |
 | U-6 | Dot budget: over 50 fuzz states (random levels, media, drugs, 2 h each), computed glyph totals ≤ 1,500; every gene with protein > 0 has ≥ 1 glyph (solid or hollow); the shared protein scale obeys 20% hysteresis. **Worst case:** fliC ×4 as focus gene after 2 h (≈150 mRNAs, ≈1,900 ribosomes on them): focus polysome at 1 dot = 10 and the legend says so; non-focus mRNA are short marks; Σ(focus strand length × 2 px) ≤ 40% of the interior area; total glyphs ≤ 1,500 |
 | U-7 | `NarratorHold` with a fake clock: holds ≥ 1.5 s; pre-emption after 0.5 s only for rules 1–11b; writes to the live region only on key change |
@@ -1172,7 +1195,7 @@ These are added alongside the engine spec's tests.
 | id | check (viewport; Chromium with `isMobile`, `hasTouch` unless noted) |
 |---|---|
 | P1 | 360×740: load; screenshot each tab (Cell, Genes, Medium, Graphs). No console errors. No request leaves the origin. `scrollWidth ≤ 360` on the document and every tab |
-| P1b | 375×553 (iPhone SE Safari tab, short screen): load; screenshot each tab. No console errors; `scrollWidth ≤ 375`; the document does not scroll vertically (`scrollHeight ≤ 553`); the cell canvas is ≥ 220 px tall; the legend is one line; the focus bar's promoter row is fully visible |
+| P1b | 375×553 (iPhone SE Safari tab, short screen): load; screenshot each tab. No console errors; `scrollWidth ≤ 375`; the document does not scroll vertically (`scrollHeight ≤ 553`); the cell canvas is ≥ 220 px tall; the legend is one line; the legend and Key button are not clipped by the narrator; the focus bar's promoter row is fully visible |
 | P2 | 360×740 touch targets: every visible `button`, `[role=radio]`, `[role=tab]` and chip has a bounding box ≥ 44×44 (checked during the P1 run) |
 | P3 | Gene on → mRNA rises (Genes tab): tap fliC "4" on the Genes tab; `runTicks(90)`; the fliC card's mRNA text (mature + nascent) > 0; `runTicks(600)`; protein text > 0 and increasing over another 300 ticks; `cellViewStats().mRNA.fliC > 0`; narrator key went through `gene.tx` |
 | P3b | Gene on → mRNA rises **without leaving the Cell tab**: on the Cell tab, open the focus picker and choose fliC; tap "4" in the focus bar's promoter row; the segment shows pending, then solid after `runTicks(1)`; `runTicks(90)`; `cellViewStats().mRNA.fliC > 0` and the focus bar's mRNA text > 0; the Genes tab's fliC card shows level 4 (shared state); the active tab never changed |
@@ -1180,6 +1203,7 @@ These are added alongside the engine spec's tests.
 | P7 | Pause and speed: paused → tick unchanged over 1.5 real s; Play at "1 s = 1 min" → tick advances by 60 ± 20 per real s (loose, real-time check); the speed sheet shows 5 options with the exact labels of §6 |
 | P8 | Reset: after P3, P3b and P4, "Start over → Same cell again" → `__btc.cell.hash()` equals the hash of a fresh `new BTC.Cell(sameConfig)` |
 | P9 | Replay: after a scripted sequence of ≥ 10 UI taps (Genes tab, focus bar, Medium, Drugs) interleaved with `runTicks`, `BTC.replay.verify(__btc.cell.runRecord()).ok === true` (so the UI issued only commands) |
+| C3 | Restore with a pending command (360×740, no `?test`, `?reset=1` first): pause, Medium → Glucose "None", reload → `cell.pending.length === 1`, the glucose row shows one pending segment ("none"), and the cell is paused |
 | P11 | `file://`: open `dist/index.html` directly (desktop Chromium, 1280×800) → the app renders, runs 100 ticks, registers no SW, logs no errors |
 | P16 | Layouts: screenshots at 740×360 (split), 768×1024 (stack) and 1280×800 (wide; desktop Chromium, no touch); no overflow; every region visible |
 
@@ -1195,6 +1219,7 @@ For each device:
 5. Read the narrator with VoiceOver or TalkBack for one gene cycle (replaces the deferred P18).
 6. On a phone, switch a gene on from the Cell tab's focus bar and watch its mRNA appear.
 7. Download a run: the share sheet appears on phones, a file downloads on laptops; replay it with `BTC.replay.verify`.
+8. On an iPhone in landscape (split layout), check that the narrator's last line and the bottom of the panel clear the home indicator (the bottom cells pad by `env(safe-area-inset-bottom)`; Playwright cannot check this).
 8. After a new deploy, reopen the installed app: the update banner appears and the page reloads only after Reload is tapped (replaces the deferred P12).
 
 ---
@@ -1274,3 +1299,22 @@ Critique items are numbered in the order of `critique.json` (1–29). "Coordinat
 **Rejected: critique 26 ("commit `dist/index.html`, as NeuronSim does").** Coordinator decision 8 keeps `dist/` out of git. The GitHub Pages workflow builds and publishes the bundle on every push to `main`, and the published `index.html` is already the single self-contained file, so anyone can save it from the site for double-click use (README, §10.2). Committing it would duplicate a generated artifact that can drift from its sources and would need a freshness check on every commit. NeuronSim's committed copy is not needed here, because the hosted page serves the same file.
 
 **Consistency fixes between the two specs:** the narrator API (`createMemory` / `ingest` / `narrate(facts, memory, tick)`) and its rules now live only here, with engine spec §12 marked superseded; the text-lint regex is shared; facts thresholds live only in engine spec §11.5; the focus-polysome scale is stated identically in engine spec §12 and §2.3 here; the Low glucose value (0.005 mM) matches engine spec §8.
+
+## 16. Changes after the M1 build review (before the first phone test)
+
+A review of the built lab (biology, code, phone UX and teaching-text lenses) led to these changes. The engine's physics, the golden hash and the presets are unchanged; `ENGINE_VERSION` stays 1.0.0. Facts (observe-only) move to schema 1.2.
+
+| # | Change | Sections |
+|---|---|---|
+| 1 | Narrator: rule 10 split on the new fact `glucoseStep` (10 `starve.fewimport` when import limits, new 10b `starve.noenzyme` when the glucose-processing enzymes do); both accept energy none | §7.1, §7.2; engine §11.5 |
+| 2 | New rule 13b `lac.toofew` for a partly induced cell moved to lactose; the About lactose advice now names the recipe that works (×4 for an hour) and says that glucose restarts a stopped cell | §4.4, §7.2; BIOLOGY open item 1 |
+| 3 | New rules 19b `growth.both`, 21b `growth.slow`; rule 22 only at normal growth. New rules 6b/6c for a drug switched off. Chloramphenicol lines need energy ≠ none | §7.2 |
+| 4 | Burden: `uselessGene` hysteresis 2.5% on / 1.0% stay; 17a per gene; 17a/17b say growth slows "over a few generations". 3, 16d and 16e reworded (winding down; "its protein") and 7 ("slows to a stop") | §7.1, §7.2; engine §11.5 |
+| 5 | `aaImportOn` from the import flux (> 5% of amino acids used), so amino acids at the default importer level give `growth.aa` | §7.1; engine §11.5 |
+| 6 | Cell view: the watched gene's strands on top with a halo, its polysome 4 px at 60%, the crowd at 45%; rod orientation hysteresis; outside scale on the canvas; scale bar "1 µm · width ×2"; the focus-ribosome scale moved from the legend to the key sheet; legend clamped to 2 lines | §0.3, §2.2, §2.3, §2.7, §2.9 |
+| 7 | Compact: fixed narrator height (3 lines); focus bar with mRNA and protein on their own lines ("+ n being made"); short screens hide the "Change" word; the offline/resumed toast sits above the tab bar | §1.2, §2.8, §7.4 |
+| 8 | Default focus gene fliC (Off at start); graph genes default `['fliC', 'ptsG']` | §1.1, §3.6 |
+| 9 | Graphs: a second, ring-mode recorder keeps full resolution for windows up to 6 h and the sparklines; one shared gutter pair for all plots, y labels in a left gutter, end labels kept inside, command labels by priority, drug bands labelled; ATP "< 0.01 mM"; the spending bar says "Almost no ATP is being made or spent." below 1% of the reference | §5.1, §5.2 |
+| 10 | Restore: pending commands shown again; the resumed toast only for a cell that was run or changed; saved preferences cleaned. Loop errors stop the loop and show a toast | §10.5 |
+| 11 | Speed keys 1–5 work while a button has focus; the keyboard-shortcut boxes are hidden on touch screens; non-compact layouts pad the narrator and panes by the bottom safe-area inset | §6, §11.3 |
+| 12 | Content: fliC job and About, the PtsG key note (glucose-6-phosphate), share-bar label, "off · some protein", About rows split and added ("Why a bacterium", ATP, lac regulation, lactose lag), the drugs title note dropped, "Full details are in the instructor notes."; docs use "rifampicin-type" and "chloramphenicol-type" like the UI | §3.2, §3.3, §4.2, §4.4 |

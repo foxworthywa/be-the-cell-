@@ -11,7 +11,7 @@
  *
  * Also here:
  *   limiting(cell)     the first thing that limits growth, in a fixed order
- *   facts(cell, out)   schema 1.1: words, not numbers, for the narrator
+ *   facts(cell, out)   schema 1.2: words, not numbers, for the narrator
  * Nothing in the physics or the hash reads any of this.
  */
 (function (root, factory) {
@@ -24,7 +24,7 @@
 })(typeof self !== 'undefined' ? self : this, function (M, GR, CMD, EV) {
   'use strict';
 
-  const FACTS_SCHEMA = '1.1';
+  const FACTS_SCHEMA = '1.2';
   // 1 mmol/gDW/h = 3.21e4 molecules/s per fL of cell (spec §3; display only).
   const MMOL_PER_GDWH = 3.21e4;
   const SECTOR_IDS = ['R', 'Q', 'P'];
@@ -37,6 +37,7 @@
     glucoseLevel: ['none', 'low', 'high'],
     carbon: ['none', 'glucose', 'lactose', 'both'],
     glucoseImport: ['none', 'low', 'normal'],
+    glucoseStep: ['import', 'enzymes'],
     energy: ['normal', 'low', 'none'],
     aa: ['ok', 'low'],
     lactoseBlock: ['no-lacY', 'no-lacZ', null],
@@ -50,6 +51,11 @@
   });
 
   const USELESS_ORDER = ['fliC', 'lacZ', 'lacY', 'aaImp'];
+  // A useless gene's share of elongating ribosomes: it becomes the burden above USELESS_ON and stays
+  // it while above USELESS_STAY (hysteresis; one gene's share swings with mRNA bursts, spec §11.5).
+  const USELESS_ON = 0.025, USELESS_STAY = 0.010;
+  // aaImportOn: the medium supplies at least this share of the amino acids polymerised.
+  const AA_IMPORT_SHARE = 0.05;
   const JUST_DIVIDED_TICKS = 90;
 
   const byRole = (cell, role) => {
@@ -91,12 +97,12 @@
   }
 
   // ---------------------------------------------------------------------------
-  // Facts, schema 1.1
+  // Facts, schema 1.2
   // ---------------------------------------------------------------------------
   function createFacts() {
     return {
       schema: FACTS_SCHEMA, drug: { rif: 'off', cm: 'off' }, medium: 'glucose', glucoseLevel: 'high', carbon: 'glucose',
-      glucoseImport: 'normal', energy: 'normal', aa: 'ok', lactoseBlock: null, lastCommandedGene: null,
+      glucoseImport: 'normal', glucoseStep: 'import', energy: 'normal', aa: 'ok', lactoseBlock: null, lastCommandedGene: null,
       uselessGene: null, aaOutside: false, aaImportOn: false, growth: 'normal', justDivided: false, limiting: 'ribosomes',
       _gene: { id: '', state: '' },       // reused holder behind lastCommandedGene
     };
@@ -105,7 +111,10 @@
   const cut = (x) => (x === 0 ? 'off' : x > 0.5 ? 'full' : 'low');
   const which = (glucose, lactose) => (glucose ? (lactose ? 'both' : 'glucose') : (lactose ? 'lactose' : 'none'));
 
-  /** Fills out (from createFacts) from the end of the last completed tick (spec §11.5). No numbers leave here. */
+  /**
+   * Fills out (from createFacts) from the end of the last completed tick (spec §11.5). No numbers leave here.
+   * Pass the same out object each time: uselessGene keeps its previous value inside a hysteresis band.
+   */
   function facts(cell, out) {
     const f = out || createFacts();
     const p = cell.p, env = cell.env, st = cell.eventState;
@@ -118,6 +127,8 @@
     f.carbon = which(cell.flux.glucoseIn > carbonMin, 2 * cell.flux.lactoseSplit > carbonMin);
     const CU = roleProtein(cell, 'glucose-import') * p.k_pts + cell.uBasal * V;
     f.glucoseImport = CU < 0.01 * p.U_ref ? 'none' : CU < 0.25 * p.U_ref ? 'low' : 'normal';
+    // Which step holds glucose use back: PtsG uptake is matched to glycolysis (Chex = min(Cgly, C_in), §7.7).
+    f.glucoseStep = cell.k.Cgly < cell.k.U ? 'enzymes' : 'import';
     f.energy = E > 0.7 ? 'normal' : E < 0.1 ? 'none' : 'low';
     f.aa = cell.AA / V < EV.THRESHOLDS.AA_LOW ? 'low' : 'ok';
     if (env.lactose_mM > 0) {
@@ -130,7 +141,8 @@
       f._gene.state = geneState(cell, cell.geneById[st.lastGene]);
       f.lastCommandedGene = f._gene;
     } else f.lastCommandedGene = null;
-    // A gene is a burden when it is useless here and ribosomes are translating it now.
+    // A gene is a burden when it is useless here and ribosomes are translating it now (with hysteresis).
+    const prev = f.uselessGene;
     f.uselessGene = null;
     let elongating = 0;
     for (let i = 0; i < cell.genes.length; i++) elongating += cell.genes[i].cohorts.nSum;
@@ -139,11 +151,11 @@
       const id = USELESS_ORDER[k], g = cell.geneById[id];
       if (!g) continue;
       const useless = id === 'fliC' || ((id === 'lacZ' || id === 'lacY') && !(env.lactose_mM > 0)) || (id === 'aaImp' && env.aminoAcids_mM === 0);
-      if (useless && g.cohorts.nSum / elongating > 0.02) { f.uselessGene = id; break; }
+      if (useless && g.cohorts.nSum / elongating > (id === prev ? USELESS_STAY : USELESS_ON)) { f.uselessGene = id; break; }
     }
     f.aaOutside = env.aminoAcids_mM > 0;
-    const imp = byRole(cell, 'aa-import');
-    f.aaImportOn = !!imp && !imp.knockout && imp.rate >= imp.rRef;
+    // Import counts when it supplies a real share of the amino acids used, whatever the promoter level.
+    f.aaImportOn = cell.flux.aaImported > AA_IMPORT_SHARE * cell.flux.aaPolymerised;
     f.growth = st.arrested ? 'arrested' : cell.lambdaEMA < 0.8 * p.lambda_ref ? 'slow' : 'normal';
     f.justDivided = st.lastDivisionTick !== null && cell.tick - st.lastDivisionTick <= JUST_DIVIDED_TICKS;
     f.limiting = limiting(cell);

@@ -27,6 +27,15 @@ test('U-1: layout classes for phones, tablets and laptops; the short-screen flag
   assert.equal(LY.mapTab('graphs', 'split'), 'graphs');
 });
 
+test('U-2: the rod keeps its orientation on a nearly square stage (turns only when the other axis is 10% longer)', () => {
+  assert.equal(G.create(360, 366).vertical, true);
+  assert.equal(G.create(360, 351).vertical, false);
+  assert.equal(G.create(360, 351, true).vertical, true, 'a small shrink does not flip a vertical rod');
+  assert.equal(G.create(360, 380, false).vertical, false);
+  assert.equal(G.create(360, 400, false).vertical, true, 'h > 1.1 w turns it');
+  assert.equal(G.create(400, 360, true).vertical, false, 'w > 1.1 h turns it');
+});
+
 test('U-2: mapped points lie strictly inside the rod; perimeter points on it with unit normals; points stretch, not jump', () => {
   for (const [w, h] of [[360, 420], [900, 440], [375, 230]]) {
     const g = G.create(w, h);
@@ -154,6 +163,18 @@ test('U-9: counts, concentrations, percentages, clocks and speed labels', () => 
   assert.equal(F.mM(10), '10 mM');
   assert.equal(F.mM(0.005), '0.005 mM');
   assert.equal(F.mM(3.1566), '3.2 mM');
+  // sig2 never prints exponent notation, however small (a starved cell's ATP is 3.5e-9 mM).
+  assert.equal(F.sig2(3.5e-9), '0.0000000035');
+  assert.equal(F.sig2(9.96e-7), '0.000001');
+  assert.equal(F.sig2(0.0999), '0.1');
+  assert.equal(F.sig2(1e-300), '0');
+  for (const x of [1e-3, 1e-7, 2.2e-12, 4.4e-20, 5e-40]) assert.ok(!/e/i.test(F.sig2(x)), F.sig2(x));
+  // The graphs' ATP readout says "< 0.01 mM" instead of a tiny number.
+  const GP = req('btc-graphs-panel');
+  const atp = GP.SPECS.find((x) => x.key === 'atp');
+  assert.equal(atp.fmt(3.5e-9), '< 0.01 mM');
+  assert.equal(atp.fmt(3.1566), '3.2 mM');
+  assert.equal(GP.SPECS.find((x) => x.key === 'growth').fmt(0.61), '0.61\u00a0per\u00a0h');
   assert.equal(F.pct(0.04), '4%');
   assert.equal(F.pct(0.004), '0.4%');
   assert.equal(F.pct(0), '0%');
@@ -201,4 +222,17 @@ test('U-10: nice ticks cover the data; log ticks handle 0 and 1; thinning keeps 
   assert.equal(mx[5], 99);
   assert.equal(mn[5], 1);
   assert.equal(mx[4], 1);
+});
+
+test('U-8: an error inside a frame stops the loop and goes to onError (no silent freeze under "Running")', () => {
+  let rafFn = null, got = null;
+  const loop = new Loop({
+    now: () => 0, raf: (f) => { rafFn = f; return 1; }, caf: () => {},
+    getCell: () => ({ dt: 1, step() { throw new Error('boom'); }, takeEvents: () => [] }),
+    onError: (e) => { got = e; }, speed: 60,
+  });
+  loop.start();
+  rafFn(0); rafFn(100);
+  assert.equal(loop.running, false);
+  assert.equal(got && got.message, 'boom');
 });

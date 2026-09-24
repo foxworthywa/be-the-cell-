@@ -26,6 +26,8 @@
 
   const MARKER_CAP = 256, BAND_CAP = 64;
   const AUTOSAVE_S = 60;
+  // The recent-history recorder keeps full resolution (every 5 ticks) for the last 6 h or more (LAB_UI §5.1).
+  const RECENT_CAP = 8640;
 
   // Kinds of graph marker.
   const MK_DIVISION = 1, MK_COMMAND = 2, MK_RESUMED = 3;
@@ -39,7 +41,13 @@
     if (params.tab) ui.tab = params.tab;
     if (params.theme) ui.theme = params.theme;
     if (!C.speeds.some((s) => s.s === ui.speed) && !params.speed) ui.speed = 60;
-    if (C.GENE_IDS.indexOf(ui.focusGene) < 0) ui.focusGene = 'ptsG';
+    // Saved preferences may come from an older build: keep only what this build knows.
+    if (C.GENE_IDS.indexOf(ui.focusGene) < 0) ui.focusGene = PR.DEFAULTS.focusGene;
+    ui.graphGenes = ui.graphGenes.filter((id, i, a) => C.GENE_IDS.indexOf(id) >= 0 && a.indexOf(id) === i).slice(0, 3);
+    if (!ui.graphGenes.length) ui.graphGenes = PR.DEFAULTS.graphGenes.slice();
+    if (!C.graphs.windows.some((x) => x.s === ui.window)) ui.window = PR.DEFAULTS.window;
+    if (ui.plot4 !== 'size' && ui.plot4 !== 'growth') ui.plot4 = 'size';
+    if (!ui.logScales || typeof ui.logScales !== 'object') ui.logScales = Object.assign({}, PR.DEFAULTS.logScales);
 
     const app = {
       BTC, params, ui,
@@ -50,14 +58,14 @@
         lockedGenes: [], allowedLevels: null, speedOptions: null, startPaused: true,
       },
       layout: 'compact', tab: 'cell', focusGene: ui.focusGene,
-      cell: null, config: null, rec: null, mem: null, gen0: 0,
+      cell: null, config: null, rec: null, recRecent: null, mem: null, gen0: 0,
       facts: BTC.observe.createFacts(),
       pending: new BTC.controls.Pending(),
       registry: [],
       speedHistory: [],
-      markers: { n: 0, tick: new Int32Array(MARKER_CAP), kind: new Uint8Array(MARKER_CAP), label: new Array(MARKER_CAP).fill('') },
+      markers: { n: 0, tick: new Int32Array(MARKER_CAP), kind: new Uint8Array(MARKER_CAP), prio: new Uint8Array(MARKER_CAP), label: new Array(MARKER_CAP).fill('') },
       bandList: [],
-      bandModel: { n: 0, t0: new Float64Array(BAND_CAP), t1: new Float64Array(BAND_CAP), color: new Array(BAND_CAP).fill('drug-rif') },
+      bandModel: { n: 0, t0: new Float64Array(BAND_CAP), t1: new Float64Array(BAND_CAP), color: new Array(BAND_CAP).fill('drug-rif'), label: new Array(BAND_CAP).fill('') },
       narrKey: '', narrTick: -1, lastTick: -1,
       sinceSlow: 1, sinceSave: 0, resumeOnShow: false, paintQueued: false,
     };
@@ -77,11 +85,17 @@
     function attach(cell) {
       app.cell = cell;
       app.gen0 = cell.observe().clock.generation;
-      app.rec = new BTC.Recorder({ every: 5, capacity: 4096, channels: BTC.Recorder.labChannels(cell) });
+      const channels = BTC.Recorder.labChannels(cell);
+      app.rec = new BTC.Recorder({ every: 5, capacity: 4096, channels });
       app.rec.sample(cell);
       cell.attachRecorder(app.rec);
+      app.recRecent = new BTC.Recorder({ every: 5, capacity: RECENT_CAP, channels, mode: 'ring' });
+      app.recRecent.sample(cell);
+      cell.attachRecorder(app.recRecent);
       app.mem = BTC.narrate.createMemory({ phrases: C.narratorPhrases(), showNames: app.labConfig.showNames, dt: cell.dt });
+      app.facts = BTC.observe.createFacts();
       app.pending.clear();
+      restorePending(cell);
       app.markers.n = 0;
       app.bandList.length = 0;
       app.narrTick = -1; app.lastTick = -1;
@@ -89,6 +103,23 @@
       const v = cell.observe();
       if (v.drugs.rifampicin > 0) app.bandList.push({ drug: 'rifampicin', t0: cell.tick, t1: -1 });
       if (v.drugs.chloramphenicol > 0) app.bandList.push({ drug: 'chloramphenicol', t0: cell.tick, t1: -1 });
+    }
+
+    /** A restored cell may hold commands that have not applied yet: its controls show them as pending (LAB_UI §3.4). */
+    function restorePending(cell) {
+      const q = cell.pending || [];
+      for (const e of q) {
+        if (e.source !== 'user' || !e.args) continue;
+        const a = e.args;
+        if (e.type === 'setPromoter' && typeof a.gene === 'string') app.pending.set(a.gene, e.seq, levelKey(a.level));
+        else if (e.type === 'setDrug' && typeof a.drug === 'string') {
+          app.pending.set(a.drug, e.seq, BTC.MediumPanel.keyFor(BTC.catalog.DRUG_PRESETS, a.dose));
+        } else if (e.type === 'setMedium') {
+          for (const f of ['glucose', 'lactose', 'aminoAcids']) {
+            if (a[f + '_mM'] !== undefined) app.pending.set(f, e.seq, BTC.MediumPanel.keyFor(BTC.catalog.MEDIUM_PRESETS[f], a[f + '_mM']));
+          }
+        }
+      }
     }
 
     // --- UI state ---------------------------------------------------------------
@@ -202,13 +233,15 @@
     };
 
     // --- markers for the graphs (LAB_UI §5.1) --------------------------------------
-    function addMarker(tick, kind, label) {
+    // Label priority when command labels collide on a plot: glucose, other medium, drugs, then promoters.
+    const PRIO = { setMedium: 3, setDrug: 2, setPromoter: 1 };
+    function addMarker(tick, kind, label, prio) {
       const m = app.markers;
       if (m.n === MARKER_CAP) {                          // oldest dropped
-        m.tick.copyWithin(0, 1); m.kind.copyWithin(0, 1); m.label.shift(); m.label.push('');
+        m.tick.copyWithin(0, 1); m.kind.copyWithin(0, 1); m.prio.copyWithin(0, 1); m.label.shift(); m.label.push('');
         m.n--;
       }
-      m.tick[m.n] = tick; m.kind[m.n] = kind; m.label[m.n] = label; m.n++;
+      m.tick[m.n] = tick; m.kind[m.n] = kind; m.prio[m.n] = prio || 0; m.label[m.n] = label; m.n++;
     }
     function commandLabel(ev) {
       const G = C.graphs.marker, lv = C.graphs.markerLevels, r = ev.resolved, a = ev.args || {};
@@ -240,6 +273,7 @@
       for (const b of app.bandList) {
         bm.t0[bm.n] = b.t0 * dt; bm.t1[bm.n] = (b.t1 < 0 ? tick : b.t1) * dt;
         bm.color[bm.n] = b.drug === 'rifampicin' ? 'drug-rif' : 'drug-cm';
+        bm.label[bm.n] = C.graphs.marker.bandLabel[b.drug] || '';
         bm.n++;
       }
       return bm;
@@ -254,7 +288,7 @@
           case 'command_applied':
             app.pending.resolve(ev);
             controls = true;
-            addMarker(ev.tick, MK_COMMAND, commandLabel(ev));
+            addMarker(ev.tick, MK_COMMAND, commandLabel(ev), ev.cmdType === 'setMedium' && ev.args && ev.args.glucose_mM !== undefined ? 4 : PRIO[ev.cmdType] || 1);
             if (ev.cmdType === 'setDrug') drugBand(ev);
             break;
           case 'command_rejected': {
@@ -395,8 +429,11 @@
       LY.openSheet({
         title: S.title, className: 'about-sheet',
         build: (body) => {
+          body.appendChild(h('h3', { text: S.whyHeading }));
+          body.appendChild(h('p', { text: S.why }));
           body.appendChild(h('h3', { text: S.lactoseHeading }));
           body.appendChild(h('p', { text: S.lactose }));
+          body.appendChild(h('p', { text: S.lactoseRestart }));
           body.appendChild(h('h3', { text: S.heading }));
           body.appendChild(h('ul', { class: 'about-list' }, C.about.map((t) => h('li', { text: t }))));
           body.appendChild(h('p', { class: 'sheet-note', text: S.more }));
@@ -438,6 +475,18 @@
       app.requestPaint();
     }
 
+    /** An error inside a frame: the loop has stopped; say so instead of freezing under a "Running" button. */
+    app.onError = (err) => {
+      try { console.error(err); } catch (e) { /* no console */ }
+      try {
+        localStorage.setItem('btc.lastError', JSON.stringify({
+          msg: String(err && err.message || err), stack: String(err && err.stack || '').slice(0, 2000), build: app.build, tick: app.cell ? app.cell.tick : -1,
+        }));
+      } catch (e) { /* storage blocked or full: ignored */ }
+      try { if (app.loop) app.loop.stop(); afterRunChange(); } catch (e) { /* the UI itself may be what failed */ }
+      LY.toast(C.pwa.error, { label: C.pwa.resumedAction, run: () => app.openStartOver() });
+    };
+
     // --- start -----------------------------------------------------------------------
     BTC.palette.apply(ui.theme);
     // Static words in the page shell come from BTC.content too (data-text="path.in.content").
@@ -452,7 +501,7 @@
         attach(BTC.Cell.restore(saved.snapshot));
         app.config = saved.snapshot.config;
         app.gen0 = saved.gen0 || 0;
-        addMarker(app.cell.tick, MK_RESUMED, C.graphs.marker.resumed);
+        addMarker(app.cell.tick, MK_RESUMED, C.graphs.marker.resumed, 4);
         restored = true;
       } catch (e) { restored = false; }
     }
@@ -469,6 +518,7 @@
       getCell: () => app.cell,
       onEvents: app.onEvents,
       render: (dtReal, stepped) => app.render(dtReal, stepped, false),
+      onError: (err) => app.onError(err),
       speed: ui.speed,
     });
     views.status = new BTC.StatusStrip(app);
@@ -481,13 +531,13 @@
     views.status.mount($('status'));
     views.cellView.mount({
       stage: $('stage'), canvas: $('cell-canvas'), focus: $('focusbar'), legend: $('legend'),
-      legendFull: $('legend-full'), legendShort: $('legend-short'), scaleBar: $('scalebar'),
+      legendFull: $('legend-full'), legendShort: $('legend-short'), scaleBar: $('scalebar'), outsideScale: $('outside-scale'),
       pausedBadge: $('paused-badge'), pausedText: $('paused-text'), rifBadge: $('badge-rif'), cmBadge: $('badge-cm'), chip: $('tap-chip'),
     });
     views.genes.mount($('pane-genes'));
     views.medium.mount($('pane-medium'));
     views.graphs.mount($('pane-graphs'));
-    narrView = new BTC.NarratorView($('narrator'));
+    narrView = new BTC.NarratorView($('narrator-text'));
 
     // Tabs: the bottom bar (compact) and the panel tabs (other layouts).
     document.querySelectorAll('[data-tab]').forEach((b) => {
@@ -516,7 +566,7 @@
       if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
       if (e.key === ' ' && (tag === 'BODY' || tag === 'CANVAS' || !t)) { e.preventDefault(); app.togglePause(); }
       const n = Number(e.key);
-      if (n >= 1 && n <= 5 && tag !== 'BUTTON') app.setSpeed(C.speeds[n - 1].s);
+      if (n >= 1 && n <= 5) app.setSpeed(C.speeds[n - 1].s);     // digits never activate a focused button
     });
 
     // Background tabs: stop and save; simulated time does not pass while hidden, and there is no catch-up.
@@ -534,9 +584,14 @@
     document.addEventListener('freeze', hide);
 
     logSpeed();
-    app.refreshControls();
-    app.render(0, false, true, 0);
-    if (restored) LY.toast(C.pwa.resumed, { label: C.pwa.resumedAction, run: () => app.openStartOver() });
+    try {
+      app.refreshControls();
+      app.render(0, false, true, 0);
+    } catch (err) { app.onError(err); }       // still register the worker and the debug hook below
+    // Only a cell that has been run or changed is worth announcing (an untouched one is saved on every visit).
+    if (restored && (saved.snapshot.tick > 0 || (saved.snapshot.log && saved.snapshot.log.length > 0) || app.cell.pending.length > 0)) {
+      LY.toast(C.pwa.resumed, { label: C.pwa.resumedAction, run: () => app.openStartOver() });
+    }
     BTC.pwa.register({ test: params.test, build: window.BTC_BUILD });
 
     // Debug hook; cell is a getter because reset replaces the cell.

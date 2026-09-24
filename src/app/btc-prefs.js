@@ -21,7 +21,7 @@
   const MAX_SAVE_CHARS = 2 * 1024 * 1024;     // skip an autosave above 2 MB
 
   const DEFAULTS = Object.freeze({
-    tab: 'cell', speed: 60, focusGene: 'ptsG', graphGenes: ['ptsG'], window: 3600,
+    tab: 'cell', speed: 60, focusGene: 'fliC', graphGenes: ['fliC', 'ptsG'], window: 3600,
     logScales: { mRNA: false, protein: false }, theme: 'system', reducedMotion: 'auto', plot4: 'size',
   });
 

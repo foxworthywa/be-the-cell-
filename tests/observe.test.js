@@ -124,22 +124,25 @@ test('events: glucose removal gives energy_low, energy_none, growth_arrest and d
   assert.equal(OBS.facts(c).growth, 'normal');
 });
 
-test('facts: schema 1.1 fields, word values only, and a reused output object', () => {
+test('facts: schema 1.2 fields, word values only, and a reused output object', () => {
   const c = warm(5);
   const out = OBS.createFacts();
   const f = OBS.facts(c, out);
   assert.equal(f, out);
-  assert.equal(OBS.FACTS_SCHEMA, '1.1');
+  assert.equal(OBS.FACTS_SCHEMA, '1.2');
   assert.deepEqual(
-    { drug: f.drug, medium: f.medium, glucoseLevel: f.glucoseLevel, carbon: f.carbon, glucoseImport: f.glucoseImport, energy: f.energy,
+    { drug: f.drug, medium: f.medium, glucoseLevel: f.glucoseLevel, carbon: f.carbon, glucoseImport: f.glucoseImport,
+      glucoseStep: f.glucoseStep === 'import' || f.glucoseStep === 'enzymes', energy: f.energy,
       aa: f.aa, lactoseBlock: f.lactoseBlock, lastCommandedGene: f.lastCommandedGene, uselessGene: f.uselessGene, aaOutside: f.aaOutside,
       aaImportOn: f.aaImportOn, growth: f.growth, limiting: f.limiting },
-    { drug: { rif: 'off', cm: 'off' }, medium: 'glucose', glucoseLevel: 'high', carbon: 'glucose', glucoseImport: 'normal', energy: 'normal',
+    { drug: { rif: 'off', cm: 'off' }, medium: 'glucose', glucoseLevel: 'high', carbon: 'glucose', glucoseImport: 'normal',
+      glucoseStep: true, energy: 'normal',
       aa: 'ok', lactoseBlock: null, lastCommandedGene: null, uselessGene: null, aaOutside: false, aaImportOn: false, growth: 'normal',
       limiting: 'ribosomes' });
   // Facts carry no numbers (only strings, booleans, null and gene ids).
   const walk = (x) => { for (const k of Object.keys(x)) { if (k === '_gene') continue; const y = x[k]; assert.notEqual(typeof y, 'number', k); if (y && typeof y === 'object') walk(y); } };
   walk(f);
+  c.command({ type: 'setMedium', aminoAcids_mM: H.PV.aminoAcidsPresent });
   c.command({ type: 'setPromoter', gene: 'aaImp', level: 1 });
   c.command({ type: 'setDrug', drug: 'rifampicin', dose: 0.3 });
   c.step();

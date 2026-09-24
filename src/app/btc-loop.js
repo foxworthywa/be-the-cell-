@@ -71,7 +71,8 @@
 
   class Loop {
     /**
-     * opts: {now(), raf(fn), caf(id), getCell(), onEvents(events), render(dtReal, stepped), speed}
+     * opts: {now(), raf(fn), caf(id), getCell(), onEvents(events), render(dtReal, stepped), onError(err)?, speed}
+     * An error thrown inside a frame stops the loop (running becomes false) and goes to onError.
      */
     constructor(opts) {
       this.now = opts.now;
@@ -80,6 +81,7 @@
       this.getCell = opts.getCell;
       this.onEvents = opts.onEvents || (() => {});
       this.render = opts.render || (() => {});
+      this.onError = opts.onError || null;
       this.speed = opts.speed || 60;
       this.running = false;
       this.acc = 0;
@@ -113,24 +115,32 @@
 
     frame(ts) {
       if (!this.running) { this.rafId = 0; return; }
-      const cell = this.getCell();
-      const dtReal = this.last === null ? 0 : Math.min(MAX_FRAME_S, Math.max(0, (ts - this.last) / 1000));
-      this.last = ts;
-      this.acc += dtReal * this.speed;
-      const want = Math.floor(this.acc / cell.dt);
-      const t0 = this.now();
-      let done = 0;
-      while (done < want) {
-        cell.step();
-        done++;
-        if (this.now() - t0 > ENGINE_BUDGET_MS) break;
+      try {
+        const cell = this.getCell();
+        const dtReal = this.last === null ? 0 : Math.min(MAX_FRAME_S, Math.max(0, (ts - this.last) / 1000));
+        this.last = ts;
+        this.acc += dtReal * this.speed;
+        const want = Math.floor(this.acc / cell.dt);
+        const t0 = this.now();
+        let done = 0;
+        while (done < want) {
+          cell.step();
+          done++;
+          if (this.now() - t0 > ENGINE_BUDGET_MS) break;
+        }
+        this.acc -= done * cell.dt;
+        if (done < want) { this.acc = 0; this.stats.behindFrames++; }   // drop the remainder; never spiral
+        this.lastDone = done;
+        this.stats.record(done, this.now() - t0, dtReal, cell.dt, this.speed);
+        this.onEvents(cell.takeEvents());
+        this.render(dtReal, done > 0);
+      } catch (err) {
+        // Never freeze silently under a "Running" button: stop, then report.
+        this.stop();
+        if (this.onError) this.onError(err);
+        else throw err;
+        return;
       }
-      this.acc -= done * cell.dt;
-      if (done < want) { this.acc = 0; this.stats.behindFrames++; }   // drop the remainder; never spiral
-      this.lastDone = done;
-      this.stats.record(done, this.now() - t0, dtReal, cell.dt, this.speed);
-      this.onEvents(cell.takeEvents());
-      this.render(dtReal, done > 0);
       if (this.running) this.rafId = this.raf(this.frame);
     }
   }

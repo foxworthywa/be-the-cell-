@@ -61,8 +61,8 @@
     },
     fliC: {
       slot: 6, name: 'Flagellin', symbol: 'fliC', plural: false,
-      job: 'Flagellum building block; no use in a still flask.',
-      about: 'Flagellin builds the tail a cell swims with. Here it stays inside the cell and does nothing.',
+      job: 'Flagellum building block; does no work here.',
+      about: 'Many flagellin molecules form the flagellum a cell swims with; the other flagellum genes are missing here, so it stays inside.',
       genePhrase: 'the flagellin gene', noun: 'flagellin', protein: 'flagellin',
     },
   };
@@ -129,10 +129,11 @@
       canvasLabel: '{sentence} Focus gene {name}: mRNA {m}, being made {n}, protein {p}.',
       pausedBadge: 'Paused', pendingNote: 'Changes apply when time runs.',
       drugBadge: { rifampicin: 'Rifampicin on', chloramphenicol: 'Chloramphenicol on' },
-      scaleBar: '1 µm',
+      scaleBar: '1 µm · width ×2',
+      outsideScale: 'outside: 1 dot = {N}',
     },
     focus: {
-      counts: 'mRNA {m} +{n} · protein {p}',
+      counts: 'mRNA {m} + {n} being made', protein: 'protein {p}',
       change: 'Change', pickerTitle: 'Choose a gene to watch',
       pickerNote: 'The chosen gene is drawn in full: its mRNA as long strands, with its ribosomes on them.',
       buttonLabel: 'Watching {name}. Choose another gene.',
@@ -141,7 +142,6 @@
     legend: {
       full: '1 dot = {P} proteins · {R} ribosomes · {A} ATP · 1 mRNA',
       short: '1 dot = {P} proteins · …',
-      focusRibosomes: ' · on focus mRNA: {F}',
       key: 'Key',
       buttonLabel: 'Legend: {text}. Open the key.',
     },
@@ -189,19 +189,19 @@
         'Length to scale; width drawn twice as wide so the inside is readable.',
         'mRNA drawn coiled, not to scale.',
         'The grey stipple is the rest of the proteome (the other ~4,000 genes\' proteins), not counted.',
-        'No free glucose inside: PtsG passes it straight to the enzymes.',
+        'Glucose from PtsG arrives already tagged (as glucose-6-phosphate) and goes straight to the enzymes, so free glucose is not drawn.',
         'Hollow dot: fewer than half a dot\'s worth.',
         'Moving markers show traffic across the membrane; each one lasts 0.6 s on screen.',
         'The pinch in the middle is drawn from cell size; the model has no septum.',
-        '"Being made" (+n) counts mRNA still being transcribed.',
+        '"Being made" counts mRNA still being transcribed.',
       ],
     },
 
     // Gene cards (LAB_UI §3).
     card: {
       standsFor: 'stands for ~{n} genes',
-      counts: 'mRNA {m} +{n}', protein: 'protein {p}',
-      share: 'ribosome share', shareLabel: 'Share of working ribosomes on this gene',
+      counts: 'mRNA {m} + {n} being made', protein: 'protein {p}',
+      share: 'ribosome share', shareLabel: 'Share of working ribosomes reading this gene\'s mRNA',
       about: 'About', aboutClose: 'Less',
       promoter: 'promoter strength', pending: 'Applies when time runs.',
       defaultTick: 'default', header: 'Genes', strain: 'lab strain',
@@ -218,7 +218,7 @@
     levelSpoken: { off: 'off', 0.25: 'one quarter', 0.5: 'one half', 1: 'times one', 2: 'times two', 4: 'times four' },
     geneState: {
       'off': 'off', 'waiting': 'switched on', 'transcribing': 'making mRNA', 'stalled': 'stalled',
-      'leftover-mRNA': 'off · mRNA left', 'protein-only': 'off · protein left', 'knocked-out': 'removed',
+      'leftover-mRNA': 'off · mRNA left', 'protein-only': 'off · some protein', 'knocked-out': 'removed',
     },
 
     // Medium and drugs (LAB_UI §4).
@@ -235,7 +235,7 @@
       footer: 'The medium never runs out and waste does not build up. No oxygen, as in the gut.',
     },
     drugs: {
-      title: 'Drugs', titleNote: '(act instantly; no resistance)',
+      title: 'Drugs', titleNote: '',
       rows: {
         rifampicin: { label: 'Rifampicin-type',
           desc: 'Blocks RNA polymerase: no new mRNA is started. mRNA already made is still read.' },
@@ -263,6 +263,8 @@
       sizeOrGrowth: [{ key: 'size', label: 'Size' }, { key: 'growth', label: 'Growth' }],
       genesLabel: 'Genes to plot (up to 3)',
       spendingEmpty: 'Nothing measured yet: run the cell for a moment.',
+      spendingNone: 'Almost no ATP is being made or spent.',
+      atpBelow: '< 0.01 mM',
       ledger: {
         translation: 'making protein', otherBuilding: 'other building', upkeep: 'upkeep',
         transcription: 'making RNA', aaMaking: 'making amino acids', transport: 'transport',
@@ -270,6 +272,7 @@
       marker: {
         promoter: '{symbol} {level}', glucose: 'glucose {v}', lactose: 'lactose {v}', aminoAcids: 'amino acids {v}',
         drug: '{drug} {v}', resumed: 'resumed',
+        bandLabel: { rifampicin: 'rif', chloramphenicol: 'Cm' },
       },
       markerLevels: { off: 'off', 0.25: '×¼', 0.5: '×½', 1: '×1', 2: '×2', 4: '×4' },
       close: 'Close', enlargeLabel: 'Enlarge the {title} graph',
@@ -286,26 +289,32 @@
       },
       about: {
         title: 'About this cell',
+        whyHeading: 'Why a bacterium',
+        why: 'A bacterium is the simplest cell that does it all; your own cells also copy genes into mRNA and read it with ribosomes.',
         lactoseHeading: 'Lactose',
-        lactose: 'To grow on lactose, switch the lactose genes on while glucose is still present, because once ATP has run out no new protein can be made.',
+        lactose: 'In this model, set LacY and LacZ to ×4 with glucose present and wait an hour before removing glucose; with fewer, ATP runs out.',
+        lactoseRestart: 'Real E. coli adapts to lactose after a lag; this model does not. Adding glucose back restarts a cell whose ATP has run out.',
         heading: 'What is simplified',
-        more: 'Full details: docs/BIOLOGY.md',
+        more: 'Full details are in the instructor notes.',
         theme: 'Theme', themes: [{ key: 'system', label: 'System' }, { key: 'light', label: 'Light' }, { key: 'dark', label: 'Dark' }],
         motion: 'Reduce motion', motions: [{ key: 'auto', label: 'Auto' }, { key: 'on', label: 'On' }, { key: 'off', label: 'Off' }],
         version: 'Build {build}, engine {engine}.',
       },
     },
-    // Short forms of engine spec §18 items 1–17.
+    // Short forms of engine spec §18 items 1–21.
     about: [
-      'Each gene here is on its own switch; real cells regulate them.',
-      '"Off" still leaks a little; this strain has no second glucose transporter.',
+      'Each gene here has its own switch, and you set it; real cells switch genes with regulator proteins that sense conditions.',
+      'Real E. coli keeps its lac genes nearly off while glucose is present; here you control them.',
+      '"Off" still leaks a little, so a switched-off gene makes a few proteins.',
+      'This strain has no second glucose transporter.',
       'Some genes stand for many: glucose processing for about 10, amino-acid making for about 100.',
       'The rest of the proteome is lumped into three groups with simple rules.',
       'No oxygen, 37 °C; the medium never runs out and waste does not build up.',
       'One energy charge stands for ATP, GTP and the proton gradient; each glucose gives 2 ATP.',
+      'ATP falls further here than in real cells, which keep some ATP from stored reserves and slow their ribosomes instead.',
       'Amino acids are one pool, standing in for charged tRNA.',
       'Ribosomes assemble instantly, and RNA polymerase is never in short supply.',
-      'Drugs act instantly, with no uptake and no resistance.',
+      'Drugs act instantly, with no uptake and no resistance; otherwise each acts as rifampicin or chloramphenicol does.',
       'Every mRNA has the same half-life, about 3 minutes.',
       'mRNA is counted molecule by molecule; protein numbers are averages.',
       'Cells add a fixed 1 fL per cycle, and only one daughter is followed.',
@@ -329,6 +338,7 @@
       update: 'An update is ready. Reload (your current cell restarts)',
       reload: 'Reload', dismiss: 'Not now', offline: 'Ready to work offline.',
       resumed: 'Resumed your last cell.', resumedAction: 'Start over',
+      error: 'Something went wrong. Start over, or reload the page.',
       shareTitle: 'Be the Cell run',
     },
   };

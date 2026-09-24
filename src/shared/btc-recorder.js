@@ -7,9 +7,12 @@
  * on frame rate, and a replay records the same samples. Each sample's tick is
  * stored beside its values. When the buffer is full, every second sample is
  * dropped and the sampling interval doubles (5 → 10 → 20 … ticks), so old and
- * new data stay evenly spaced.
+ * new data stay evenly spaced (mode 'thin', the default, for the whole run).
+ * In mode 'ring' the interval never changes: a full buffer drops its oldest
+ * half instead, so the recent past keeps full resolution (the lab's 10-min,
+ * 1-h and 6-h windows and the sparklines, LAB_UI §5.1).
  *
- *   new BTC.Recorder({every: 5, capacity: 4096, channels: [{name, read(cell, view)}]})
+ *   new BTC.Recorder({every: 5, capacity: 4096, channels: [{name, read(cell, view)}], mode: 'thin' | 'ring'})
  *   rec.count, rec.every, rec.ticks (Int32Array, valid [0, count)), rec.series(name) (Float64Array, same)
  *   BTC.Recorder.labChannels(cell): the lab's 27 channels (LAB_UI §5.1)
  */
@@ -29,6 +32,7 @@
       this.every = o.every || 5;
       this.capacity = o.capacity || 4096;
       if (this.capacity < 2 || this.capacity % 2) throw new Error('Recorder capacity must be even and ≥ 2');
+      this.mode = o.mode === 'ring' ? 'ring' : 'thin';
       this.channels = (o.channels || []).slice();
       this.names = this.channels.map((c) => c.name);
       this.ticks = new Int32Array(this.capacity);
@@ -45,7 +49,7 @@
 
     /** Stores one sample now. */
     sample(cell) {
-      if (this.count === this.capacity) this.thin();
+      if (this.count === this.capacity) { if (this.mode === 'ring') this.dropOldestHalf(); else this.thin(); }
       const view = typeof cell.observe === 'function' ? cell.observe() : null;
       const i = this.count;
       this.ticks[i] = cell.tick;
@@ -69,6 +73,14 @@
       }
       this.count = j;
       this.every = every;
+    }
+
+    /** Ring mode: keeps the newer half in place at the start; ticks stay ascending and the interval unchanged. */
+    dropOldestHalf() {
+      const half = this.capacity / 2;
+      this.ticks.copyWithin(0, half, this.capacity);
+      for (let c = 0; c < this.data.length; c++) this.data[c].copyWithin(0, half, this.capacity);
+      this.count = half;
     }
 
     series(name) { return this.byName[name] || null; }

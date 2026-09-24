@@ -22,17 +22,23 @@
   const G = C.graphs;
   const LN2 = 0.6931471805599453;
   const FPS_S = 1 / 15;             // at most 15 redraws per second while running
+  const RECENT_MAX_S = 21600;       // windows up to 6 h read the full-resolution recent recorder
+  const SPEND_NONE = 0.01;          // under 1% of a steady cell's ATP turnover, the spending bar is hidden
+  const NBSP = '\u00a0';
+
+  /** ATP in mM: two significant figures, and "< 0.01 mM" for a cell that has run out. */
+  const atpText = (x) => (x < 0.01 ? G.atpBelow : F.sig2(x) + ' mM');
 
   // What each plot shows (LAB_UI §5.2).
   const SPECS = [
     { key: 'mRNA', title: G.plots.mRNA, multi: true, channel: 'mRNA:', scale: 'lin', log: true },
     { key: 'protein', title: G.plots.protein, multi: true, channel: 'protein:', scale: 'lin', log: true },
     { key: 'atp', title: G.plots.atp, channel: 'ATP_mM', scale: 'fixed', min: 0, max: 4, color: 'atp',
-      band: { below: 1.05, label: G.low }, live: (v) => v.energy.ATP_mM, fmt: (x) => F.sig2(x) + ' mM' },
+      band: { below: 1.05, label: G.low }, live: (v) => v.energy.ATP_mM, fmt: atpText },
     { key: 'size', title: G.plots.size, channel: 'V_fL', scale: 'fixed', min: 0, max: 2.5, color: 'membrane',
       live: (v) => v.cell.V_fL, fmt: (x) => F.sig2(x) + ' fL' },
     { key: 'growth', title: G.plots.growth, channel: 'growth_dph', scale: 'fixed', min: 0, max: 1.5, extendStep: 0.5,
-      color: 'good', live: (v) => v.cell.lambdaEMA_perH / LN2, fmt: (x) => F.sig2(x) + ' per h' },
+      color: 'good', live: (v) => v.cell.lambdaEMA_perH / LN2, fmt: (x) => F.sig2(x) + NBSP + 'per' + NBSP + 'h' },
   ];
 
   const LEDGER_ORDER = ['translation', 'otherBuilding', 'upkeep', 'transcription', 'aaMaking', 'transport'];
@@ -47,8 +53,17 @@
       this.model = {
         ticks: null, count: 0, dt: 1, t0: 0, t1: 0, window: 3600, nSeries: 0, scrubT: -1,
         series: [0, 1, 2].map(() => ({ data: null, live: 0, color: 'ink', label: '' })),
-        markers: null, bands: null,
+        markers: null, bands: null, gutterL: 0, gutterR: 0,
       };
+      this.gut = { left: 0, right: 0 };
+      const PV = app.BTC.params.values();
+      this.spendRef = PV.fermYield * PV.F_ref;      // ATP per second of the reference cell (engine spec §9)
+    }
+
+    /** The recorder behind the current window: full resolution for windows up to 6 h, the whole run for "All". */
+    recorder() {
+      const w = this.app.ui.window;
+      return w > 0 && w <= RECENT_MAX_S && this.app.recRecent ? this.app.recRecent : this.app.rec;
     }
 
     mount(root) {
@@ -100,6 +115,7 @@
       this.barLabels = h('div', { class: 'spend-labels' });
       this.barSmall = h('div', { class: 'spend-small' });
       this.barEmpty = h('p', { class: 'spend-empty', text: G.spendingEmpty, hidden: true });
+      this.barNone = h('p', { class: 'spend-empty', text: G.spendingNone, hidden: true });
       this.segs = LEDGER_ORDER.map((name, i) => {
         const seg = h('span', { class: 'spend-seg' + (name === 'translation' ? ' hatch' : ''), style: { background: 'var(--ledger-' + i + ')' } });
         const lab = h('span', { class: 'spend-in' });
@@ -110,7 +126,7 @@
       this.segs.forEach((s) => this.barSmall.appendChild(s.small));
       root.appendChild(h('figure', { class: 'plot spend', 'data-plot': 'spending' }, [
         h('div', { class: 'plot-head' }, [h('span', { class: 'plot-title', text: G.plots.spending })]),
-        this.bar, this.barEmpty, this.barSmall,
+        this.bar, this.barEmpty, this.barNone, this.barSmall,
       ]));
       void this.barLabels;
       this.syncControls();
@@ -191,7 +207,7 @@
     }
 
     drawAll() {
-      const app = this.app, rec = app.rec, view = app.cell.observe(), m = this.model;
+      const app = this.app, rec = this.recorder(), view = app.cell.observe(), m = this.model;
       m.ticks = rec.ticks; m.count = rec.count; m.dt = view.scale.dt_s;
       m.t1 = view.t_s;
       const win = app.ui.window;
@@ -202,11 +218,21 @@
       m.window = m.tEnd - m.t0;
       m.markers = app.markers; m.bands = app.bandsFor(view.tick);
       m.scrubT = this.scrubT;
+      // One pair of side gutters for every plot, so the stacked plots share one time axis.
+      let gl = 0, gr = 0;
       for (const p of this.plots) {
         if (p.box.hidden) continue;
         p.plot.resize();
         p.plot.log = !!app.ui.logScales[p.spec.key];
         this.fillSeries(p.spec, view);
+        p.plot.gutters(m, this.gut);
+        if (this.gut.left > gl) gl = this.gut.left;
+        if (this.gut.right > gr) gr = this.gut.right;
+      }
+      for (const p of this.plots) {
+        if (p.box.hidden) continue;
+        this.fillSeries(p.spec, view);
+        m.gutterL = gl; m.gutterR = gr;
         p.plot.draw(m);
         LY.setText(p.value, this.valueText(p.spec, view));
       }
@@ -215,6 +241,7 @@
         sp.plot.resize();
         sp.plot.log = !!app.ui.logScales[sp.spec.key];
         this.fillSeries(sp.spec, view);
+        m.gutterL = undefined; m.gutterR = undefined;     // the enlarged plot sets its own
         sp.plot.draw(m);
         LY.setText(sp.value, this.valueText(sp.spec, view));
       }
@@ -222,7 +249,7 @@
     }
 
     fillSeries(spec, view) {
-      const m = this.model, rec = this.app.rec;
+      const m = this.model, rec = this.recorder();
       if (spec.multi) {
         const genes = this.app.ui.graphGenes;
         m.nSeries = genes.length;
@@ -256,13 +283,13 @@
           pieces.push(C.geneWords(id, this.app.labConfig.showNames).tag + ' ' + F.count(v));
         } else pieces.push(spec.fmt(v));
       }
-      const prefix = at >= 0 ? F.clock(this.app.rec.ticks[at] * m.dt, false) + ': ' : '';
+      const prefix = at >= 0 ? F.clock(this.recorder().ticks[at] * m.dt, false) + ': ' : '';
       void view;
       return pieces.length ? '· ' + prefix + pieces.join(', ') : '';
     }
 
     sampleAt(t) {
-      const rec = this.app.rec, m = this.model;
+      const rec = this.recorder(), m = this.model;
       if (!rec.count) return -1;
       let i = Plot.lowerBound(rec.ticks, rec.count, Math.floor(t / m.dt));
       if (i >= rec.count) i = rec.count - 1;
@@ -272,13 +299,20 @@
 
     drawSpending(view) {
       const L = view.ledger;
-      let sum = 0;
-      for (let i = 0; i < 6; i++) sum += L.fractions[i];
+      let sum = 0, total = 0;
+      for (let i = 0; i < 6; i++) { sum += L.fractions[i]; total += L.perS[i]; }
       const empty = !(sum > 0);
+      // Shares of almost nothing would look like a busy cell: below 1% of a steady cell's spending, say so instead.
+      const none = !empty && total < SPEND_NONE * this.spendRef;
       this.barEmpty.hidden = !empty;
-      this.bar.hidden = empty;
-      this.barSmall.hidden = empty;
-      if (empty) return;
+      this.barNone.hidden = !none;
+      this.bar.hidden = empty || none;
+      this.barSmall.hidden = empty || none;
+      if (empty || none) {
+        const label = G.plots.spending + ': ' + (none ? G.spendingNone : G.spendingEmpty);
+        if (this.bar.getAttribute('aria-label') !== label) this.bar.setAttribute('aria-label', label);
+        return;
+      }
       const parts = [];
       for (const s of this.segs) {
         const f = L.fractions[L.names.indexOf(s.name)] / sum;
