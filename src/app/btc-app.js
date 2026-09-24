@@ -299,6 +299,8 @@
         ctrl, key: getGene, where, locked: () => app.geneControlMode(getGene()) === 'locked',
         read: (view) => (view.geneById[getGene()] ? levelKey(view.geneById[getGene()].level) : null),
         defaultKey: () => {
+          // A hidden gene's usual level would name it (only a transporter sits at 1): no mark until it is named (1.1).
+          if (app.geneModel && !app.geneModel.named(getGene())) return null;
           const lv = defaultLevelOf(getGene());
           return levelKey(lv === 0 ? 'off' : lv);
         },
@@ -703,7 +705,7 @@
       app.focusGene = ui.focusGene;
       refreshGeneModel();
       app.loop.setSpeed(ui.speed);
-      views.status.setLevel(null);
+      views.status.setLevel(null, true);           // the free-play lab keeps the Levels button: home is one tap away
       setScreen('lab');
       showSurface('app');
       remountPanels();
@@ -739,12 +741,20 @@
       const overrideSeed = o.v !== undefined && o.v !== null ? BTC.code.decodeSeed(String(o.v)) : null;
       const ref = o.fresh ? app.progress.nextAttempt(id) : app.progress.attemptFor(id, overrideSeed);
       let runner = null, resumed = false;
-      if (!o.fresh && overrideSeed === null && !ignoreLevelSave) {
+      // The open attempt resumes from the autosave: the student's own (attempt ≥ 1), or a think-aloud
+      // override (attempt 0) when the save is that same override variant.
+      if (!o.fresh && !ignoreLevelSave) {
         const saved = app.progress.loadLevel(BTC.ENGINE_VERSION);
         if (saved.status === 'mismatch') LY.toast(C.game.updated);
         else if (saved.status === 'ok' && saved.save.levelId === id && saved.save.attempt === ref.attempt &&
-          (!def.scored || saved.save.variantSeed === ((ref.variantSeed >>> 0) & 0x3FFFFFFF))) {
-          try { runner = BTC.LevelRunner.restore(def, saved.save, runnerOpts()); resumed = true; } catch (e) { runner = null; }
+          !!saved.save.override === !!ref.override && (!def.scored || saved.save.variantSeed === ((ref.variantSeed >>> 0) & 0x3FFFFFFF))) {
+          if (saved.save.content !== def.version) {
+            // Saved by a build with other content (variants, scoring, questions): the level starts again.
+            app.progress.clearLevel();
+            LY.toast(C.game.updated);
+          } else {
+            try { runner = BTC.LevelRunner.restore(def, saved.save, runnerOpts()); resumed = true; } catch (e) { runner = null; }
+          }
         }
       }
       ignoreLevelSave = false;
@@ -907,6 +917,9 @@
       app.mem.phrases = C.narratorPhrases(app.geneModel);
       app.mem.showNames = lc.showNames !== false;
       app.mem.cache = {};
+      // A line already on screen may carry the old words ("protein C"): let the narrator say it afresh with the new name.
+      resetNarrator();
+      app.narrTick = -1;
       remountPanels();
       views.cellView.dirty = true;
       // A newly named gene gets a toast, with its letter and its name (not at the end, when all are named at once).
@@ -941,7 +954,7 @@
       if (L.live) { showSurface('app'); return; }        // the Prologue's bacterium stays behind its completion screen
       if (r.phase === 'demo') {
         // 1.2's scripted test run: its own cell, with the student's sketch over the Protein plot.
-        if (!r.demo.cell) r.startDemo();
+        if (!r.demo.cell) r.startDemo();                  // a finished demo comes back from its record (LevelRunner.restore)
         if (app.cell !== r.demo.cell) { attachLevelCell(r, r.demo.cell); sketchOverlay(r); }
         showSurface('app');
         updateHud(true);
@@ -1051,6 +1064,15 @@
       if (r.def.epilogue && r.def.epilogue.speed) app.setSpeed(r.def.epilogue.speed);
       app.resume();
     };
+    /** The run (or the epilogue) has just ended: the HUD, the status strip and the controls show it at once. */
+    function runEnded() {
+      const L = app.level;
+      if (!L) return;
+      L.sinceHud = 0;
+      updateHud();
+      views.status.update(app.cell.observe(), app.facts);
+      app.refreshControls();
+    }
     /** Per frame in a level: the end of a run, the HUD (≤ 4 Hz), the debounced autosave, a changed labConfig (1.1's reveals). */
     function levelFrame(dtReal, force) {
       const L = app.level;
@@ -1061,15 +1083,22 @@
         L.lastEnd = r.run.endTick + ':' + r.runs;
         if (app.loop.running) app.loop.stop();
         saveLevelNow();
-        views.status.update(app.cell.observe(), app.facts);
+        // The run is over: say so now. The loop has stopped, so no later frame would refresh the HUD.
+        runEnded();
         if (!r.goal) { r.next(); views.levelUI.after(); }    // a missed goal opens the result; a met one waits on the goal chip
       }
-      if (r.phase === 'epilogue' && r.epilogue.done && app.loop.running) app.loop.stop();
+      if (r.phase === 'epilogue' && r.epilogue.done && L.lastEpilogue !== r.runs) {
+        L.lastEpilogue = r.runs;
+        if (app.loop.running) app.loop.stop();
+        saveLevelNow();
+        runEnded();
+      }
       // The demo stops at its end tick (halt); then its sheet opens.
       if (r.phase === 'demo' && r.demo.cell && !r.demo.done && r.halted()) {
         r.checkDemo();
         if (app.loop.running) app.loop.stop();
         saveLevelNow();
+        runEnded();
         views.levelUI.after();
       }
       L.sinceHud += dtReal;
@@ -1194,15 +1223,28 @@
       standalone: !!((typeof matchMedia === 'function' && matchMedia('(display-mode: standalone)').matches) || navigator.standalone === true),
       touch: 'ontouchstart' in window || (navigator.maxTouchPoints || 0) > 0, reducedMotion: app.reducedMotion(),
     });
+    // Another tab (or the installed app) changed the progress: adopt it, so this tab never writes an old copy back.
+    window.addEventListener('storage', (e) => {
+      if (e.key !== BTC.progress.KEY && e.key !== null) return;
+      app.progress.sync();
+      if (app.mode === 'home' && !document.querySelector('.sheet-backdrop')) views.home.render();
+    });
+
     // The first screen (LEVELS §5.11): ?level, ?lab, else the last screen; a fresh install opens home.
     const lastScreen = ui.screen;
     if (params.level) app.enterLevel(params.level, { v: params.v });
-    else if (params.lab || (lastScreen === 'lab' && !params.test)) { setScreen('lab'); showSurface('app'); }
+    else if (params.lab || (lastScreen === 'lab' && !params.test)) { setScreen('lab'); views.status.setLevel(null, true); showSurface('app'); }
     else if (lastScreen === 'level' && !params.reset) {
       const s = app.progress.loadLevel(BTC.ENGINE_VERSION);
       if (s.status === 'ok' && BTC.levels.byId[s.save.levelId]) app.enterLevel(s.save.levelId);
       else { if (s.status === 'mismatch') LY.toast(C.game.updated); app.enterHome(); }
     } else app.enterHome();
+    // The one-shot parameters have done their job: a reload (tab discard, pull-to-refresh, the update's Reload) must not
+    // open the linked level again over the student's autosave, or reset it (?test and ?seed stay for the checks).
+    try {
+      const rest = PR.strippedSearch(location.search, ['level', 'v', 'lab', 'reset']);
+      if (rest !== location.search) history.replaceState(history.state, '', location.pathname + rest + location.hash);
+    } catch (e) { /* file:// or a sandbox: the parameters stay */ }
     // Only a cell that has been run or changed is worth announcing (an untouched one is saved on every visit).
     if (app.screen === 'lab' && restored && (saved.snapshot.tick > 0 || (saved.snapshot.log && saved.snapshot.log.length > 0) || app.cell.pending.length > 0)) {
       LY.toast(C.pwa.resumed, { label: C.pwa.resumedAction, run: () => app.openStartOver() });

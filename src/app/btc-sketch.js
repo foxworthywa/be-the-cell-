@@ -10,7 +10,8 @@
  * between two samples of one stroke are filled by straight lines. "Done" is enabled
  * once the drawing starts by minute 1 and reaches minute 19 ("Draw across the whole
  * graph." until then). "Use sliders instead" swaps the canvas input for five
- * steppers (2, 5, 8, 12 and 20 min, 0–2,000 in steps of 50) through (0, 0).
+ * steppers (2, 5, 8, 12 and 20 min, 0–2,000 in steps of 100; the value can also be typed) through
+ * (0, 0); Done waits until at least one of them has been set, so a flat blank line cannot be locked in.
  *
  * The locked value is one stroke of [minute, LacY] points (one per drawn column); the
  * level kit resamples it onto the scoring grid. Sketch.chart draws a finished sketch
@@ -30,6 +31,7 @@
   const W = C.game.sketch;
   const COLS = 200;                                  // 0.1-min columns over 0–20 min
   const SLIDER_T = [2, 5, 8, 12, 20];
+  const SLIDER_STEP = 100;
   const round = (x, d) => Math.round(x * d) / d;
 
   /** An empty time-series model with fixed axes (x in sim seconds) and the schedule's bands. */
@@ -66,6 +68,7 @@
       this.raw = [];
       this.sliders = false;
       this.values = SLIDER_T.map(() => 0);
+      this.touched = false;           // a slider value has been set (the blank line is not a prediction)
       this.plot = null;
     }
 
@@ -107,21 +110,27 @@
       const h = LY.h;
       this.sliderBox.textContent = '';
       this.sliderInputs = SLIDER_T.map((t, i) => {
-        const out = h('span', { class: 'sketch-value num', 'aria-live': 'polite' });
+        const at = (s) => s.replace('{t}', String(t));
+        // The value can be typed as well as stepped (steps of 100: the whole range in 20 taps, not 40).
+        const out = h('input', { class: 'sketch-value num', type: 'text', inputmode: 'numeric', autocomplete: 'off', 'aria-label': at(W.valueAt) });
         const set = (x) => {
-          this.values[i] = Math.max(this.y0, Math.min(this.y1, x));
-          LY.setText(out, String(this.values[i]));
+          this.values[i] = Math.round(Math.max(this.y0, Math.min(this.y1, x)));
+          this.touched = true;
+          out.value = String(this.values[i]);
           this.redraw();
           if (this.opts.onChange) this.opts.onChange();
         };
-        const at = (s) => s.replace('{t}', String(t));
+        out.addEventListener('change', () => {
+          const v = Number(String(out.value).replace(/[^0-9.]/g, ''));
+          if (out.value !== '' && v === v) set(v); else out.value = String(this.values[i]);
+        });
         const row = h('div', { class: 'sketch-slider' }, [
           h('span', { class: 'sketch-at', text: at(W.atMinute) }),
-          h('button', { class: 'btn lv-step', type: 'button', 'aria-label': at(W.less), onclick: () => set(this.values[i] - 50) }, '−'),
+          h('button', { class: 'btn lv-step', type: 'button', 'aria-label': at(W.less), onclick: () => set(this.values[i] - SLIDER_STEP) }, '−'),
           out,
-          h('button', { class: 'btn lv-step', type: 'button', 'aria-label': at(W.more), onclick: () => set(this.values[i] + 50) }, '+'),
+          h('button', { class: 'btn lv-step', type: 'button', 'aria-label': at(W.more), onclick: () => set(this.values[i] + SLIDER_STEP) }, '+'),
         ]);
-        LY.setText(out, String(this.values[i]));
+        out.value = String(this.values[i]);
         this.sliderBox.appendChild(row);
         return { set };
       });
@@ -140,6 +149,7 @@
     clear() {
       this.raw = [];
       this.values = SLIDER_T.map(() => 0);
+      this.touched = false;
       this.buildSliders();
       this.redraw();
       if (this.opts.onChange) this.opts.onChange();
@@ -151,9 +161,9 @@
       return columnsStroke(this.raw, this.x0, this.x1);
     }
 
-    /** Coverage rule of §5.4.3: first drawn at ≤ 1 min, last at ≥ 19 min. */
+    /** Coverage rule of §5.4.3: first drawn at ≤ 1 min, last at ≥ 19 min. With the sliders: one value set. */
     covered() {
-      if (this.sliders) return true;
+      if (this.sliders) return this.touched;
       return K.sketch.coverage(this.raw, { x0: this.x0, x1: this.x1, n: COLS }).ok;
     }
 
@@ -172,8 +182,8 @@
       this.plot.setOverlay(v.length ? toSeconds(v) : null, { color: 'ink', dash: [], width: 2.5 });
       this.plot.draw(model(this.x1 * 60, this.opts.schedule || []));
       const ok = this.covered();
-      LY.setText(this.note, !v.length ? W.start : ok ? W.ready : W.whole);
-      this.note.classList.toggle('is-warn', !!v.length && !ok);
+      LY.setText(this.note, this.sliders ? (ok ? W.sliderReady : W.sliderStart) : !v.length ? W.start : ok ? W.ready : W.whole);
+      this.note.classList.toggle('is-warn', !this.sliders && !!v.length && !ok);
     }
   }
 

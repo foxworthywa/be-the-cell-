@@ -76,13 +76,9 @@ test('L-12: every phase of a scored level refuses Continue until its gate holds'
   assert.equal(r.halted(), true, 'the app stops stepping at the end tick');
   assert.equal(r.run.monitor.result().changes, 1, 'the monitor saw the applied user command');
   assert.ok(r.next().ok);
-  // result: the goal was met, so the outro beat comes first.
+  // result: no story beat, even with the goal met; the outro waits for echo, after the debrief (§4.1).
   assert.equal(r.phase, 'result');
-  assert.equal(r.storyLine().beat, 'outro');
-  refused(r, 'story');
-  r.storySkip();
-  assert.ok(r.next().ok);
-  assert.equal(r.phase, 'result', 'closing the beat keeps the phase');
+  assert.equal(r.beat, null, 'the outro would answer the debrief: it is not shown here');
   assert.equal(r.retry().ok, false, 'no Try again after the goal was met');
   assert.ok(r.next().ok);
   // predict2.
@@ -115,8 +111,14 @@ test('L-12: every phase of a scored level refuses Continue until its gate holds'
   assert.equal(r.debriefState.d1.firstCorrect, false);
   assert.equal(r.debriefState.d1.firstMc, 'CELL_DECIDES');
   assert.ok(r.next().ok);
-  // echo: the outro was shown in result, so the screens start at once; Continue on the last one.
+  // echo: the outro comes first, after the debrief; closing it keeps the phase; Continue on the last screen.
   assert.equal(r.phase, 'echo');
+  assert.equal(r.storyLine().beat, 'outro');
+  assert.equal(r.echoScreen(), null, 'the screens wait for the outro');
+  refused(r, 'story');
+  r.storySkip();
+  assert.ok(r.next().ok);
+  assert.equal(r.phase, 'echo', 'closing the beat keeps the phase');
   assert.equal(r.beat, null);
   refused(r, 'echo');
   assert.equal(r.echoNext(), true);
@@ -266,4 +268,59 @@ test('the Prologue: scenes gate on each line and on the question; cards; an unsc
   assert.deepEqual(r.result.flags, ['PRED_DNA_DIRECT']);
   const ok = RUN.game.playHeadless(P, { deviceSeed: 1 });
   assert.match(ok.code, /-G1ENAPNAD11X0-F00-/);
+});
+
+test('M2 review: a designer level\'s Try again goes back to the DNA editor; the result waits for par; runs stop at 99 in the code', () => {
+  const def = LV.validate(stub.full());
+  const r = new RUN.LevelRunner({ def, variantSeed: 4242, attempt: 1 }).start();
+  r.storySkip(); r.next(); r.next();
+  r.lock('p1', 'ok'); r.next();
+  const demo = r.startDemo();
+  while (!r.checkDemo()) demo.step();
+  r.next();
+  assert.equal(r.phase, 'design');
+  r.next();
+  while (!r.run.endReason) r.run.cell.step();              // never switched on: the limit ends it
+  r.next();
+  assert.equal(r.phase, 'result');
+  assert.equal(r.goal, false);
+  // A par run still being worked out (1.7) holds Continue (and Continue without the goal) on the result.
+  r.par = { done: false };
+  refused(r, 'par');
+  assert.equal(r.continueWithoutGoal().ok, false);
+  r.par = null;
+  assert.ok(r.retry().ok);
+  assert.equal(r.phase, 'design', 'the run has no controls: Try again means changing the DNA');
+  assert.equal(r.setDesign({ lac: { promoter: 2 } }), true);
+  assert.equal(r.runs, 2);
+  assert.ok(r.next().ok);
+  assert.equal(r.phase, 'run');
+  assert.equal(r.run.cell.tick, 0);
+  // The code has two digits for runs.
+  const out = RUN.game.summarise(def, { goal: false, comp: {}, debrief: {}, variantSeed: 1, attempt: 1, runs: 150, record: null });
+  assert.equal(out.runs, 99);
+  assert.equal(CODE.decode(out.code).runs, 99);
+  r.runs = 120;
+  assert.equal(r.runFile().level.runs, 99);
+});
+
+test('M2 review: a save from another content version is refused; a finished demo comes back at its end, not played again', () => {
+  const def = LV.validate(stub.full());
+  const r = new RUN.LevelRunner({ def, variantSeed: 99, attempt: 1 }).start();
+  r.storySkip(); r.next(); r.next();
+  r.lock('p1', 'ok'); r.next();
+  const demo = r.startDemo();
+  while (!r.checkDemo()) demo.step();
+  const endTick = demo.tick, final = r.demo.result.final;
+  const saved = JSON.parse(JSON.stringify(r.save()));
+  assert.throws(() => RUN.LevelRunner.restore(def, Object.assign({}, saved, { content: def.version + 1 })), /content/);
+  const back = RUN.LevelRunner.restore(def, saved);
+  assert.equal(back.phase, 'demo');
+  assert.equal(back.demo.done, true);
+  assert.ok(back.demo.cell, 'the demo cell is rebuilt from its record');
+  assert.equal(back.demo.cell.tick, endTick);
+  assert.equal(back.demo.cell.hash(), demo.hash());
+  assert.equal(back.startDemo(), back.demo.cell, 'a finished demo is not started again');
+  assert.equal(back.demo.result.final, final);
+  assert.equal(back.halted(), true);
 });

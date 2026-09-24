@@ -213,6 +213,7 @@
       }
     }
     if (def.outroKey !== undefined && typeof def.outroKey !== 'function') fail('outroKey', 'must be outroKey(variant, monitorResult, goal)');
+    if (def.skipBeat !== undefined && typeof def.skipBeat !== 'function') fail('skipBeat', 'must be skipBeat(name, variant, design)');
     if (def.missReason !== undefined && typeof def.missReason !== 'function') fail('missReason', 'must be missReason(monitorResult) → a phrase or null');
     if (has('intro') && !def.story.intro.length) fail('story.intro', 'the intro beat has no lines');
     if (has('scenes')) {

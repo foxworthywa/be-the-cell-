@@ -79,7 +79,8 @@
           h('span', { class: 'card-chip', style: { background: 'var(--' + model.color(id) + ')' } }),
           h('span', { class: 'card-title' }, [h('span', { class: 'card-name', text: w.name }), ' ', h('span', { class: 'sym', text: w.symbol })]),
         ]);
-        const badge = gv.lumped ? h('span', { class: 'badge', text: F.fill(C.card.standsFor, { n: gv.standsForGenes }) }) : null;
+        // "Stands for ~10 genes" would name a hidden gene (only the amino-acid importers are lumped in 1.1): shown once it is named.
+        const badge = gv.lumped && model.named(id) ? h('span', { class: 'badge', text: F.fill(C.card.standsFor, { n: gv.standsForGenes }) }) : null;
         const card = h('article', { class: 'gene-card' + (model.revealed(id) ? ' is-revealed' : ''), 'data-gene': id, 'data-letter': model.hidden ? model.letter(id) : null }, [
           head,
           h('p', { class: 'card-job' }, [e.state, ' ', badge, badge ? ' ' : null, w.job]),

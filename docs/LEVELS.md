@@ -321,8 +321,8 @@ Every variant object carries its own `seed` (the variant seed). `config.variant`
 - Story beats never auto-advance. Every line waits for a tap on "Next".
 - A run starts paused (Lab spec §10.3). The player presses Run.
 - Pause is always allowed. Commands made while paused apply when time runs (Lab spec §3.4).
-- The outro story beat is shown at the start of `result` when the goal was met, and at the
-  start of `echo` otherwise.
+- The outro story beat is shown at the start of `echo`, after the debrief, whether or not the goal
+  was met. (Shown before the debrief, the outros stated its answers; M2 review, §16.11.)
 
 ### 4.2 Attempts, runs, variants and seeds
 
@@ -342,7 +342,10 @@ Every variant object carries its own `seed` (the variant seed). `config.variant`
   `'task'` for the 1.7 par run (common random numbers). The Prologue's live bacterium uses
   `K.seedFor(deviceSeed, 'prologue')` and is not recorded.
 - **Think-aloud override.** `?level=1.2&v=<6 base32 chars>` opens that level with that variant
-  seed and marks the attempt `override: true` (shown in the code as attempt `0`).
+  seed and marks the attempt `override: true` (shown in the code as attempt `0`). The override is
+  the level's open attempt until it is completed, so it resumes from its autosave like any other
+  (the parameters are taken out of the address once used, §5.11).
+- **Runs** are counted up to 99 in the code (`N1`–`N99`); a 100th run still says 99.
 
 ### 4.3 Predictions and debrief
 
@@ -373,12 +376,18 @@ Every access is wrapped in try/catch, as in Lab spec §10.5. The app works when 
 - **Written:** on every phase change, every locked answer, every design change, every accepted
   user command (debounced to at most once per 2 real s), on hide and `pagehide`, and every 60
   real s while running. "Save after every action" (design doc) is met this way.
-- **Restored** on load unless `?reset=1`: if `engineVersion` matches, the level reopens at the
-  saved phase; a saved run restores its cell with `BTC.Cell.restore(snapshot)` and its monitor
-  with `monitor.restore(state)`, paused, with the toast "Resumed level {id}." A 1.2 demo or a 1.7
-  par run in progress is not saved; it starts again from its beginning. A mismatched engine
-  discards the level autosave (not the progress) with the toast "The app was updated; this level
-  starts again."
+- **Restored** on load unless `?reset=1`: if `engineVersion` and the level's content version
+  (`content`) match, the level reopens at the saved phase; a saved run restores its cell with
+  `BTC.Cell.restore(snapshot)` and its monitor with `monitor.restore(state)`, paused, with the
+  toast "Resumed level {id}." A 1.2 demo or a 1.7 par run in progress is not saved; it starts
+  again from its beginning. A finished demo is rebuilt from its record and shown at its end. A
+  mismatched engine or content version discards the level autosave (not the progress) with the
+  toast "The app was updated; this level starts again."
+- **Two tabs** (or the installed app beside a browser tab) share storage. Every change to the
+  progress re-reads the stored copy first (`Progress.sync()`), and the app re-reads it on the
+  `storage` event, so neither writes an old copy over the other's codes and attempts. Telemetry
+  takes in the other sessions' stored events before it writes. The level autosave stays one slot:
+  the last tab to save a level wins.
 - Storage can be cleared (iOS clears a site after about 7 days without a visit unless it is
   installed). The complete screen says: "Paste your code into Canvas now; this device may not
   keep it."
@@ -430,7 +439,7 @@ dialogs (max width 560 px) elsewhere, as in the lab.
 - All levels are open in any order (§14 decision 1). The list shows the recommended order.
 - **My codes:** one row per level with the first-attempt code and the latest code, each with a
   Copy button.
-- **Cards:** the collected "Meanwhile, in you" cards, each stamped Universal or Bacteria-only.
+- **Cards:** the collected "Meanwhile, in you" cards, each stamped Universal or Not in your cells (§16.11).
 - **Export my data:** a JSON file of progress and telemetry (§11.4), delivered like the lab's
   run download (share sheet, then anchor download).
 - `wide`: the list becomes a two-column grid of tiles (max width 960 px), buttons below.
@@ -595,7 +604,7 @@ One question per sheet, answered as in §4.3. Continue appears after the right a
 
 One or two full screens, each with the heading "Meanwhile, in you", one or two lines of text
 (17 px) and, on the last screen, the level's cards: a 72 px tile with the card title and its
-stamp, **Universal** (accent outline) or **Bacteria-only** (muted outline), the word always
+stamp, **Universal** (accent outline) or **Not in your cells** (muted outline; "Bacteria-only" before §16.11), the word always
 printed. Tapping "Next" collects the cards. Never "advanced", "upgrade", "primitive" or
 "evolved from bacteria" (§12.1 L-2).
 
@@ -666,7 +675,10 @@ The editor replaces the content pane (all tabs hidden) during `design`.
   it on the next launch; a fresh install opens `home`.
 - New parameters: `?lab=1`; `?level=<id>` (opens that level's current attempt, or a new one);
   `?v=<variant seed>` with `?level` (§4.2 override). `?test=1` also exposes `app.test.level`
-  (§12.2).
+  (§12.2). `?level`, `?v`, `?lab` and `?reset` are one-shot: after boot they are taken out of the
+  address (`history.replaceState`), so a reload (a discarded tab, pull-to-refresh, the update's
+  Reload) resumes the autosave instead of opening the linked level again. `?test` and `?seed` stay.
+- The lab keeps the **Levels** button at the left of the status strip; it goes home (M2 review).
 
 ### 5.12 Layouts
 
@@ -767,13 +779,13 @@ motion). Scene 6 is the live engine cell.
 is not scored; the first tap is logged):
 
 "Where did the mRNA this ribosome is reading come from?"
-- ✓ "It was copied from the insulin gene." — "Right. The gene stays in the nucleus; its copies go out to the ribosomes."
+- ✓ "It was copied from the insulin gene." — "The gene stays in the nucleus; its copies go out to the ribosomes."
 - `OTHER` "It came from the food you ate." — "Food supplies building blocks. The instructions in this mRNA were copied from your own insulin gene."
 - `DNA_DIRECT` "It is the insulin gene itself, moved out of the nucleus." — "The gene never leaves. The mRNA is a copy, and the gene can be copied again and again."
 - `OTHER` "The ribosome made it." — "Ribosomes read mRNA; they do not write it. RNA polymerase copied it from the gene."
 
 **Cards** (collected after scene 7): Ribosome · Universal; Genetic code · Universal; No nucleus ·
-Bacteria-only.
+Not in your cells.
 
 **Flags:** bit 0 `PRED_DNA_DIRECT` (first tap on the `DNA_DIRECT` option).
 
@@ -781,7 +793,7 @@ Bacteria-only.
 `prologueSeen` is set.
 
 **Source notes (not student-facing):** about 3.0 × 10¹³ human cells (Sender, Fuchs & Milo 2016,
-to verify before release); two copies of the insulin gene per diploid cell.
+verified in the M2 biology review); two copies of the insulin gene per diploid cell.
 
 ---
 
@@ -846,13 +858,13 @@ one." Expert: "Also reveal a second gene's job, with at most 4 experiments in to
 
 #### 7.1.7 Predictions
 **p1** "You switch on the right gene. What changes first?"
-- ✓ "mRNA from that gene appears." — "Right. The gene is copied into mRNA first; the transporter comes next, and only then does glucose get in."
+- ✓ "mRNA from that gene appears." — "The gene is copied into mRNA first; the transporter comes next, and only then does glucose get in."
 - `DNA_DIRECT` "Glucose starts coming in." — "Glucose came in only after transporters had been made and sat in the membrane, minutes later."
 - `ENERGY_FIRST` "ATP goes up." — "ATP rose later. It needs glucose inside, glucose needs the transporter, and the transporter needs the mRNA."
 - `OTHER` "The cell grows faster." — "Growth changed last of all, once ATP was back."
 
 **p2** "Where will the transporter protein sit?"
-- ✓ "In the membrane, between the glucose and the inside." — "Right. It spans the membrane, which is why it was drawn across the cell's edge."
+- ✓ "In the membrane, between the glucose and the inside." — "It spans the membrane, which is why it was drawn across the cell's edge."
 - `DNA_DIRECT` "In the DNA." — "The DNA holds the instructions. The protein made from them ends up in the membrane."
 - `PROTEIN_LOCATION` "Anywhere in the cytoplasm." — "A protein floating inside never meets the glucose outside. This one sits in the membrane."
 - `OTHER` "Outside the cell, around the glucose." — "It stays in the membrane. Glucose meets it there and crosses through it."
@@ -871,13 +883,13 @@ one." Expert: "Also reveal a second gene's job, with at most 4 experiments in to
 
 #### 7.1.9 Debrief
 **d1** "Glucose was outside the whole time. What finally let it in?"
-- ✓ "Transporter proteins made from that gene's mRNA, sitting in the membrane." — "Right. The gene was copied into mRNA, ribosomes built transporters from it, and glucose crossed through them."
+- ✓ "Transporter proteins made from that gene's mRNA, sitting in the membrane." — "The gene was copied into mRNA, ribosomes built transporters from it, and glucose crossed through them."
 - `DNA_DIRECT` "The gene itself, once it was switched on." — "The gene never left the chromosome. It was copied into mRNA, and the copies were read into transporters."
 - `ENERGY_FIRST` "ATP made from the glucose." — "ATP came after glucose got in, not before. Until the transporters existed, ATP stayed low."
 - `CELL_DECIDES` "The cell sensed the glucose and let it in." — "Nothing sensed anything. Glucose crosses only through a transporter it happens to fit."
 
 **d2** "What is the transporter?"
-- ✓ "A machine: a protein whose shape lets glucose through the membrane." — "Right. Its shape gives it the job; while it lasts, it carries glucose across, one molecule at a time."
+- ✓ "A machine: a protein whose shape lets glucose through the membrane." — "Its shape gives it the job; while it lasts, it carries glucose across, one molecule at a time."
 - `PROTEIN_AS_FOOD` "Food that the cell uses up for energy." — "The transporter is not eaten. It keeps working, carrying many glucose molecules every second."
 - `PROTEIN_AS_MATERIAL` "Building material that makes the membrane stronger." — "It sits in the membrane, but not as material: without it the membrane holds, and no glucose gets in."
 - `CELL_DECIDES` "A message that tells the cell to eat." — "Nothing in the cell reads messages and obeys. The transporter carries the glucose itself."
@@ -1012,13 +1024,13 @@ accuracy or better."
 
 #### 7.2.8 Debrief
 **d1** "You switched the gene off, yet LacY kept rising for minutes. Why?"
-- ✓ "mRNA made before the switch-off was still being read by ribosomes." — "Right. Each mRNA lasts a few minutes, and ribosomes keep reading it until it decays."
+- ✓ "mRNA made before the switch-off was still being read by ribosomes." — "Each mRNA lasts a few minutes, and ribosomes keep reading it until it decays."
 - `CELL_DECIDES` "The gene took a while to register that it was off." — "Genes register nothing. RNA polymerase stopped starting new copies at once; the copies already made remained."
 - `PROTEIN_SELF_COPY` "LacY makes more LacY once there is enough of it." — "Proteins are not copied from proteins. Every LacY was built by a ribosome reading an mRNA."
 - `DELAY_MISATTRIBUTED` "The switch-off took minutes to reach the DNA." — "The switch acted at once: no new mRNA was started after it. The rise came from mRNA already made."
 
 **d2** "Why does the cell make mRNA copies instead of reading the gene directly?"
-- ✓ "Many copies can be made, and each is read many times, so one gene gives many proteins." — "Right. Here one gene gave a few dozen mRNAs and each gave about twenty LacY. Copies also decay, so output stops soon after the gene does."
+- ✓ "Many copies can be made, and each is read many times, so one gene gives many proteins." — "Here one gene gave a few dozen mRNAs and each gave about twenty LacY. Copies also decay, so output stops soon after the gene does."
 - `MIDDLEMAN` "mRNA is a spare copy kept in case the DNA is damaged." — "mRNA is read, not stored. Each copy lasts only minutes before it decays."
 - `OTHER` "Ribosomes cannot reach the DNA." — "In this bacterium ribosomes start on mRNA right beside the DNA, while it is still being made. Distance is not the reason here."
 - `MIDDLEMAN` "mRNA is an early form of the protein." — "mRNA is a copy of the instructions. Ribosomes read it; it is never built into the protein."
@@ -1125,13 +1137,13 @@ level at ×1 from the rates, within 25%." · "Hold it with a single setting, set
 
 #### 7.4.7 Predictions
 **p1** "You switch LacY on at one setting and leave it. What will the count do?"
-- ✓ "Rise, then level off where making and breaking down balance." — "Right. The more LacY there is, the faster proteases cut it up, until removal matches making."
+- ✓ "Rise, then level off where making and breaking down balance." — "The more LacY there is, the faster proteases cut it up, until removal matches making."
 - `MOLECULES_LAST` "Keep rising for as long as the gene is on." — "It would if nothing broke LacY down. Here more is cut up as the count grows, so it levels off."
 - `INSTANT` "Jump straight to a fixed level." — "It takes minutes to rise: mRNA first, then protein, and the count approaches its level gradually."
 - `OTHER` "Rise, then fall back to zero." — "With the gene still on, new LacY keeps replacing what is cut up, so the count holds."
 
 **p2** (after the goal) "You are about to switch LacY off. What will its count do?"
-- ✓ "Fall steadily, losing about half every {halfLife} minutes." — "Right. Proteases keep cutting it up, and nothing replaces it."
+- ✓ "Fall steadily, losing about half every {halfLife} minutes." — "Proteases keep cutting it up, and nothing replaces it."
 - `MOLECULES_LAST` "Stay where it is now." — "The count held only while new LacY replaced the old. Without new LacY, it falls."
 - `INSTANT` "Drop to zero at once." — "Each LacY is cut up at its own moment, so the count falls gradually, not all at once."
 - `OTHER` "Keep rising for a long time." — "Leftover mRNA adds a little for a minute or two, but breakdown soon wins."
@@ -1150,13 +1162,13 @@ level at ×1 from the rates, within 25%." · "Hold it with a single setting, set
 
 #### 7.4.9 Debrief
 **d1** "While the gene stayed on, the LacY count held steady. What was happening?"
-- ✓ "LacY was being made and cut up at the same rate." — "Right. A steady level is a balance: new LacY replaced the old as fast as proteases cut it up."
+- ✓ "LacY was being made and cut up at the same rate." — "A steady level is a balance: new LacY replaced the old as fast as proteases cut it up."
 - `CELL_DECIDES` "The cell stopped making LacY once there was enough." — "The setting never changed, so LacY was made at the same rate all along. Breakdown matched it."
 - `MOLECULES_LAST` "Nothing: the LacY already made simply stayed." — "Each LacY lasted only minutes. The count held because new ones replaced them."
 - `OTHER` "The mRNA ran out." — "mRNA was made the whole time the gene was on. Without it, the count would have fallen."
 
 **d2** "Proteases become twice as fast, and the setting stays the same. Where does LacY level off?"
-- ✓ "About half as high." — "Right. The same making rate now balances at half the count, because each LacY lasts half as long."
+- ✓ "About half as high." — "The same making rate now balances at half the count, because each LacY lasts half as long."
 - `OTHER` "At the same level, reached more slowly." — "Faster breakdown lowers the level itself: it settles where removal equals making."
 - `MOLECULES_LAST` "It keeps its level; breakdown only matters once the gene is off." — "Breakdown runs all the time. With faster proteases, less LacY is needed to match the making rate."
 - `OTHER` "About twice as high." — "Faster breakdown removes LacY sooner, so less of it builds up."
@@ -1317,7 +1329,7 @@ made" / "almost none". Rows and answers (the model contract of R-E15):
 Core shows 3 rows (§7.7.3); Expert shows all 4.
 
 **Expert choice** "Glucose and lactose are both present. Which design makes less LacZ?"
-- ✓ "The one with the CRP site." — "Right. With glucose getting in, cAMP is low, so CRP gives the lac promoter little help."
+- ✓ "The one with the CRP site." — "With glucose getting in, cAMP is low, so CRP gives the lac promoter little help."
 - `OTHER` "The one without the CRP site." — "Without the site, CRP cannot help or hold back; the promoter runs at its own strength, sugar or not."
 - `OTHER` "Both make the same." — "The CRP site ties the promoter to cAMP, and cAMP is low while glucose gets in."
 
@@ -1335,13 +1347,13 @@ Core shows 3 rows (§7.7.3); Expert shows all 4.
 
 #### 7.7.9 Debrief
 **d1** "When lactose arrived, what switched the lac genes on?"
-- ✓ "Allolactose made from lactose fitted LacI and pulled it off the operator." — "Right. With the operator free, RNA polymerase started the lac genes. Nothing else was involved."
+- ✓ "Allolactose made from lactose fitted LacI and pulled it off the operator." — "With the operator free, RNA polymerase started the lac genes. Nothing else was involved."
 - `CELL_DECIDES` "The cell decided lactose was worth using." — "Nothing decided. LacI lets go of the operator only when allolactose is bound to it."
 - `COMMANDER` "You did, by designing the DNA." — "You wrote the parts before the run. During it, LacI and allolactose did the switching."
 - `RIBOSOME_DECIDES` "The ribosomes, once they saw lactose." — "Ribosomes see nothing. They read whatever mRNA lands on them."
 
 **d2** "Why did the normal design make so little LacZ in glucose?"
-- ✓ "With no lactose there was no allolactose, so LacI stayed on the operator." — "Right. RNA polymerase was blocked until something pulled LacI off."
+- ✓ "With no lactose there was no allolactose, so LacI stayed on the operator." — "RNA polymerase was blocked until something pulled LacI off."
 - `CELL_DECIDES` "The cell switched the lac genes off to save energy." — "Nothing was saved on purpose. LacI stayed bound because nothing pulled it off."
 - `OTHER` "Glucose damages the lac genes." — "The genes were untouched. A protein sat on the operator, and they were read again once it came off."
 - `RIBOSOME_DECIDES` "Ribosomes skip lac mRNA when glucose is present." — "Ribosomes read any mRNA. There was little lac mRNA to read, because LacI blocked transcription."
@@ -1349,7 +1361,7 @@ Core shows 3 rows (§7.7.3); Expert shows all 4.
 #### 7.7.10 Meanwhile, in you
 - "Your cells switch genes on and off with regulatory proteins called transcription factors. Each binds DNA when a signal fits it."
 - "Your genes are not grouped into operons; most have their own promoter, and several factors act on each. Nobody is in charge there either."
-- Cards: Repressor protein · Universal; Operon · Bacteria-only.
+- Cards: Repressor protein · Universal; Operon · Not in your cells.
 
 #### 7.7.11 Story ("Ordeal: too fast to command")
 Intro:
@@ -1730,14 +1742,19 @@ visible button, radio, tab and chip ≥ 44 × 44. Screenshots go to `test-artifa
 | Id | Screens and checks |
 |---|---|
 | LV-1 | Home: rows, Free-play lab button; tapping it opens the lab and `?lab=1` does the same |
-| LV-2 | Prologue: scenes 1, 4 (question with feedback after a wrong tap) and 6 (live cell running); Continue disabled until the question is right |
-| LV-3 | 1.1: intro sheet, p1, run with the HUD (height 44 px compact / 40 px wide; canvas ≥ 220 px), cards show letters and "Unknown"; after `runTicks` with ptsG on, the card is revealed and `l11.reveal` fires; result, debrief with a wrong tap's feedback, echo with cards, complete with a code that decodes as valid in the page |
+| LV-2 | Prologue played by taps from home to its completion screen (code, Copy, the Canvas line, Next level, the result stored); after the right answer Next is enabled and on screen |
+| LV-3 | 1.1: intro sheet, p1, run with the HUD (height 44 px compact / 40 px wide; canvas ≥ 220 px), cards show letters and "Unknown" and no default-level mark or "stands for" badge; the side route drawn in the membrane, glucose markers only there and the narrator's `l11.trickle` (real time); after `runTicks` with ptsG on, the card is revealed and `l11.revealGlucose` fires with the gene's name; result, debrief with a wrong tap's feedback, echo (after the outro) with cards, complete with a code that decodes as valid in the page |
 | LV-4 | 1.2: sketch drawn with touch events (a scripted stroke), Done disabled before full coverage, demo overlay drawn; run HUD with the mRNA counter; settle after D; complete |
 | LV-5 | 1.4: band gauge and hold progress; epilogue after p2; complete |
 | LV-6 | 1.7: truth table cards, designer editor (default and after edits; the Run confirmation), run with "No controls", read-only genes panel, phase band on the plots, "Run to the end", result with three bars; complete |
 | LV-7 | Copy code: with clipboard permission granted the clipboard holds the code; with `navigator.clipboard` removed the fallback selects the text and shows its message |
 | LV-8 | Resume: leave 1.4 mid-run, reload, the level reopens paused at the same tick and phase |
 | LV-9 | 375 × 553 (short screen): 1.2 run screen keeps the canvas ≥ 220 px with the HUD |
+| LV-10 | Runs that end in real time (the loop, not `runTicks`): 1.4's goal and epilogue at 1 s = 10 min, the HUD reads "Goal met · Continue" / "Continue" at once; 1.7 at 1 s = 1 h with a failing design, the result opens, "To the end" is gone, Try again opens the DNA editor |
+| LV-11 | The free-play lab shows the Levels button (≥ 44 px), which goes home; after a reload in the lab it is still there (360 × 740 and 1280 × 800) |
+| LV-12 | Two tabs: tab A completes 1.4; tab B (opened earlier) shows it done and opens 1.1; A's code is still stored and the next 1.4 attempt is 2 |
+| LV-13 | An autosave of another content version is not resumed: the level starts again from its story, with "The app was updated" |
+| LV-14 | `?level=1.4&v=…` leaves the address after boot and a reload resumes the override run at its tick; after a `?level=1.2` link the student plays 1.1, and a reload resumes 1.1 |
 
 ### 12.3 Manual checks (before the think-aloud group)
 
@@ -1830,9 +1847,10 @@ Each can change without affecting the others.
 3. **Par run on slow phones.** 36,000 ticks at ≈ 50 µs is ≈ 2 s of engine time, spread over idle
    frames during the intro and prediction. Measure on the test Chromebook; if it is too slow,
    precompute par only when the student presses Run and show "Working out par…".
-4. **Facts to verify before release:** about 3.0 × 10¹³ human cells; red blood cell life about
-   120 days; GLUT4 and SGLT wording; AraE (P0AE24, 472 aa), LacA (P07464, 203 aa) and LacI
-   (P03023, 360 aa) lengths; LacI about 10 tetramers per cell; Oehler 1990 repression factors.
+4. **Facts checked before release** *(done: the M2 biology review verified them, §16.11)*: about
+   3.0 × 10¹³ human cells (Sender 2016); red blood cell life about 120 days; GLUT4 and SGLT
+   wording; AraE (P0AE24, 472 aa), LacA (P07464, 203 aa) and LacI (P03023, 360 aa) lengths; LacI
+   about 10 tetramers per cell; Oehler 1990 repression factors; two insulin gene copies.
 5. **Palette:** two new gene colours need the CVD check that U-5 was deferred for. *Done:
    `tests/ui-palette.test.js` (§16.10).*
 6. **Sketch fairness across devices:** a finger on a 360 px plot is coarser than a mouse. The
@@ -1872,7 +1890,7 @@ the build departs from §1–§15 it is recorded here, with the reason. All numb
 |---|---|---|
 | `m2-lac` has 10 genes (R-E19) | 9: the lab strain's 7 plus lacI and lacA (ENGINE §22.5) | Level code reads the strain's gene list; nothing assumes 10 |
 | Wild-type lactose lag 20–60 min (RT-2) | 125–146 min from glucose (12 seeds, median 132); 64–71 min after time in both sugars; never dormant (BIOLOGY "The lac operon", open item 1) | For 1.7, `LMIN = max(90, 3·lagP90)` would be about 7 h per L phase, which the 600-min templates of §7.7.3 cannot hold. Open item for 1.7 (§15 item 11) |
-| Lag after both sugars 64–71 min (12 seeds) | On the 1.7 schedules (every L after a B phase): first L phase 59–104 min (median 72), second 22–70 min; over all L phases p50 63, p90 81 | `LMIN = 245` min (§16.8) |
+| Lag after both sugars 64–71 min (12 seeds) | On the 1.7 schedules (every L after a B phase), with inducer exclusion (content 2, §16.11): first L phase 57.5–104.3 min (median 74.6), second 27.4–75.4 min; over all L phases p50 63.3, p90 81.7 | `LMIN = 250` min (§16.8) |
 | `m2-l11` = lab strain + araE | 8 genes; araE (slot 7) role `none` | the level's candidate list comes from the level, the gene list from the cell |
 | 1.3 "The price of a protein" runs with `primingSeed = 0`, a real bootstrapping threshold (about 30% of default capacity) | Gone: the energy gates let even 5% capacity restart (ENGINE §21.1 row 6, test g6) | 1.3's planned lesson ("running out of ATP stalls everything, including making more enzymes") needs a new mechanism. Open item for 1.3 (§15 item 10) |
 | A newborn (`start: 'birth'`, lacY off) carries about 17 LacY [M1] | About 4 (4.4 on average) | The HUD and the gene card show it before the first tick; nothing else depends on it |
@@ -1919,7 +1937,7 @@ the build departs from §1–§15 it is recorded here, with the reason. All numb
 | 7.2.2 | newborn ≈ 17 LacY | ≈ 4 | engine 1.1 (§16.1) |
 | 7.2.3 | ppm ≈ 21, `mPar` 32, 40, 49 | ppm 21.2 (5th–95th percentile 17.5–24.8; 20.7 at the demo's 20 min), `mPar` 32, 40, 48 | calibration |
 | 7.2.3 | D = 14 for all T | D = 14 for all T | calibration: the reference reaches T by 10.6, 11.1 and 12.6 min at the latest (T 400, 500, 600) |
-| 7.2.4 | Expert prompt "… lasts about {min} minutes on average …", `sec` and `min` read from the demo cell at tick 0 | "A ribosome starts on each LacY mRNA about every {sec} seconds, and an mRNA lasts about {min} minutes. How many LacY does one mRNA make?"; `sec` = 13 and `min` = 4.5 from the calibration (13.27 s, 4.33 min) | the same for every variant and seed; the prompt comes before any demo cell exists. "on average" dropped for length |
+| 7.2.4 | Expert prompt "… lasts about {min} minutes on average …", `sec` and `min` read from the demo cell at tick 0 | "A ribosome starts on each LacY mRNA about every {sec} seconds, and an mRNA lasts about {min} minutes on average. How many LacY per mRNA?" (content 2, §16.11); `sec` = 13 and `min` = 4.5 from the calibration (13.27 s, 4.33 min) | the same for every variant and seed; the prompt comes before any demo cell exists; "on average", because 4.5 min is the mean lifetime (the half-life is 3 min) |
 | 7.2.4 | demo "pause allowed" | runs by itself, pause allowed; the demo sheet of §16.2 | the demo is watched, not played |
 | 7.2.4 | HUD | as planned; short forms "LacY {count} / {T}", "due in {time}", "{m} / {mPar}"; demo "Test run · LacY {count}", "{time} of 20 min", "mRNAs {m}"; settle "{time} left" | 360 px width |
 | 7.2.11 | `l12.settle` after D with lacY mRNA or nascent > 0 | also needs lacY off | with the gene on, new mRNA is still made and "come from mRNA that was already there" is false |
@@ -1937,8 +1955,8 @@ the build departs from §1–§15 it is recorded here, with the reason. All numb
 | 7.4.1, 7.4.5 | hold 10 game-min within 40 | **hold 15 within 45** (task card, story "fifteen minutes", HUD "held {h} of 15 min") | on engine 1.1 the stockpile (×4 to the band's middle, then off) stays in the band for about 10 min, because the mRNA already made keeps delivering while proteases cut; with a 10-min hold it passed. 45 min is still before the newborn replicates (≈ 48 min) |
 | 7.4.3 | 6 variants (half-life 3, 4, 5 min × target ×1, ×2) | **5 variants: half-life 5 min at ×2 removed** (content version 2) | coordinator decision (§16.9): there the stockpile held the band on 6 of 40 seeds |
 | 7.4.3 | S [M1] | `S[hl][level]` for ×¼, ×½, ×1, ×2, ×4: half-life 3 min 73, 144, 290, 579, 1,122; 4 min 100, 196, 380, 750, 1,463; 5 min 113, 219, 443, 888, 1,770 (coefficient of variation 0.01–0.33 at ×1–×4). Band [0.70, 1.35] kept; neighbouring settings outside the band on 98.3% | calibration (recalibrated after the variant change) |
-| 7.4.4 | Expert prompt "… about {X} LacY per minute, and each LacY lasts about {Y} minutes. About how many LacY will there be once the count levels off at ×1?" | "At ×1 this gene makes about {X} LacY a minute, and each lasts about {Y} minutes. About how many LacY are there once the count levels off?"; Y = 4, 5.5, 7 min | ≤ 140 characters |
-| 7.4.7 | p2 ✓ "Fall steadily, losing about half every {halfLife} minutes." | ✓ "Hold for a minute or two while the last mRNA is read, then fall steadily as proteases cut it up." — "Right. Proteases keep cutting it up, and once the last mRNA is gone nothing replaces what they cut." | measured after the switch-off: > 90% left at 2 min, 28–41% at 12 min, slower than halving every half-life because the leftover mRNA delivers for a few minutes |
+| 7.4.4 | Expert prompt "… about {X} LacY per minute, and each LacY lasts about {Y} minutes. About how many LacY will there be once the count levels off at ×1?" | "At ×1 about {X} LacY are made a minute, and each lasts about {Y} minutes on average. How many LacY are there once the count levels off?" (content 3, §16.11); Y = 4, 5.5, 7 min | ≤ 140 characters; a gene does not "make" protein |
+| 7.4.7 | p2 ✓ "Fall steadily, losing about half every {halfLife} minutes." | ✓ "Hold for a minute or two while the last mRNA is read, then fall steadily as proteases cut it up." — "Proteases keep cutting it up, and once the last mRNA is gone nothing replaces what they cut." | measured after the switch-off: > 90% left at 2 min, 28–41% at 12 min, slower than halving every half-life because the leftover mRNA delivers for a few minutes |
 | 7.4.13 | reference: the target level when the count reaches `lo` | the target level when `protein + 15·mRNA + 20·nascent ≥ (lo + hi)/2` | switching at `lo` overshot the band (the mRNA already made carries the count on) |
 | 7.4.12 | rules keyed on the 60-s mean against the band | keyed on the last minute's measured making and cutting-up rates (`synthesis_perS`, `degraded_perS`): `l14.rising` (made > 1.1·cut + 0.05/s), new `l14.dropping` ("At this setting LacY is cut up faster than it is made, so the count falls until the two rates meet."), `l14.balance` (even, ≥ 60 s), `l14.over` and new `l14.under` ("At this setting making and breakdown balance below the band, so the count settles there.") when even; `l14.falling` needs lacY off and no lacY mRNA left | the band rule claimed the wrong direction about 20% of the time (noise and overshoot); the rate rules made no wrong claim in the tests |
 | 7.4.11 | one outro | `pulsed` when lacY was switched off during the run; `missed` when the goal was not met | "LacY was made and cut up at the same rate the whole time" must be true |
@@ -1971,8 +1989,10 @@ the build departs from §1–§15 it is recorded here, with the reason. All numb
   `codes.html`). The narrator rules of both levels are checked for truth whenever they speak.
 - Browser (`tools/ui-check-levels.js`, run by `tools/ui-check.js`): LV-1, LV-3 (1.1: 360 × 740
   and 1280 × 800), LV-4 (360 × 740 and 1280 × 800, sketch by touch and by mouse), LV-5, LV-6
-  (1.7: 360 × 740, 375 × 553 for the design and the run, 1280 × 800), LV-7, LV-8, LV-9 and the
-  published `codes.html`.
+  (1.7: 360 × 740, 375 × 553 for the design and the run, 1280 × 800), LV-7, LV-8, LV-9, the
+  published `codes.html`, and since the M2 reviews LV-2 (the Prologue to its completion screen),
+  LV-10 (run ends on the real loop), LV-11 (the lab's way home), LV-12 (two tabs), LV-13 (content
+  version) and LV-14 (one-shot URL parameters) (§16.11).
 - Build: `dist/index.html` is about 920 KB with all five levels, under the 1.2 MB warning and
   the 1.5 MB limit (§16.9).
 
@@ -1999,7 +2019,8 @@ the build departs from §1–§15 it is recorded here, with the reason. All numb
 both-sugar phase, and the run opens in both sugars, straight from the glucose-grown start (a
 glucose phase first let a division leave 2 of 40 wild-type cells with none of the preset's few
 LacY, and such a cell never let lactose in). Phase lengths come from the calibrated lag: every L
-phase is at least `LMIN = 3·lagP90` rounded up to 5 min, on these schedules 3 × 81.4 → **245 min**.
+phase is at least `LMIN = 3·lagP90` rounded up to 5 min, on these schedules 3 × 81.7 → **250 min**
+(245 before inducer exclusion, §16.11).
 The total time grows to fit.
 
 | Template | Phases (kind and minutes; L = LMIN + 15 before the jitter) |
@@ -2010,18 +2031,18 @@ The total time grows to fit.
 | T4 | B 105 · L · G 75 · B 90 · G 60 · B 105 · L · G 60 |
 
 Every phase but the last moves by a multiple of 5 min in [−15, +15]; then L ≥ LMIN, a B phase
-before an L ≥ 90, every other phase ≥ 60. Runs last 13.4–18.3 game-h (14.2–17.7 h on the
+before an L ≥ 90, every other phase ≥ 60. Runs last 13.6–18.6 game-h (14.3–17.8 h on the
 calibration's seeds). The default speed is 1 s = 10 min (a run takes about a minute and a half of
 real time; 1 s = 1 min and 1 s = 1 h are offered), and "Run to the end" finishes it in a few
 seconds.
 
 | § | Planned | Built | Why |
 |---|---|---|---|
-| 7.7.3 | 600-min templates opening in glucose; `LMIN = max(90, 3·lagP90)` | the templates above; LMIN 245 | the lag (§16.1) and the decision above |
+| 7.7.3 | 600-min templates opening in glucose; `LMIN = max(90, 3·lagP90)` | the templates above; LMIN 250 | the lag (§16.1) and the decision above |
 | 7.7.5 | `λL` [M1: doubling 104 min] | λL = 9.42 × 10⁻⁵ /s (doubling 122.7 min, 0.80 λ_ref) | calibration |
 | 7.7.14 | truth table | wt glucose 0.0–0.5% of the induced wild type's LacZ, lactose 50–66%; no lacI and no operator 10–17% and 51–66%; Is 0.0–0.5% and 0.1–1.0%: the answers of §7.7.7 hold (made ≥ 5%, almost none ≤ 1%) | calibration |
-| 7.7.6 | Expert bit 0: `rB/L ≤ 0.25` ("a quarter") | `rB/L ≤ rBLMax` = **0.5** ("half"): the reference's rB/L is 0.11–0.28 (p95 0.22), so a quarter would fail the normal lac genes on some schedules; without the CRP site rB/L is 0.83–1.41, well above half. The calibration picks a quarter if the reference's p95 is ≤ 0.2 | calibration |
-| 7.7.13 | results | reference: waste 0.1–0.4%, lag 44–76 min, E = 1 (par by construction); `coreWildType` E 0.91–1; `commander` waste 10.6–11.7%, E 0; `noRepressor` waste 2.9–3.7%, E 0; `lockedOff` lag 248–275 min, goal 0%; `lacIq` E 1; `repressorAsActivator` (the reference with "no repressor gene: almost none") raises `PRED_REPRESSOR_AS_ACTIVATOR`. Every solution meets its expectation on 40 of 40 (4 templates × 10) | – |
+| 7.7.6 | Expert bit 0: `rB/L ≤ 0.25` ("a quarter"), "Glucose first" | `rB/L ≤ rBLMax` = **0.5** ("half"), labelled **"Glucose effect"** (a factor of two is not "first"): the reference's rB/L is 0.13–0.25 (p95 0.23), so a quarter would fail the normal lac genes on some schedules; without the CRP site rB/L is 0.80–1.37 (p5 0.85), well above half. The calibration picks a quarter if the reference's p95 is ≤ 0.2 | calibration (content 2) |
+| 7.7.13 | results | content 2 (inducer exclusion): reference waste 0.1–0.4%, lag 47.2–80.5 min, E = 1 (par by construction); `coreWildType` E 0.99–1; `commander` waste 10.6–11.7%, lag 0, E 0; `noRepressor` waste 2.9–3.7%, E 0; `lockedOff` lag 252.5–280 min, goal 0%; `lacIq` E 1; `repressorAsActivator` (the reference with "no repressor gene: almost none") raises `PRED_REPRESSOR_AS_ACTIVATOR`. Every solution meets its expectation on 40 of 40 (4 templates × 10) | – |
 | 7.7.4 | HUD "Now: {phase} · {growing / slowed / stopped}", "{elapsed} of 10 h", "No controls" | the same, with "{elapsed} of {total}"; only "Now: {phase}" in the first minute (no growth to report yet); "Next change: unknown" under it; the "Run to the end" button beside "No controls", which gives it its place below 400 px | total varies |
 | 7.7.4 | par in idle frames | from the moment the level opens, ≤ 4 ms per frame; the result shows "Working out par…" until it is done. The run file records par's final hash, and `verifyRunFile` recomputes par | – |
 | 7.7.2 | graph chips lacZ, lacY | lacZ, lacY, lacI (lacA available) | LacI's count is part of the story |
@@ -2054,6 +2075,109 @@ seconds.
   the cell; text tokens ≥ 4.5:1.
 - **Status strip:** a clock of 9 or more characters ("14 h 30 min") is set at 14 px on phones,
   so it fits beside the Levels button.
+
+### 16.11 Fixes after the four M2 reviews (code, phone UX, biology, text; 2026-09-24)
+
+Four reviews of commit 2146f5b before the think-aloud. Everything they found is fixed here; the
+coordinator's decisions are marked *(decision)*.
+
+**Content versions.** 1.1 → 2, 1.2 → 2, 1.4 → 3 (questions and feedback reworded, §3.2's rule),
+1.7 → 2 (inducer exclusion, the Expert objective relabelled, the questions reworded). The
+Prologue stays 1 (unscored; one feedback line). Each level file reads its `CONTENT` constant for
+both `version` and `config.variant.content`. Codes of an older content version still decode;
+the instructor's table leaves their variant values blank and warns "content v{n}: older than
+this build" (`BTC.code.table`).
+
+**Flow and framework (runner, progress, app)**
+
+| Was | Now | Review |
+|---|---|---|
+| The outro at the start of `result` when the goal was met, stating the debrief's answers | At the start of `echo`, after the debrief, always *(decision)*; §4.1 | text 1 |
+| The Prologue's completion screen threw (`text.task` is undefined), so no code | `((text.task \|\| {}).expert \|\| []).length`; browser check LV-2 plays it to the end | code 1, UX B3 |
+| A resumed level ignored its content version | `LevelRunner.restore` throws on another `content`; the app clears the save with "The app was updated; this level starts again." (LV-13) | code 2 |
+| Two tabs overwrote each other's progress (codes vanished, attempt 1 replayed) | `Progress.sync()` before every change; the app re-reads on the `storage` event and redraws home; telemetry merges the other sessions' stored events before writing (LV-12) | code 3 |
+| `?level`, `?v` re-applied on every load, over the autosave | Taken out of the address after boot (with `?lab`, `?reset`); an override attempt resumes from its autosave (LV-14) | code 4 |
+| 1.7 Try again replayed the identical run | A designer level's Try again returns to `design`; the note says "Change the DNA and run it again." (LV-10) | code 5 |
+| 1.7 par slices up to 131 ms on a slow phone; the rest run at once at the complete screen | The clock is read every 16 steps; the first slice only builds the cell; the result's Continue (and Continue without the goal) waits for par (`gate` reason `par`) | code 6 |
+| A finished 1.2 demo played again after a reload | Rebuilt from its record (`replayWithMonitor`), shown at its end | code 7 |
+| From the 100th run the code did not decode | Runs clamped to 99 in the code and the run file | code 8 |
+| The decoder labelled old codes with this build's variant values | Blank, with a warning | code 9 |
+| The free-play lab had no way home | The Levels button shows in the lab (LV-11) | UX B1 |
+| Runs ended silently: the HUD kept its running text until the next 250-ms tick, which never came once the loop stopped | The end of a run, of the epilogue and of the demo refreshes the HUD, the status strip and the controls in that frame; "To the end" is hidden (LV-10, on the real loop) | UX B2 |
+| – | `def.skipBeat(name, variant, design)`: 1.7 drops LacI's onRun line when the design deleted lacI | UX M6 |
+
+**Screens**
+
+- Completion screen: "Paste it into the Canvas quiz for this level." under the code *(decision)*.
+- The Prologue's question sheet keeps Next in a sticky bar (it was below the fold at 360 × 740).
+- Home: level titles and challenges wrap to two lines; the challenges are shorter (text 17).
+- HUD counters on phones keep one word of unit ("1/3 tests", "32/48 mRNA", "1/2 changes"; "tries"
+  trips the teleology lint); over par the counter turns `--warn-ink` and the long form adds "over
+  par". HUD chips are 13 px below 400 px; 1.1's phone timer reads "171 min left" and 1.7's "3/15 h",
+  so the goal chip keeps its words ("Found · growth 45%", "Both sugars · growing").
+- 1.2: the run opens at 1 s = 10 s *(decision)*; after the target the HUD reads "Reached · watching
+  10 more min" ("Reached · watching" on phones); a goal met over par adds the hint "mRNA already
+  made keeps being read into LacY, so switching the gene off earlier needs fewer mRNAs."
+- Sketch sliders: steps of 100, values can be typed, Done stays disabled until one is set.
+- 1.1: while names are hidden, no dial marks a gene's normal level and no card shows "stands for
+  ~10 genes" (both named the transporter; LV-3 checks). The completion list says flagellin is
+  "made inside the cell; here it is not exported to a flagellum".
+- 1.7: a "How the switch works" line above the truth table; each designer part says what it does
+  ("When LacI sits here, RNA polymerase cannot start the lac genes."); the CRP site's absent option
+  reads "absent (promoter ignores CRP)" with the note "That is this game's rule. The real lac
+  promoter is weak without its CRP site."; the second Core objective in plain words; a result line
+  for a design that wins one bar by losing another ("Ready for lactose at once, but it paid for
+  that in glucose…"); the first debrief question asks about the normal design; the Expert
+  objective is "Glucose effect", threshold still half *(decision)*.
+- Card stamps read "Universal" and "Not in your cells" (archaea have no nucleus either; some
+  animals have operons) *(decision)*.
+- A sheet whose main button is disabled takes the focus itself (the first truth-table cell looked
+  chosen); toasts on home and the Prologue drawings sit at the top; the sketch says "draw", not
+  "with your finger".
+
+**Biology**
+
+- **1.1's side route** (engine `backupGlucoseUptake`, about 15% of normal uptake, growth 0.35–0.46
+  λ_ref) is disclosed and drawn *(decision)*: intro line 2 "A slow side route lets a trickle of
+  glucose in…"; the narrator's tick-0 line `l11.start` and `l11.trickle` ("Only a trickle of glucose
+  gets in, through a slow side route, so ATP is low and growth is slow.") replace the lab's "none of
+  it gets in"; d2's material feedback and the `missed` outro mention it. The cell view draws the
+  route as a dashed gate labelled "side route" at two fixed places in the membrane; glucose markers
+  of its share (uBasal·V ÷ (uBasal·V + PtsG·k_pts)) enter only there, never through bare membrane.
+  The key sheet and the tap chip explain it (LV-3 checks the markers).
+- **1.1 narrator:** `l11.waiting`, `l11.tx`, `l11.rising` (gene → mRNA → protein in plain words; the
+  lab's 16a–c lost to "too little glucose" all through the search); the reveal lines speak for 10
+  game-min and pre-empt (a 1-min window was shorter than the 1.5-s hold at 1 s = 1 min); a reveal
+  resets the narrator so the line carries the new name.
+- **1.4 narrator:** `l14.down` ("…proteases keep cutting it up, so its count settles at a lower
+  level.") instead of the lab's dilution line.
+- **1.7 inducer exclusion** *(decision)*: `params: {IEmax: 0.8}` on every role (task, par, the
+  calibration's cells). Without it the cell used both sugars together after a lactose phase
+  (lactose 20–59% of the sugar in both-sugar phases), against Monod's diauxie. Now (20 variants)
+  lactose is 8% of the sugar in both-sugar phases (median; 1–26%), the goal is met on 20 of 20 and
+  the recalibrated numbers are in §16.1 and §16.8 (LMIN 250; rB/L 0.13–0.25 with the CRP site,
+  0.80–1.37 without). IEmax 1 was not usable (one variant in 20 never adapts). The text no longer
+  says glucose "does not hold back" a promoter without the CRP site ("holds it back much less").
+- Texts: the 1.4 intro no longer says proteases removed the last permeases (they were shared out
+  at division); the red-blood-cell screen reads their leftover mRNA for a day or two; 1.7's
+  transcription-factor screen no longer inverts LacI; "Nothing else was involved" is gone (LacY and
+  LacZ made the allolactose).
+
+**Text** (the 20 ranked findings and the lower-priority notes, all applied): feedback no longer
+starts "Right." (the UI prints "✓ Right."); no "needs" for molecules; "the gene makes" and "one
+mRNA makes" reworded; the 1.2 outro no longer says the permeases were "on their way"; 1.4's outro
+says "While the count held"; the 1.7 outro gains the Commander's grudging concession ("Fine. I
+write the DNA, and after that I keep out of it.") *(decision)*; the app description reads "A game
+about genes and proteins, in which you are in charge of a cell. In principle."; codes.html spells
+its column headings out and adds a key of each level's flags. The tone lines listed by the text
+review are unchanged.
+
+**Tests and checks added.** Node: the outro placement, a designer's Try again, the par gate, runs
+at 99, content-version restore, the rebuilt demo (`level-runner.test.js`); two tabs
+(`progress.test.js`, `telemetry.test.js`); stripped parameters (`ui-pure.test.js`); an older
+content code in the decoder (`level-replay.test.js`); the new 1.1 narrator rules are checked for
+truth whenever they speak (`level-1-1.test.js`). Browser: LV-2 and LV-10 to LV-14 (§12.2), and
+LV-3's default marks, badges and side route.
 
 
 ---

@@ -20,7 +20,7 @@ const def = LV.validate(require('../src/levels/btc-level-1-7.js'));
 const L = LC.l17;
 const ANSWER = { wt: { glc: 0, lac: 1 }, dlacI: { glc: 1, lac: 1 }, Oc: { glc: 1, lac: 1 }, Is: { glc: 0, lac: 0 } };
 
-test('L-3: four templates, jittered; every lactose phase follows both sugars and lasts ≥ LMIN; runs of 13–18.5 h; truth-table rows', () => {
+test('L-3: four templates, jittered; every lactose phase follows both sugars and lasts ≥ LMIN; runs of 13–19 h (13.6–18.6 with LMIN 250); truth-table rows', () => {
   const seen = new Set();
   for (let s = 0; s < 500; s++) {
     const vs = K.variantSeed(s, def.id, 0);
@@ -40,7 +40,7 @@ test('L-3: four templates, jittered; every lactose phase follows both sugars and
       } else assert.ok(min >= 60);
     });
     const h = def.totalTicks(v) / 3600;
-    assert.ok(h >= 13 && h <= 18.5, `${h} h`);
+    assert.ok(h >= 13 && h <= 19, `${h} h`);
     assert.equal(v.rows.length, 3);
     assert.ok(v.rows.includes('wt') && v.rows.includes('dlacI'));
     assert.deepEqual([...v.rows, v.extraRow].sort(), ['Is', 'Oc', 'dlacI', 'wt']);
@@ -158,7 +158,7 @@ test('§3.7 / §16 calibration: λL, the lag and LMIN (≥ 3 × p90), the glucos
   assert.equal(L.LMIN % 5, 0);
   assert.ok([0.25, 0.5].includes(L.rBLMax));
   assert.ok(L.rBL.crp[1] <= L.rBLMax + 0.05 && L.rBL.noCrp[0] > L.rBLMax, `rB/L ${JSON.stringify(L.rBL)} vs ${L.rBLMax}`);
-  assert.ok(L.totalHours[0] >= 13 && L.totalHours[1] <= 18.5);
+  assert.ok(L.totalHours[0] >= 13 && L.totalHours[1] <= 19);
   const R = L.passRates;
   assert.ok(R.reference.goalPar >= 0.95);
   for (const name of ['commander', 'noRepressor', 'lockedOff']) assert.ok(R[name].goalPar <= 0.05, name + ' ' + R[name].goalPar);
@@ -179,5 +179,5 @@ test('the lac-region drawings: palette tokens only, ≤ 4 KB, labelled parts; ea
   }
   assert.ok(!D.strainSvg('wt').includes('stroke-width="2.2"'), 'the normal strain has nothing outlined');
   for (const row of ['dlacI', 'Oc', 'Is']) assert.ok(D.strainSvg(row).includes('stroke-width="2.2"'), row + ' outlines its difference');
-  assert.equal(D.summary(def.designStart, def.text.design), 'This design: lac promoter ×4 · operator absent · repressor gene deleted · CRP site absent.');
+  assert.equal(D.summary(def.designStart, def.text.design), 'This design: lac promoter ×4 · operator absent · repressor gene deleted · CRP site absent (promoter ignores CRP).');
 });

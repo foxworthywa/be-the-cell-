@@ -153,10 +153,28 @@
       } catch (e) { return null; }
     }
 
+    /**
+     * Another tab's events (other session ids) that were stored since this tab loaded are taken in before
+     * writing, so two open tabs do not erase each other's log. Events keep their own session and seq.
+     */
+    mergeStored() {
+      let obj = null;
+      try { const raw = this.storage.getItem(KEY); obj = raw ? JSON.parse(raw) : null; } catch (e) { return; }
+      if (!obj || obj.v !== 1 || !Array.isArray(obj.events)) return;
+      const have = {};
+      for (const e of this.events) have[e.s + ':' + e.seq] = true;
+      const foreign = obj.events.filter((e) => e && e.s !== this.s && !have[e.s + ':' + e.seq]);
+      if (!foreign.length) return;
+      const mine = this.events;
+      this.events = []; this.sizes = []; this.chars = 0;
+      for (const e of foreign.concat(mine)) this.push(e);
+    }
+
     /** Writes the buffer; on a quota error drops the oldest half and tries once more. */
     flush() {
       this.lastFlush = this.now();
       if (!this.storage || !this.dirty) return true;
+      this.mergeStored();
       const write = () => this.storage.setItem(KEY, JSON.stringify({ v: 1, events: this.events }));
       try { write(); this.dirty = false; return true; } catch (e) {
         this.dropOldest(Math.ceil(this.events.length / 2));
@@ -166,7 +184,10 @@
 
     all() { return this.events.slice(); }
     forAttempt(lv, att) { return this.events.filter((e) => e.lv === lv && e.att === att); }
-    clear() { this.events = []; this.sizes = []; this.chars = 0; this.dirty = true; this.flush(); }
+    clear() {
+      this.events = []; this.sizes = []; this.chars = 0; this.dirty = false;
+      try { if (this.storage) this.storage.setItem(KEY, JSON.stringify({ v: 1, events: [] })); } catch (e) { /* storage blocked */ }
+    }
   }
 
   function create(o) { return new Telemetry(o); }

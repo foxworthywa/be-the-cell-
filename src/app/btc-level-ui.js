@@ -145,8 +145,11 @@
       return st;
     }
     focusPrimary(sheet) {
-      const b = sheet.querySelector('[data-primary]:not([disabled])') || sheet.querySelector('button:not([disabled])');
-      if (b && document.activeElement !== b) b.focus({ preventScroll: true });
+      // The main button when it is enabled; otherwise the sheet itself, so no answer looks chosen by a focus ring.
+      let b = sheet.querySelector('[data-primary]:not([disabled])');
+      if (!b && !sheet.querySelector('[data-primary]')) b = sheet.querySelector('button:not([disabled])');
+      if (!b) { if (!sheet.hasAttribute('tabindex')) sheet.setAttribute('tabindex', '-1'); b = sheet; }
+      if (document.activeElement !== b) b.focus({ preventScroll: true });
     }
 
     // --- story beats (§5.2) ------------------------------------------------------------
@@ -187,7 +190,8 @@
         } }, info.last ? G.continue : G.next);
         const canSkip = !info.last && !blocked;
         const skip = canSkip ? h('button', { class: 'btn lv-skip', type: 'button', onclick: () => { r.sceneSkip(); this.after(); } }, G.skipStory) : h('span');
-        body.appendChild(h('div', { class: 'lv-actions' }, [skip, next]));
+        // With a question the sheet scrolls: Next stays in reach at the bottom, as on the other level sheets.
+        body.appendChild(h('div', { class: 'lv-actions' + (tall ? ' lv-sticky' : '') }, [skip, next]));
       });
     }
 
@@ -214,10 +218,16 @@
           onclick: () => {
             r.tap(qid, idx);
             this.after();
-            // Keep the tapped option and its feedback in view (the sheet may scroll).
+            // Keep the tapped option and its feedback in view, above a sticky action bar (the sheet may scroll).
             const cur = LY.currentSheet();
             const el = cur && cur.body.querySelector('.lv-option[data-option="' + idx + '"]');
-            if (el && el.scrollIntoView) el.scrollIntoView({ block: 'nearest' });
+            if (el && el.getBoundingClientRect) {
+              const body = cur.body, bar = body.querySelector('.lv-sticky');
+              const r = el.getBoundingClientRect(), top = body.getBoundingClientRect().top;
+              const limit = (bar ? bar.getBoundingClientRect().top : body.getBoundingClientRect().bottom) - 8;
+              if (r.bottom > limit) body.scrollTop += Math.min(r.bottom - limit, Math.max(0, r.top - top - 8));
+              else if (r.top < top) body.scrollTop -= top - r.top + 8;
+            }
           },
         }, kids));
       }
@@ -292,6 +302,8 @@
       this.dropSketch();
       this.sheet('predict:' + it.id, { title, className: 'lv-sheet lv-full' + (it.kind === 'sketch' ? ' lv-sketch-sheet' : '') }, (body) => {
         body.appendChild(h('p', { class: 'lv-prompt', text: r.text(it.prompt) }));
+        // A line of background before the item (1.7: how the lac switch works, above the truth table).
+        if (it.intro) body.appendChild(h('p', { class: 'lv-how', text: r.text(it.intro) }));
         const lockBtn = h('button', { class: 'btn primary lv-wide', type: 'button', 'data-primary': '', disabled: true }, G.predict.lockIn);
         const actions = [];
         if (it.kind === 'choice') {
@@ -533,6 +545,7 @@
         body.appendChild(h('p', { class: 'lv-outcome ' + (r.goal ? 'is-met' : 'is-not'), text: r.goal ? R.met : F.fill(R.notMet, { reason }) }));
         const parPending = r.hasPar() && !r.par.done;
         if (parPending) body.appendChild(h('p', { class: 'sheet-note lv-working', 'aria-live': 'polite', text: r.text((this.def.text.result || {}).working || '') }));
+        if (this.def.resultHint) for (const t of this.def.resultHint(r.variant, prev, r.monitorResult || {}, r.goal)) body.appendChild(h('p', { class: 'lv-hint', text: t }));
         if (r.goal && typeof prev.E === 'number') {
           const E = Math.max(0, Math.min(1, prev.E)), within = E >= 0.8;
           body.appendChild(h('div', { class: 'lv-eff' }, [
@@ -557,12 +570,15 @@
           for (const c of review) body.appendChild(c);
         }
         const actions = [];
+        // Continue waits for par (1.7), which is worked out in idle frames; the sheet is rebuilt once it is done.
         if (r.goal) {
-          actions.push(h('button', { class: 'btn primary lv-wide', type: 'button', 'data-primary': '', onclick: () => { r.next(); this.after(); } }, R.continue));
+          actions.push(h('button', { class: 'btn primary lv-wide', type: 'button', 'data-primary': '', 'data-action': 'result-continue', disabled: parPending,
+            onclick: () => { r.next(); this.after(); } }, R.continue));
         } else {
-          body.appendChild(h('p', { class: 'sheet-note', text: R.tryAgainNote }));
-          actions.push(h('button', { class: 'btn', type: 'button', onclick: () => { r.continueWithoutGoal(); this.after(); } }, R.withoutGoal));
-          actions.push(h('button', { class: 'btn primary', type: 'button', 'data-primary': '', onclick: () => { this.app.retryRun(); } }, R.tryAgain));
+          body.appendChild(h('p', { class: 'sheet-note', text: r.has('design') ? R.tryAgainDesign : R.tryAgainNote }));
+          actions.push(h('button', { class: 'btn', type: 'button', 'data-action': 'result-without-goal', disabled: parPending,
+            onclick: () => { r.continueWithoutGoal(); this.after(); } }, R.withoutGoal));
+          actions.push(h('button', { class: 'btn primary', type: 'button', 'data-primary': '', 'data-action': 'result-retry', onclick: () => { this.app.retryRun(); } }, R.tryAgain));
         }
         body.appendChild(h('div', { class: 'lv-sticky lv-actions' }, actions));
       });
@@ -698,7 +714,8 @@
       const r = this.runner, h = LY.h, app = this.app, K = G.complete, res = r.result;
       if (!this.completed) { this.completed = true; app.levelCompleted(r); }
       this.sheet('complete', { title: this.title(), className: 'lv-sheet lv-full lv-complete' }, (body) => {
-        const lines = scoreLines(res, this.def.text.task.expert.length);
+        // The Prologue has no task card, so no Expert objectives (and nothing to count).
+        const lines = scoreLines(res, ((this.def.text.task || {}).expert || []).length);
         body.appendChild(h('div', { class: 'lv-score' }, lines.map((t, i) => h('p', { class: i === lines.length - 1 && res.total !== null ? 'lv-total' : '', text: t }))));
         if (r.cards.length && !r.has('echo')) {
           const names = this.def.echo.cards.map((c) => textAt(this.def, c.title) + ' (' + (c.stamp === 'universal' ? G.echo.universal : G.echo.bacteria) + ')');
@@ -708,6 +725,7 @@
         const codeEl = h('div', { class: 'code-box num', 'aria-label': K.codeLabel + ' ' + r.code }, codeLines(r.code, perLine).map((l) => h('span', { class: 'code-line-part', text: l })));
         body.appendChild(h('p', { class: 'code-caption', text: K.codeLabel }));
         body.appendChild(codeEl);
+        body.appendChild(h('p', { class: 'lv-canvas', text: K.canvas }));
         const status = h('p', { class: 'lv-copy-status', 'aria-live': 'polite' });
         const row = [h('button', { class: 'btn primary', type: 'button', 'data-primary': '', 'data-action': 'copy-code', onclick: () => {
           PWA.copyText(r.code, codeEl).then((how) => {

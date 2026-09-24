@@ -228,7 +228,11 @@
         flags: '', attempt: '', runs: '', engine: r.engine || '', content: '', total: '', warnings: (r.warnings || []).join('; '),
       };
       if (!r.ok) return out;
-      if (d && d.scored && d.variantLabel) {
+      // The variant's values come from this build's level file: only a code of the same content version has them.
+      if (d && r.content !== d.version) {
+        out.warnings = [out.warnings, 'content v' + r.content + ': older than this build (v' + d.version + '); variant values not shown']
+          .filter(Boolean).join('; ');
+      } else if (d && d.scored && d.variantLabel) {
         try { out.variantValues = d.variantLabel(d.variant(r.variantSeed)); } catch (e) { out.variantValues = ''; }
       }
       const pct = (x) => (x === null ? 'NA' : String(x));

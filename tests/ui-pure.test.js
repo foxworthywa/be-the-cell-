@@ -236,3 +236,15 @@ test('U-8: an error inside a frame stops the loop and goes to onError (no silent
   assert.equal(loop.running, false);
   assert.equal(got && got.message, 'boom');
 });
+
+test('M2 review: the one-shot URL parameters are taken out of the address once used (?test and ?seed stay)', () => {
+  const PR = req('btc-prefs');
+  const drop = ['level', 'v', 'lab', 'reset'];
+  assert.equal(PR.strippedSearch('?test=1&seed=1&level=1.4&v=ABCDEF', drop), '?test=1&seed=1');
+  assert.equal(PR.strippedSearch('?level=1.2', drop), '');
+  assert.equal(PR.strippedSearch('?lab=1&reset=1&theme=dark', drop), '?theme=dark');
+  assert.equal(PR.strippedSearch('', drop), '');
+  assert.equal(PR.strippedSearch('?source=pwa', drop), '?source=pwa');
+  const p = PR.parseParams('?test=1&seed=1&level=1.4&v=ABCDEF');
+  assert.deepEqual([p.level, p.v, p.seed, p.test], ['1.4', 'ABCDEF', 1, true]);
+});

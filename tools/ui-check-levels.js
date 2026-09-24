@@ -12,6 +12,14 @@ const path = require('path');
 const paint = (page) => page.evaluate(() => new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r))));
 const L = (page, fn, ...a) => page.evaluate(([f, args]) => window.__btc.app.test.level[f](...args), [fn, a]);
 const R = (page, expr) => page.evaluate(new Function('return (' + expr + ');'));
+/** From the echo phase: the outro beat (it comes after the debrief, LEVELS §4.1), the screens, then complete. */
+async function echoToComplete(page, shot) {
+  for (let i = 0; i < 30 && (await L(page, 'phase')) !== 'complete'; i++) {
+    const st = await R(page, "{ beat: !!window.__btc.app.test.level.runner().beat, echo: window.__btc.app.test.level.runner().echoScreen() }");
+    if (shot && !st.beat && st.echo && st.echo.index === 0) await shot('echo');
+    await L(page, 'next');
+  }
+}
 
 async function openLevel(browser, port, vp, query, opts) {
   const o = opts || {};
@@ -155,7 +163,7 @@ async function run(browser, port, OUT, check) {
     await paint(page);
     // The run: the HUD with the mRNA counter; the reference play through the Genes tab.
     const hud = await page.evaluate(() => ({ h: document.getElementById('hud').getBoundingClientRect().height, stage: document.getElementById('stage').getBoundingClientRect().height, counter: document.querySelector('.hud-counter').textContent }));
-    check('LV-4 ' + s.tag + ' run: 44 px HUD with the mRNA counter; canvas ≥ 220 px', hud.h === 44 && /\d+ \/ \d+/.test(hud.counter) && (!touch || hud.stage >= 220), JSON.stringify(hud));
+    check('LV-4 ' + s.tag + ' run: 44 px HUD with the mRNA counter (a unit on phones); canvas ≥ 220 px', hud.h === 44 && (touch ? /^\d+\/\d+ mRNA$/ : /mRNAs \d+ \/ \d+/).test(hud.counter) && (!touch || hud.stage >= 220), JSON.stringify(hud));
     if (touch) await page.locator('[data-tab="genes"]:visible').first().click();
     await page.locator('[data-gene="lacY"] .seg[data-key="4"]').click();
     await L(page, 'runTicks', 1);
@@ -170,7 +178,7 @@ async function run(browser, port, OUT, check) {
     const D = await R(page, 'window.__btc.app.test.level.runner().variant.D');
     await L(page, 'runTicks', D * 60 + 30 - (await R(page, 'window.__btc.cell.tick')));
     const settle = await page.evaluate(() => ({ goal: document.querySelector('.hud-goal-text').textContent, locked: Array.from(document.querySelectorAll('[data-gene="lacY"] .seg, .fb-row2 .seg')).every((b) => b.disabled), key: window.__btc.app.test.narratorKey() }));
-    check('LV-4 ' + s.tag + ' settle after D: the dial is locked and the HUD says the deadline passed', /Deadline passed/.test(settle.goal) && settle.locked, JSON.stringify(settle));
+    check('LV-4 ' + s.tag + ' settle after D: the dial is locked and the HUD says the target was reached', /^Reached · watching/.test(settle.goal) && settle.locked, JSON.stringify(settle));
     await shot('settle');
     await L(page, 'runToEnd');
     await L(page, 'next');
@@ -283,8 +291,7 @@ async function run(browser, port, OUT, check) {
     await L(page, 'answer', 'l14.d2', 2);
     await shot('debrief-wrong');
     await L(page, 'answer', 'l14.d2', 'ok'); await L(page, 'next');
-    await shot('echo');
-    await L(page, 'next'); await L(page, 'next');
+    await echoToComplete(page, shot);
     await shot('complete');
     const code = await L(page, 'code');
     const dec = await page.evaluate((c) => window.__btc.BTC.code.decode(c), code);
@@ -314,16 +321,42 @@ async function run(browser, port, OUT, check) {
       const text = document.getElementById('pane-genes').textContent;
       const names = cand.map((id) => window.__btc.BTC.content.genes[id].name).concat(['LacY', 'LacZ', 'PtsG']);
       return { letters: els.map((e) => e.getAttribute('data-letter')).join(''), unknown: els.filter((e) => /Unknown/.test(e.textContent)).length,
-        leaks: names.filter((n) => text.includes(n)) };
+        leaks: names.filter((n) => text.includes(n)),
+        // A hidden gene's usual level (only a transporter sits at 1) or its "stands for ~10 genes" badge would name it.
+        defaults: document.querySelectorAll('#pane-genes .seg.is-default').length, badges: document.querySelectorAll('#pane-genes .badge').length };
     }, CAND);
-    check('LV-3 ' + s.tag + ' six candidates, lettered A–F, jobs Unknown, no names shown', cards.letters === 'ABCDEF' && cards.unknown === 6 && cards.leaks.length === 0, JSON.stringify(cards));
+    check('LV-3 ' + s.tag + ' six candidates, lettered A–F, jobs Unknown, no names shown, no default mark or "stands for" badge',
+      cards.letters === 'ABCDEF' && cards.unknown === 6 && cards.leaks.length === 0 && cards.defaults === 0 && cards.badges === 0, JSON.stringify(cards));
     await shot('genes-hidden');
+    // The slow side route: drawn as its own glyph in the membrane; with no transporter made yet, every glucose marker goes through it.
+    if (touch) await page.locator('[data-tab="cell"]:visible').first().click();
+    await page.locator('.play').click();
+    await page.waitForTimeout(1200);
+    const side = await page.evaluate(() => {
+      const cv = window.__btc.app.views.cellView;
+      let viaPts = 0, viaSide = 0;
+      for (let j = 0; j < 128; j++) { if (cv.mAge[j] >= 0) viaPts++; if (cv.mAge[5 * 128 + j] >= 0) viaSide++; }
+      const onSide = [];
+      for (let j = 0; j < 128; j++) {
+        const i = 5 * 128 + j;
+        if (cv.mAge[i] < 0) continue;
+        // Each marker starts 16 px outside its glyph and ends inside it.
+        const d = Math.min(...[0, 1].map((k) => Math.hypot(cv.mX0[i] - cv.sideX[k], cv.mY0[i] - cv.sideY[k])));
+        onSide.push(d < 20);
+      }
+      return { sideN: cv.sideN, viaPts, viaSide, allAtGlyph: onSide.every(Boolean), ptsG: window.__btc.cell.observe().geneById.ptsG.protein, key: window.__btc.app.test.shownKey() };
+    });
+    await page.locator('.play').click();
+    await shot('run-side-route');
+    check('LV-3 ' + s.tag + ' the side route is drawn in the membrane and glucose comes in only there; the narrator says so',
+      side.sideN === 2 && side.viaPts === 0 && side.viaSide > 0 && side.allAtGlyph && side.ptsG === 0 && side.key === 'l11.trickle', JSON.stringify(side));
+    if (touch) await page.locator('[data-tab="genes"]:visible').first().click();
     await page.locator('[data-gene="ptsG"] .seg[data-key="2"]').click();
     if (touch) await page.locator('[data-tab="cell"]:visible').first().click();
     await L(page, 'runTicks', 240);
     const hud = await page.evaluate(() => ({ h: Math.round(document.getElementById('hud').getBoundingClientRect().height), stage: Math.round(document.querySelector('#stage').getBoundingClientRect().height),
       counter: document.querySelector('.hud-counter').textContent }));
-    check('LV-3 ' + s.tag + ' run: 44 px HUD with the experiment counter; canvas ≥ 220 px', hud.h === 44 && /1 \/ 3|Experiments 1/.test(hud.counter) && (!touch || hud.stage >= 220), JSON.stringify(hud));
+    check('LV-3 ' + s.tag + ' run: 44 px HUD with the experiment counter; canvas ≥ 220 px', hud.h === 44 && /^1\/3 tests$|Experiments 1/.test(hud.counter) && (!touch || hud.stage >= 220), JSON.stringify(hud));
     await shot('run');
     for (let i = 0; i < 200 && !(await R(page, '!!window.__btc.app.test.level.runner().run.monitor.save().revealed.ptsG')); i++) await L(page, 'runTicks', 10);
     // The narrator's hold is real time: let it pass, then one more tick.
@@ -357,8 +390,7 @@ async function run(browser, port, OUT, check) {
     await shot('debrief-wrong');
     await L(page, 'answer', 'l11.d1', 'ok'); await L(page, 'next');
     await L(page, 'answer', 'l11.d2', 'ok'); await L(page, 'next');
-    await shot('echo');
-    await L(page, 'next'); await L(page, 'next');
+    await echoToComplete(page, shot);
     await shot('complete');
     const lines = await page.evaluate(() => document.querySelector('.sheet-body').textContent);
     const code = await L(page, 'code');
@@ -449,8 +481,7 @@ async function run(browser, port, OUT, check) {
     await shot('debrief-wrong');
     await L(page, 'answer', 'l17.d1', 'ok'); await L(page, 'next');
     await L(page, 'answer', 'l17.d2', 'ok'); await L(page, 'next');
-    await shot('echo');
-    await L(page, 'next'); await L(page, 'next');
+    await echoToComplete(page, shot);
     await shot('complete');
     const code = await L(page, 'code');
     const dec = await page.evaluate((c) => window.__btc.BTC.code.decode(c), code);
@@ -527,6 +558,219 @@ async function run(browser, port, OUT, check) {
     await page.screenshot({ path: path.join(OUT, '1.4-360x740-resumed.png') });
     screens.push('1.4-360x740-resumed.png');
     check('LV-8 no console errors', s.errors.length === 0, s.errors.join(' | '));
+    await s.context.close();
+  }
+
+  // --- LV-2: the Prologue, played by taps from home to its completion screen (M2 review blocker) ----------------
+  {
+    const s = await openLevel(browser, port, [360, 740], '?test=1&seed=1');
+    const page = s.page, probs = [];
+    const shot = shotter(s, 'P', probs);
+    await page.locator('.level-row[data-level="P"]').tap();
+    await paint(page);
+    let tapped = 0, qShot = false;
+    for (let i = 0; i < 60; i++) {
+      if ((await L(page, 'phase')) === 'complete') break;
+      // The question: the right option, by tapping it, as a student would; Next must stay in reach (sticky).
+      const opt = await page.evaluate(() => { const i = window.__btc.app.level.runner.sceneInfo();
+        return i && i.question && !i.solved ? i.question.options.findIndex((o) => o.ok) : -1; });
+      if (opt >= 0) {
+        await page.locator('.lv-option[data-option="' + opt + '"]').tap();
+        await paint(page);
+        if (!qShot) {
+          qShot = true;
+          const next = await page.evaluate(() => { const b = document.querySelector('.lv-next'); const r = b.getBoundingClientRect(); return { bottom: Math.round(r.bottom), h: innerHeight, enabled: !b.disabled }; });
+          check('LV-2 360x740 the Prologue question: after the right answer, Next is enabled and on screen', next.enabled && next.bottom <= next.h, JSON.stringify(next));
+          await shot('question-answered');
+        }
+        continue;
+      }
+      await page.locator('.lv-next').tap();
+      tapped++;
+      await paint(page);
+    }
+    await page.waitForTimeout(200);
+    const st = await page.evaluate(() => ({
+      phase: window.__btc.app.level && window.__btc.app.level.runner.phase, code: window.__btc.app.level && window.__btc.app.level.runner.code,
+      codeBox: !!document.querySelector('.code-box'), copy: !!document.querySelector('[data-action="copy-code"]'),
+      next: !!document.querySelector('[data-action="next-level"]'), canvas: (document.querySelector('.lv-canvas') || {}).textContent || '',
+      stored: ((JSON.parse(localStorage.getItem('btc.progress.v1')).levels.P || {}).results || []).length,
+    }));
+    await shot('complete');
+    check('LV-2 360x740 the Prologue plays by taps to its completion screen: code, Copy, the Canvas line, Next level; the result is stored',
+      st.phase === 'complete' && /^BTC1-P0-/.test(st.code || '') && st.codeBox && st.copy && st.next && /Canvas quiz for this level/.test(st.canvas) && st.stored === 1,
+      JSON.stringify(Object.assign({ taps: tapped }, st)));
+    finish(s, 'LV-2', probs);
+    await s.context.close();
+  }
+
+  // --- LV-10: a run that ends in real time (the loop, not runTicks): the HUD says so at once ----------------------
+  {
+    const s = await openLevel(browser, port, [360, 740], '?test=1&seed=1&level=1.4');
+    const page = s.page, probs = [];
+    const shot = shotter(s, '1.4', probs);
+    while ((await L(page, 'phase')) === 'intro') await L(page, 'next');
+    await L(page, 'next');
+    await L(page, 'answer', 'p1', 'ok'); await L(page, 'answer', 'ss', 300);
+    const v = await R(page, 'window.__btc.app.test.level.runner().variant');
+    await page.locator('[data-tab="genes"]:visible').first().click();
+    await page.locator('[data-gene="lacY"] .seg[data-key="' + v.targetLevel + '"]').click();
+    await page.locator('[data-tab="cell"]:visible').first().click();
+    await page.evaluate(() => window.__btc.app.test.setSpeed(600));
+    await page.locator('.play').click();
+    await page.waitForFunction(() => { const r = window.__btc.app.test.level.runner(); return r.run && r.run.endReason; }, null, { timeout: 30000 });
+    // No test hook steps the cell or refreshes the HUD from here on: the frame that ended the run must have done it.
+    await page.waitForTimeout(150);
+    const end = await page.evaluate(() => ({ reason: window.__btc.app.test.level.runner().run.endReason, goal: window.__btc.app.test.level.runner().goal,
+      hud: document.querySelector('.hud-goal-text').textContent, cont: document.querySelector('.hud-goal').classList.contains('is-continue'),
+      running: window.__btc.app.loop.running, play: document.querySelector('.play').textContent }));
+    await shot('run-end-realtime');
+    check('LV-10 360x740 1.4 ends in real time: the HUD reads "Goal met · Continue" at once, the loop has stopped',
+      end.reason === 'goal' && end.goal && /Goal met · Continue/.test(end.hud) && end.cont && !end.running, JSON.stringify(end));
+    await page.locator('.hud-goal').click();
+    await paint(page);
+    await L(page, 'next');                       // result → predict2
+    await L(page, 'answer', 'p2', 'ok');
+    await page.locator('[data-action="epilogue-start"]').click();
+    await page.evaluate(() => window.__btc.app.test.setSpeed(600));
+    await page.waitForFunction(() => window.__btc.app.test.level.runner().epilogue.done, null, { timeout: 30000 });
+    await page.waitForTimeout(150);
+    const ep = await page.evaluate(() => ({ hud: document.querySelector('.hud-goal-text').textContent, running: window.__btc.app.loop.running }));
+    check('LV-10 360x740 the 1.4 epilogue ends in real time: the HUD reads "Continue" at once', /^Continue$/.test(ep.hud) && !ep.running, JSON.stringify(ep));
+    finish(s, 'LV-10', probs);
+    await s.context.close();
+    // 1.7 on the loop (1 s = 1 h, a design that fails): the result opens by itself and "To the end" is gone.
+    const t = await openLevel(browser, port, [360, 740], '?test=1&seed=1&level=1.7');
+    const p7 = t.page;
+    while ((await L(p7, 'phase')) === 'intro') await L(p7, 'next');
+    await L(p7, 'next');
+    await L(p7, 'answer', 'tt', { wt: { glc: 0, lac: 1 }, dlacI: { glc: 1, lac: 1 }, Oc: { glc: 1, lac: 1 }, Is: { glc: 0, lac: 0 } });
+    await p7.evaluate(() => { const r = window.__btc.app.test.level.runner(); r.skip('crp'); if (!r.currentItem()) r.next(); window.__btc.app.views.levelUI.after(); });
+    await L(p7, 'design', { lac: { promoter: 1, operator: true, crpSite: true }, lacI: { allele: 'Is', promoter: 1 } });
+    await L(p7, 'runDesign');
+    while (await R(p7, '!!window.__btc.app.test.level.runner().beat')) await L(p7, 'next');
+    await p7.evaluate(() => window.__btc.app.test.setSpeed(3600));
+    await p7.locator('.play').click();
+    await p7.waitForFunction(() => { const r = window.__btc.app.test.level.runner(); return r.phase === 'result'; }, null, { timeout: 60000 });
+    await p7.waitForTimeout(150);
+    const r7 = await p7.evaluate(() => ({ action: !!document.querySelector('.hud-action:not([hidden])'), sheet: !!document.querySelector('[data-action="result-retry"]'),
+      note: Array.from(document.querySelectorAll('.sheet-note')).map((e) => e.textContent).join(' | ') }));
+    check('LV-10 360x740 1.7 ends in real time with the goal missed: the result opens, "To the end" is gone, Try again says to change the DNA',
+      !r7.action && r7.sheet && /Change the DNA/.test(r7.note), JSON.stringify(r7));
+    await p7.locator('[data-action="result-retry"]').click();
+    await paint(p7);
+    const back = await p7.evaluate(() => ({ phase: window.__btc.app.test.level.phase(), designer: !!document.querySelector('[data-part="lacI.allele"]') }));
+    check('LV-10 360x740 1.7 Try again opens the DNA editor', back.phase === 'design' && back.designer, JSON.stringify(back));
+    check('LV-10 no console errors', s.errors.length === 0 && t.errors.length === 0, s.errors.concat(t.errors).join(' | '));
+    await t.context.close();
+  }
+
+  // --- LV-11: the free-play lab has a way home ------------------------------------------------------------------
+  for (const vp of [[360, 740], [1280, 800]]) {
+    const touch = vp[0] < 1000;
+    const s = await openLevel(browser, port, vp, '?test=1&seed=1', { touch });
+    const probs = [];
+    const shot = shotter(s, 'lab', probs);
+    await s.page.locator('[data-action="lab"]').click();
+    await paint(s.page);
+    const btn = await s.page.evaluate(() => { const b = document.querySelector('#status .levels-btn'); const r = b.getBoundingClientRect();
+      return { hidden: b.hidden, w: Math.round(r.width), h: Math.round(r.height), screen: window.__btc.app.screen }; });
+    await shot('levels-button');
+    await s.page.locator('#status .levels-btn').click();
+    await paint(s.page);
+    const home = await R(s.page, "window.__btc.app.screen + '/' + document.body.getAttribute('data-surface')");
+    // A reload in the lab comes back to the lab, with the button (a student's page: no ?test, which always opens home).
+    await s.page.locator('[data-action="lab"]').click();
+    await s.page.goto('http://localhost:' + port + '/');
+    await s.page.waitForFunction(() => window.__btc && window.__btc.app && window.__btc.app.screen);
+    const again = await s.page.evaluate(() => ({ screen: window.__btc.app.screen, hidden: document.querySelector('#status .levels-btn').hidden }));
+    check('LV-11 ' + s.tag + ' the lab shows the Levels button, which goes home; after a reload in the lab it is still there',
+      btn.screen === 'lab' && !btn.hidden && btn.w >= 44 && btn.h >= 44 && home === 'home/home' && again.screen === 'lab' && !again.hidden, JSON.stringify({ btn, home, again }));
+    finish(s, 'LV-11', probs);
+    await s.context.close();
+  }
+
+  // --- LV-12: two tabs share the progress: a code from one survives the other --------------------------------------
+  {
+    const context = await browser.newContext({ viewport: { width: 360, height: 740 }, isMobile: true, hasTouch: true });
+    const open = async () => { const pg = await context.newPage(); await pg.goto('http://localhost:' + port + '/?test=1&seed=1'); await pg.waitForFunction(() => window.__btc && window.__btc.app && window.__btc.app.test); return pg; };
+    const A = await open(), B = await open();
+    await A.evaluate(() => window.__btc.app.enterLevel('1.4'));
+    await quickComplete(A);
+    const a = await A.evaluate(() => window.__btc.app.test.level.code());
+    await B.waitForTimeout(200);
+    const homeB = await B.evaluate(() => (document.querySelector('.level-row[data-level="1.4"] .lr-chip') || {}).textContent || '');
+    await B.evaluate(() => window.__btc.app.enterLevel('1.1'));
+    const stored = await B.evaluate(() => { const p = JSON.parse(localStorage.getItem('btc.progress.v1')); return { r: (p.levels['1.4'] || {}).results || [], open: p.lastLevel }; });
+    const C = await open();
+    const next = await C.evaluate(() => window.__btc.app.progress.attemptFor('1.4').attempt);
+    check('LV-12 two tabs: tab A\'s 1.4 code survives tab B opening 1.1; B\'s home showed it done; the next 1.4 attempt is 2',
+      stored.r.length === 1 && stored.r[0].code === a && /done/.test(homeB) && stored.open === '1.1' && next === 2, JSON.stringify({ a, homeB, n: stored.r.length, next }));
+    await context.close();
+  }
+
+  // --- LV-13: an autosave from another content version is not resumed ---------------------------------------------
+  {
+    const s = await openLevel(browser, port, [360, 740], '?test=1&seed=1&level=1.4');
+    const page = s.page;
+    while ((await L(page, 'phase')) === 'intro') await L(page, 'next');
+    await L(page, 'next');
+    await L(page, 'answer', 'p1', 'ok'); await L(page, 'answer', 'ss', 300);
+    await L(page, 'runTicks', 300);
+    await page.evaluate(() => window.__btc.app.autosaveNow());
+    await page.close();                          // the page saves on its way out, so the older save is planted before the next one boots
+    const page2 = await s.context.newPage();
+    page2.on('pageerror', (e) => s.errors.push(e.message));
+    await page2.addInitScript(() => {
+      if (sessionStorage.getItem('planted')) return;
+      sessionStorage.setItem('planted', '1');
+      const k = 'btc.level.autosave.v1', sv = JSON.parse(localStorage.getItem(k));
+      sv.content = sv.content - 1;                // as written by a build with the level's previous content
+      localStorage.setItem(k, JSON.stringify(sv));
+    });
+    await page2.goto('http://localhost:' + port + '/?test=1&seed=1');
+    await page2.waitForFunction(() => window.__btc && window.__btc.app && window.__btc.app.test);
+    await paint(page2);
+    const st = await page2.evaluate(() => ({ phase: window.__btc.app.test.level.phase(), tick: window.__btc.cell.tick, toast: (document.getElementById('toast') || {}).textContent || '',
+      saved: JSON.parse(localStorage.getItem('btc.level.autosave.v1') || 'null'), version: window.__btc.BTC.levels.byId['1.4'].version }));
+    check('LV-13 an autosave of another content version: the level starts again from its story, with "The app was updated"',
+      st.phase === 'intro' && st.tick === 0 && /updated/.test(st.toast) && st.saved && st.saved.content === st.version, JSON.stringify({ phase: st.phase, tick: st.tick, toast: st.toast }));
+    check('LV-13 no console errors', s.errors.length === 0, s.errors.join(' | '));
+    await s.context.close();
+  }
+
+  // --- LV-14: ?level and ?v are used once; a reload resumes the autosave instead of starting over ---------------------
+  {
+    const s = await openLevel(browser, port, [360, 740], '?test=1&seed=1&level=1.4&v=ABCDEF');
+    const page = s.page;
+    const url0 = await page.evaluate(() => location.search);
+    while ((await L(page, 'phase')) === 'intro') await L(page, 'next');
+    await L(page, 'next');
+    await L(page, 'answer', 'p1', 'ok'); await L(page, 'answer', 'ss', 300);
+    await L(page, 'runTicks', 300);
+    const before = await R(page, "{ tick: window.__btc.cell.tick, attempt: window.__btc.app.test.level.runner().attempt, override: window.__btc.app.test.level.runner().override }");
+    await page.evaluate(() => window.__btc.app.autosaveNow());
+    await page.reload();
+    await page.waitForFunction(() => window.__btc && window.__btc.app && window.__btc.app.test);
+    await paint(page);
+    const after = await R(page, "{ tick: window.__btc.cell.tick, phase: window.__btc.app.test.level.phase(), attempt: window.__btc.app.test.level.runner().attempt, override: window.__btc.app.test.level.runner().override, search: location.search }");
+    check('LV-14 ?level=1.4&v=… is taken out of the address; a reload resumes the override run where it was',
+      url0 === '?test=1&seed=1' && after.search === '?test=1&seed=1' && after.phase === 'run' && after.tick === before.tick && after.attempt === 0 && after.override === true,
+      JSON.stringify({ url0, before, after }));
+    // A link to 1.2, then the student plays 1.4, then the page reloads: 1.4 comes back, not a fresh 1.2.
+    await page.goto('http://localhost:' + port + '/?test=1&seed=2&level=1.2');
+    await page.waitForFunction(() => window.__btc && window.__btc.app && window.__btc.app.test);
+    await page.evaluate(() => { window.__btc.app.enterHome(); window.__btc.app.enterLevel('1.1'); });
+    while ((await L(page, 'phase')) === 'intro') await L(page, 'next');
+    await L(page, 'next');
+    await L(page, 'answer', 'p1', 'ok'); await L(page, 'answer', 'p2', 'ok');
+    await L(page, 'runTicks', 120);
+    await page.evaluate(() => window.__btc.app.autosaveNow());
+    await page.reload();
+    await page.waitForFunction(() => window.__btc && window.__btc.app && window.__btc.app.test);
+    const again = await R(page, "{ level: window.__btc.app.test.level.runner().def.id, phase: window.__btc.app.test.level.phase(), tick: window.__btc.cell.tick }");
+    check('LV-14 after ?level=1.2 the student plays 1.1; a reload resumes 1.1 at its tick', again.level === '1.1' && again.phase === 'run' && again.tick === 120, JSON.stringify(again));
+    check('LV-14 no console errors', s.errors.length === 0, s.errors.join(' | '));
     await s.context.close();
   }
 

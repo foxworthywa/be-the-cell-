@@ -36,10 +36,10 @@
   const get = (d, path) => { const [a, b] = path.split('.'); return d[a][b]; };
   const set = (d, path, v) => { const [a, b] = path.split('.'); const out = JSON.parse(JSON.stringify(d)); out[a][b] = v; return out; };
 
-  /** The option text of a part's current value ("normal", "×4", …). */
-  function optionText(text, path, v) {
+  /** The option text of a part's current value ("normal", "×4", …); short: the part button's form, if the option has one. */
+  function optionText(text, path, v, short) {
     const o = text.parts[path].options.find((x) => x.v === v);
-    return o ? o.t : String(v);
+    return o ? (short && o.short) || o.t : String(v);
   }
 
   /** "This design: lac promoter ×4 · operator absent · repressor gene deleted · CRP site absent." */
@@ -204,13 +204,14 @@
         class: 'btn dz-part' + (on ? ' is-open' : '') + (absent ? ' is-absent' : ''), type: 'button', 'data-part': path,
         'aria-expanded': on ? 'true' : 'false', 'aria-label': P.name + ': ' + optionText(T, path, v), disabled: disabled || null,
         onclick: () => { this.open = on ? null : path; this.confirming = false; this.render(); this.focus('[data-part="' + path + '"]'); },
-      }, [icon, h('span', { class: 'dz-part-text' }, [h('span', { class: 'dz-part-name', text: P.label }), h('span', { class: 'dz-part-value', text: optionText(T, path, v) })])]);
+      }, [icon, h('span', { class: 'dz-part-text' }, [h('span', { class: 'dz-part-name', text: P.label }), h('span', { class: 'dz-part-value', text: optionText(T, path, v, true) })])]);
     }
 
     options(path) {
       const h = LY.h, T = this.opts.text, P = T.parts[path], cur = get(this.design, path);
       const box = h('div', { class: 'dz-options', role: 'radiogroup', 'aria-label': P.name });
       box.appendChild(h('p', { class: 'dz-desc' }, [h('strong', { text: P.name + '. ' }), P.desc]));
+      if (P.note) box.appendChild(h('p', { class: 'dz-desc dz-note', text: P.note }));
       for (const o of P.options) {
         const on = o.v === cur;
         box.appendChild(h('button', {

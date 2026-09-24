@@ -24,7 +24,7 @@
 
   const TEXT = {
     title: 'You, right now',
-    challenge: 'From you to one cell, then to a bacterium.',
+    challenge: 'From you to one cell, then a bacterium.',
     notToScale: 'Drawing, not to scale',
     scale: { m1: '1 m', cm10: '10 cm', um100: '100 µm', um10: '10 µm', nm30: '30 nm' },
     labels: {
@@ -55,7 +55,7 @@
         { who: 'narrator', text: 'Your cells do this for thousands of genes at once. To see how, start with the simplest cell that does it all.' },
       ],
       s6: [
-        { who: 'narrator', text: 'A bacterium. Its ribosomes do the same job as yours, and it reads the same genetic code.' },
+        { who: 'narrator', text: 'A bacterium. Its ribosomes do the same job as yours, and it uses the same genetic code.' },
         { who: 'narrator', text: 'It has no nucleus, so its ribosomes start on mRNA that is still being made.' },
       ],
       s7: [
@@ -68,7 +68,7 @@
       prompt: 'Where did the mRNA this ribosome is reading come from?',
       options: [
         { t: 'It was copied from the insulin gene.', ok: true,
-          fb: 'Right. The gene stays in the nucleus; its copies go out to the ribosomes.' },
+          fb: 'The gene stays in the nucleus; its copies go out to the ribosomes.' },
         { t: 'It came from the food you ate.', mc: 'OTHER',
           fb: 'Food supplies building blocks. The instructions in this mRNA were copied from your own insulin gene.' },
         { t: 'It is the insulin gene itself, moved out of the nucleus.', mc: 'DNA_DIRECT',

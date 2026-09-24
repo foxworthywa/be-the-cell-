@@ -1,7 +1,7 @@
 {
   "name": "Be the Cell",
   "short_name": "Be the Cell",
-  "description": "A bacterium you run by switching its genes on and off.",
+  "description": "A game about genes and proteins, in which you are in charge of a cell. In principle.",
   "id": "./",
   "start_url": "./?source=pwa",
   "scope": "./",

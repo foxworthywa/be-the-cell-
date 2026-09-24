@@ -33,10 +33,12 @@
   // [half-life (min), target setting]: every combination except half-life 5 min at ×2 (content version 2).
   const VARIANTS = Object.freeze([[3, 1], [3, 2], [4, 1], [4, 2], [5, 1]]);
   const LN2 = 0.6931471805599453;
+  // Content version (LEVELS §3.2: bumped on any change to variants, goals, scoring or questions): 2: half-life 5 min at ×2 removed; 3: the M2 review reworded the Expert question, p2 and the debrief feedback.
+  const CONTENT = 3;
 
   const TEXT = {
     title: 'Nothing lasts',
-    challenge: 'Hold a protein level steady while it is broken down.',
+    challenge: 'Hold a protein steady as it breaks down.',
     task: {
       goal: 'Hold LacY between {lo} and {hi} for 15 minutes.',
       core: ['Hold it for 15 minutes in a row, within 45 minutes.', 'Change the setting at most twice.'],
@@ -44,13 +46,12 @@
     },
     story: {
       intro: [
-        { who: 'narrator', text: 'The permeases from last time are gone. Nobody took them; proteases cut them up.' },
+        { who: 'narrator', text: 'The permeases from last time are gone. Nobody took them; the cell kept dividing, and they were shared out.' },
         { who: 'commander', text: 'Then build a stockpile, and keep it.' },
         { who: 'narrator', text: 'These LacY carry a tag that proteases fit. Half are cut up every {halfLife} minutes, whatever the orders.' },
-        { who: 'narrator', text: 'Hold LacY between {lo} and {hi} for fifteen minutes.' },
       ],
       outro: [
-        { who: 'narrator', text: 'A steady level is not a still one. LacY was made and cut up at the same rate the whole time.' },
+        { who: 'narrator', text: 'A steady level is not a still one. While the count held, LacY was made and cut up at the same rate.' },
         { who: 'protease', denies: true, text: "I don't cut anything on purpose. Tagged proteins fit me, and then they are in pieces." },
       ],
       // The outro when the count never held in the band (the first line would not be true).
@@ -68,7 +69,7 @@
       prompt: 'You switch LacY on at one setting and leave it. What will the count do?',
       options: [
         { t: 'Rise, then level off where making and breaking down balance.', ok: true,
-          fb: 'Right. The more LacY there is, the faster proteases cut it up, until removal matches making.' },
+          fb: 'The more LacY there is, the faster proteases cut it up, until removal matches making.' },
         { t: 'Keep rising for as long as the gene is on.', mc: 'MOLECULES_LAST',
           fb: 'It would if nothing broke LacY down. Here more is cut up as the count grows, so it levels off.' },
         { t: 'Jump straight to a fixed level.', mc: 'INSTANT',
@@ -78,14 +79,14 @@
       ],
     },
     ss: {
-      prompt: 'At ×1 this gene makes about {X} LacY a minute, and each lasts about {Y} minutes. About how many LacY are there once the count levels off?',
+      prompt: 'At ×1 about {X} LacY are made a minute, and each lasts about {Y} minutes on average. How many LacY are there once the count levels off?',
       unit: 'LacY',
     },
     p2: {
       prompt: 'You are about to switch LacY off. What will its count do?',
       options: [
-        { t: 'Hold for a minute or two while the last mRNA is read, then fall steadily as proteases cut it up.', ok: true,
-          fb: 'Right. Proteases keep cutting it up, and once the last mRNA is gone nothing replaces what they cut.' },
+        { t: 'Hold for a minute or two while the last mRNA is read, then fall, fast at first and then more slowly, as proteases cut it up.', ok: true,
+          fb: 'Proteases keep cutting it up, and once the last mRNA is gone nothing replaces what they cut.' },
         { t: 'Stay where it is now.', mc: 'MOLECULES_LAST',
           fb: 'The count held only while new LacY replaced the old. Without new LacY, it falls.' },
         { t: 'Drop to zero at once.', mc: 'INSTANT',
@@ -102,9 +103,9 @@
       prompt: 'While the gene stayed on, the LacY count held steady. What was happening?',
       options: [
         { t: 'LacY was being made and cut up at the same rate.', ok: true,
-          fb: 'Right. A steady level is a balance: new LacY replaced the old as fast as proteases cut it up.' },
+          fb: 'A steady level is a balance: new LacY replaced the old as fast as proteases cut it up.' },
         { t: 'The cell stopped making LacY once there was enough.', mc: 'CELL_DECIDES',
-          fb: 'The setting never changed, so LacY was made at the same rate all along. Breakdown matched it.' },
+          fb: 'Nothing in the cell counts LacY. At a fixed setting it was made at a steady rate, and breakdown rose until it matched.' },
         { t: 'Nothing: the LacY already made simply stayed.', mc: 'MOLECULES_LAST',
           fb: 'Each LacY lasted only minutes. The count held because new ones replaced them.' },
         { t: 'The mRNA ran out.', mc: 'OTHER',
@@ -115,7 +116,7 @@
       prompt: 'Proteases become twice as fast, and the setting stays the same. Where does LacY level off?',
       options: [
         { t: 'About half as high.', ok: true,
-          fb: 'Right. The same making rate now balances at half the count, because each LacY lasts half as long.' },
+          fb: 'The same making rate now balances at half the count, because each LacY lasts half as long.' },
         { t: 'At the same level, reached more slowly.', mc: 'OTHER',
           fb: 'Faster breakdown lowers the level itself: it settles where removal equals making.' },
         { t: 'It keeps its level; breakdown only matters once the gene is off.', mc: 'MOLECULES_LAST',
@@ -124,14 +125,15 @@
           fb: 'Faster breakdown removes LacY sooner, so less of it builds up.' },
       ],
     },
-    echo1: 'Your proteins are made and broken down all the time. Some last minutes, others months.',
-    echo2: 'Red blood cells lose their nucleus as they mature, so they cannot make new proteins. They wear out in about 120 days and are replaced.',
+    echo1: 'Your proteins are made and broken down all the time. Some last minutes, others for years.',
+    echo2: 'Red blood cells lose their nucleus, read their leftover mRNA for a day or two, then make no new protein. They last about 120 days.',
     cards: { turnover: 'Protein turnover' },
     hud: {
       goal: 'LacY {count} · band {lo}–{hi} · held {h} of 15 min', goalShort: 'LacY {count} · {h}/15 min',
       ready: 'LacY {count} · ready to switch off', off: 'LacY {count} · gene off', offShort: 'LacY {count}',
       timer: '{time} left', epilogueTimer: '{time} of 12 min',
-      counter: 'changes {c} · target 2', counterShort: '{c} / 2',
+      counter: 'changes {c} · target 2', counterShort: '{c}/2 changes',
+      counterOver: 'changes {c} · over par (2)', counterOverShort: '{c}/2 changes',
     },
     band: 'band',
     result: { used: 'You changed the setting {c} times; par is 2 or fewer.', usedOne: 'You changed the setting once; par is 2 or fewer.' },
@@ -139,9 +141,10 @@
       rising: 'LacY is made faster than it is cut up, so the count rises until the two rates meet.',
       dropping: 'At this setting LacY is cut up faster than it is made, so the count falls until the two rates meet.',
       balance: 'LacY is made and cut up at about the same rate, so the count holds steady.',
-      over: 'At this setting LacY is made faster than the band allows, so the count settles above it.',
+      over: 'At this setting making and breakdown balance above the band, so the count settles there.',
       under: 'At this setting making and breakdown balance below the band, so the count settles there.',
       falling: 'No new LacY is being made, and proteases keep cutting up the rest.',
+      down: 'LacY is made less often now, and proteases keep cutting it up, so its count settles at a lower level.',
     },
   };
 
@@ -151,7 +154,7 @@
   const clamp01 = (x) => (x > 1 ? 1 : x > 0 ? x : 0);
 
   const DEF = {
-    id: '1.4', code: '14', order: 4, version: 2, title: 'title', challenge: 'challenge', text: TEXT,
+    id: '1.4', code: '14', order: 4, version: CONTENT, title: 'title', challenge: 'challenge', text: TEXT,
     mode: 'operator', scored: true, los: ['LO4'], misconceptions: ['MOLECULES_LAST', 'INSTANT', 'CELL_DECIDES'],
     estMinutes: 8, engine: '1.1',
     phases: ['intro', 'task', 'predict', 'run', 'result', 'predict2', 'epilogue', 'debrief', 'echo', 'complete'],
@@ -182,7 +185,7 @@
         medium: { glucose_mM: 10, lactose_mM: 0, aminoAcids_mM: 0 },
         genes: { lacY: { level: 'off', kdeg_perS: LN2 / (v.halfLife_min * 60) } },
         flags: { userGenes: ['lacY'] },
-        variant: { levelId: '1.4', content: 2, seed: v.seed, halfLife_min: v.halfLife_min, targetLevel: v.targetLevel },
+        variant: { levelId: '1.4', content: CONTENT, seed: v.seed, halfLife_min: v.halfLife_min, targetLevel: v.targetLevel },
       };
     },
 
@@ -204,7 +207,10 @@
       const s = Object.assign({ tick: 0, count: 0, mean: 0, run: 0, done: false, changes: 0 }, st || {});
       const count = Math.floor(s.count + 0.5);
       const gauge = { lo: v.lo, hi: v.hi, max: Math.round(1.5 * v.hi), value: s.mean };
-      const counter = { text: K.fill(TEXT.hud.counter, { c: s.changes }), short: K.fill(TEXT.hud.counterShort, { c: s.changes }) };
+      // Over par (more than 2 changes) the counter says so in words, and the HUD colours it.
+      const counter = s.changes > 2
+        ? { text: K.fill(TEXT.hud.counterOver, { c: s.changes }), short: K.fill(TEXT.hud.counterOverShort, { c: s.changes }), over: true }
+        : { text: K.fill(TEXT.hud.counter, { c: s.changes }), short: K.fill(TEXT.hud.counterShort, { c: s.changes }) };
       if (s.epilogue) {
         const ep = s.epilogue;
         const started = !!ep.started;
@@ -347,6 +353,9 @@
           when: (f, mem, t, lv) => { const m = mon(lv); return !!m && m.on && even(m) && m.mean > lv.variant.hi; } },
         { key: 'l14.under', template: TEXT.narr.under,
           when: (f, mem, t, lv) => { const m = mon(lv); return !!m && m.on && even(m) && m.mean < lv.variant.lo; } },
+        // Turned down: the lab's line would blame dilution, but here proteases remove nearly all of it.
+        { key: 'l14.down', template: TEXT.narr.down,
+          when: (f, mem, t, lv) => !!lv && lv.phase === 'run' && !!lv.monitor && lv.monitor.on && mem.phase === 'down' },
       ];
     }()),
 

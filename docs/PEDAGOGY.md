@@ -108,9 +108,10 @@ Chapter 1 uses a bacterium as the simplest cell that does it all, never as the t
 
 1. **Start in the student's body.** The prologue zooms from the student to a pancreatic cell
    making insulin, then to a ribosome, and only then to a bacterium.
-2. **Stamp every card** the student collects as **Universal** or **Bacteria-only**. The
-   Bacteria-only list stays short: operons, no nucleus, transcription and translation happening
-   together, a circular chromosome.
+2. **Stamp every card** the student collects as **Universal** or **Not in your cells** (the
+   design doc's "Bacteria-only"; renamed after the M2 biology review, because archaea have no
+   nucleus either and some animals have operons). The list stays short: operons, no nucleus,
+   transcription and translation happening together, a circular chromosome.
 3. **"Meanwhile, in you"** after every chapter 1 level: one or two screens with the same process
    in a human cell (glucose transporters in gut and muscle, insulin from many copies of one
    mRNA, red blood cells wearing out in about 120 days, sickle-cell hemoglobin, flu and mRNA

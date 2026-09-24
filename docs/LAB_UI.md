@@ -566,7 +566,7 @@ While a drug is on, its row gets a tinted background in its drug token (§8.1).
 
 - First, under the heading "Why a bacterium": "A bacterium is the simplest cell that does it all; your own cells also copy genes into mRNA and read it with ribosomes."
 - Then the practical rows under the heading "Lactose" (engine 1.1.0): "Switch LacY and LacZ on while glucose is still there, then remove glucose: the cell pauses, then grows on lactose.", "More LacY and LacZ at the switch, a shorter pause: about 2 h after ×1 for 3 min, a few minutes after ×4 for 15 min." and "Switched on after glucose is gone, they are never made: no sugar gets in, so ATP runs down. Adding glucose back restarts the cell." (Measured on the lab strain from the steady preset with lactose present throughout, seeds 1–4; the pause is the time from removing glucose until the growth rate, averaged over a few minutes as the app shows it, is back above half the rate on lactose (doubling 106 min): ×1 for 3 min 112–123 min, 5 min 94–102, 15 min 47–61, 30 min 31–42; ×4 for 5 min 30–35; after ×4 for 15 min it never falls below half (the charge dips to 0.53–0.56 for a few minutes), after ×4 for 30 min the charge stays above 0.78. Switched on 1 min after glucose is removed, no lacY mRNA is finished in 40 min, the narrator reaches `gene.noatp` at about 12 min, and the cell is dormant at about 2 h; glucose added back after 3 h brings it to half speed in about 70 s. They speak to the student; no molecule wants or needs anything, and they pass the lint.)
-- Then "What is simplified": short forms of engine spec §18 items 1–21, one idea per row, from `BTC.content.about`. For example: "Each gene here has its own switch, and you set it; real cells switch genes with regulator proteins that sense conditions."
+- Then "What is simplified": short forms of engine spec §18 items 1–21, one idea per row, from `BTC.content.about`. For example: "In the free lab each gene has its own switch, and you set it; in real cells, regulator proteins that bind signals switch genes."
 - The sheet ends with "Full details are in the instructor notes." as plain text (a repository path means nothing to a student).
 
 ### 4.5 Download this run
@@ -741,7 +741,7 @@ The first rule whose condition holds wins. `{G}` is the gene phrase, `{n}` the n
 | 16g | gene.gone | phase gone | The mRNA for {n} is gone; the protein remains and is shared out at each division. |
 | 17a | burden.lac | uselessGene ∈ {lacZ, lacY}; gene = uselessGene | With no lactose here, {n} does no work, and making it slows growth over a few generations. |
 | 17b | burden | uselessGene set; gene = uselessGene | Ribosomes busy with {n} are not making other proteins, so growth slows over a few generations. |
-| 18 | growth.aa | aaOutside, aaImportOn, growth = normal | Amino acids from the medium spare the cell from making them, so it grows faster. |
+| 18 | growth.aa | aaOutside, aaImportOn, growth = normal | Amino acids come in from the medium, so fewer have to be made inside and the cell grows faster. |
 | 19 | growth.lactose | carbon = lactose, growth ≠ arrested | The cell is growing on lactose, which {Z} splits into glucose and galactose. |
 | 19b | growth.both | carbon = both, growth = normal | The cell is growing steadily on glucose and lactose. |
 | 20 | growth.low | glucoseLevel = low, growth = slow | Glucose is scarce, so growth is slow. |
@@ -919,7 +919,7 @@ The data shown is identical; only motion differs.
 {
   "name": "Be the Cell",
   "short_name": "Be the Cell",
-  "description": "A bacterium you run by switching its genes on and off.",
+  "description": "A game about genes and proteins, in which you are in charge of a cell. In principle.",
   "id": "./",
   "start_url": "./?source=pwa",
   "scope": "./",
@@ -1337,3 +1337,22 @@ Engine 1.1.0 changed how a cell without sugar behaves (it cuts its spending and 
 | 10 | Gene controls show "Set by this level." when the level's schedule has locked the controls (`cell.controls === 'locked'`, 1.2 after the deadline) | §3.4 |
 | 11 | The HUD slot is used: goal, timer and counter with short forms below 400 px, a progress bar or a band gauge (1.4), a "Continue ›" button when the phase is done; every tap target ≥ 44 px | §12 |
 | 12 | `sw.js`: navigations to pages other than the app (for example `tools/codes.html`) go to the network, so a cached `index.html` never answers for them | §9.3 |
+
+## 18. Changes after the M2 reviews (before the think-aloud)
+
+Four reviews (code, phone UX, biology, text) of the M2 build; LEVELS.md §16.11 has the level side.
+
+| # | Change | Sections |
+|---|---|---|
+| 1 | The free-play lab shows the **Levels** button at the left of the status strip (`StatusStrip.setLevel(null, true)`); it goes home. Before, the lab was a one-way door (a reload went back to the lab, and no sheet led home) | §6 |
+| 2 | Cell view: a sixth flux, glucose through the **slow side route** (level 1.1's `backupGlucoseUptake`). The route is drawn as a dashed gate across the membrane at two fixed places (perimeter 0.19 and 0.69) with the canvas label "side route"; its share of the glucose flux, uBasal·V ÷ (uBasal·V + PtsG protein·k_pts), enters only there, and the rest through PtsG glyphs. No glucose marker crosses bare membrane. Key row "glucose by the slow side route (not one of the six genes)" with its marker scale; tap chip "A slow side route for glucose: …" | §2.3, §2.5, §2.8, §2.9 |
+| 3 | While a level hides gene names (1.1), a dial marks no default level and a card shows no "stands for ~N genes" badge until the gene is named (both named the transporter or the importers) | §3.1, §3.4 |
+| 4 | A level's change of names (1.1's reveal) resets the narrator, so the line on screen is said again with the new name | §7.4 |
+| 5 | Narrator rule 18: "Amino acids come in from the medium, so fewer have to be made inside and the cell grows faster." | §7.2 |
+| 6 | About sheet: "In the free lab each gene has its own switch, and you set it; in real cells, regulator proteins that bind signals switch genes." and "In real E. coli, LacI and CRP keep the lac genes nearly off while glucose is present; level 1.7 builds that in."; the gly card's About no longer names glycolysis; the lacZ card's About adds that LacZ turns a little lactose into allolactose | §3.2, §4.4 |
+| 7 | HUD counters: short forms keep a unit ("1/3 tests", "32/48 mRNA", "1/2 changes"); `counter.over` marks a count past par in `--warn-ink` (bold) and the long form says "over par". The run's end refreshes the HUD in the same frame (the loop has stopped, so the 250-ms refresh never came) | §12 |
+| 8 | Sketch sliders: ±100 (was ±50), the value is a text field that takes a typed number, and Done stays disabled until one value has been set (a flat line at zero could be locked in) | §12 |
+| 9 | Toasts on home and the Prologue's drawings sit at the top (they covered home's buttons and the Prologue's sheet) | §9.4 |
+| 10 | Manifest and page description: "A game about genes and proteins, in which you are in charge of a cell. In principle." | §9.1 |
+| 11 | Telemetry merges the other tabs' stored events before it writes; `clear()` writes an empty log | §10.5 |
+

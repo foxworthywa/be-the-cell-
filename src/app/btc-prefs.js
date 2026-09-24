@@ -54,6 +54,24 @@
     return r;
   }
 
+  /**
+   * The query string without the given keys ('' when nothing is left): the one-shot parameters
+   * (?level, ?v, ?lab, ?reset) are taken out of the address once used, so a reload does not
+   * apply them again over the student's autosave (LEVELS §5.11).
+   */
+  function strippedSearch(search, keys) {
+    const s = (search || '').replace(/^\?/, '');
+    if (!s) return '';
+    const kept = s.split('&').filter((part) => {
+      if (!part) return false;
+      const i = part.indexOf('=');
+      let k = i < 0 ? part : part.slice(0, i);
+      try { k = decodeURIComponent(k); } catch (e) { /* kept as written */ }
+      return keys.indexOf(k) < 0;
+    });
+    return kept.length ? '?' + kept.join('&') : '';
+  }
+
   function storage() {
     try { return typeof localStorage !== 'undefined' ? localStorage : null; } catch (e) { return null; }
   }
@@ -102,5 +120,5 @@
     try { const st = storage(); return !!(st && st.getItem(key)); } catch (e) { return false; }
   }
 
-  return { DEFAULTS, parseParams, loadUI, saveUI, loadAutosave, saveAutosave, clearAutosave, flag };
+  return { DEFAULTS, parseParams, strippedSearch, loadUI, saveUI, loadAutosave, saveAutosave, clearAutosave, flag };
 });

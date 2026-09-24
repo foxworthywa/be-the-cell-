@@ -32,12 +32,14 @@
   const CANDIDATES = Object.freeze(['ptsG', 'aaImp', 'lacY', 'lacZ', 'fliC', 'araE']);
   // Where each candidate's protein sits (drawn the same for every student).
   const MEMBRANE = Object.freeze(['ptsG', 'aaImp', 'lacY', 'araE']);
-  const LIMIT_MIN = 180, HOLD_TICKS = 300, MEAN_TICKS = 60, PAR_N = 3;
+  const LIMIT_MIN = 180, HOLD_TICKS = 300, MEAN_TICKS = 60, PAR_N = 3, REVEAL_TICKS = 600;
   const LETTERS = 'ABCDEF';
+  // Content version (LEVELS §3.2: bumped on any change to variants, goals, scoring or questions): the M2 review reworded its questions and feedback, and the side route is disclosed.
+  const CONTENT = 2;
 
   const TEXT = {
     title: 'Starving next to a feast',
-    challenge: 'Glucose sits outside. Find the gene whose protein lets it in.',
+    challenge: 'Glucose is outside. Find its transporter.',
     task: {
       goal: 'Get glucose into the cell.',
       core: ['Find the gene whose protein lets glucose in, and get growth back to normal.',
@@ -47,20 +49,20 @@
     story: {
       intro: [
         { who: 'narrator', text: 'Your bacterium is starving. It is sitting in glucose.' },
+        { who: 'narrator', text: 'A slow side route lets a trickle of glucose in, so it grows, but at about a third of its usual speed.' },
         { who: 'commander', text: 'It clearly wants the glucose. Order it to eat.' },
-        { who: 'narrator', text: 'Wanting is not among its options. Orders do not cross membranes; proteins do.' },
-        { who: 'narrator', text: 'One of these six genes makes the protein that lets glucose in. They are unlabelled.' },
-        { who: 'narrator', text: 'Each gene gets its name once you have seen what its protein does.' },
+        { who: 'narrator', text: 'Wanting is not among its options. Orders do not cross membranes. Glucose does, through the right protein.' },
+        { who: 'narrator', text: 'One of these six unlabelled genes holds the instructions for that protein. Each gets its name once you have seen its protein work.' },
       ],
       outro: [
         { who: 'narrator', text: 'The glucose was there the whole time. The transporter was not.' },
         { who: 'glucose', denies: true, text: "I don't want anything. I bumped into a transporter, and I fit." },
-        { who: 'ribosome', text: 'I built the transporter. I had no idea what it was for.' },
+        { who: 'ribosome', text: 'I built the transporters. I had no idea what they were for.' },
       ],
       // The glucose transporter's job was never seen (the first line of the outro would not be true).
       missed: [
-        { who: 'narrator', text: 'The glucose stayed outside. None of the proteins made in this run carried it in.' },
-        { who: 'glucose', denies: true, text: "I don't want anything. I bump into whatever is in the membrane, and nothing here fit." },
+        { who: 'narrator', text: 'The glucose stayed outside, apart from a trickle through a slow side route. None of the proteins made in this run carried it in.' },
+        { who: 'glucose', denies: true, text: "I don't want anything. I bump into whatever is in the membrane, and nothing here fits." },
       ],
       // The transporter was found, but growth was not back to normal in time.
       slow: [
@@ -72,11 +74,11 @@
       prompt: 'You switch on the right gene. What changes first?',
       options: [
         { t: 'mRNA from that gene appears.', ok: true,
-          fb: 'Right. The gene is copied into mRNA first; the transporter comes next, and only then does glucose get in.' },
-        { t: 'Glucose starts coming in.', mc: 'DNA_DIRECT',
-          fb: 'Glucose came in only after transporters had been made and sat in the membrane, minutes later.' },
+          fb: 'The gene is copied into mRNA first; the transporter comes next, and only then does more glucose get in.' },
+        { t: 'More glucose starts coming in.', mc: 'DNA_DIRECT',
+          fb: 'More glucose came in only after transporters had been made and sat in the membrane, minutes later.' },
         { t: 'ATP goes up.', mc: 'ENERGY_FIRST',
-          fb: 'ATP rose later. It needs glucose inside, glucose needs the transporter, and the transporter needs the mRNA.' },
+          fb: 'ATP rose later. ATP comes from glucose inside, glucose gets in only through transporters, and transporters are built from mRNA.' },
         { t: 'The cell grows faster.', mc: 'OTHER',
           fb: 'Growth changed last of all, once ATP was back.' },
       ],
@@ -85,7 +87,7 @@
       prompt: 'Where will the transporter protein sit?',
       options: [
         { t: 'In the membrane, between the glucose and the inside.', ok: true,
-          fb: 'Right. It spans the membrane, which is why it was drawn across the cell\'s edge.' },
+          fb: 'It spans the membrane, which is why it was drawn across the cell\'s edge.' },
         { t: 'In the DNA.', mc: 'DNA_DIRECT',
           fb: 'The DNA holds the instructions. The protein made from them ends up in the membrane.' },
         { t: 'Anywhere in the cytoplasm.', mc: 'PROTEIN_LOCATION',
@@ -98,38 +100,39 @@
       prompt: 'Glucose was outside the whole time. What finally let it in?',
       options: [
         { t: 'Transporter proteins made from that gene\'s mRNA, sitting in the membrane.', ok: true,
-          fb: 'Right. The gene was copied into mRNA, ribosomes built transporters from it, and glucose crossed through them.' },
+          fb: 'The gene was copied into mRNA, ribosomes built transporters from it, and glucose crossed through them.' },
         { t: 'The gene itself, once it was switched on.', mc: 'DNA_DIRECT',
           fb: 'The gene never left the chromosome. It was copied into mRNA, and the copies were read into transporters.' },
         { t: 'ATP made from the glucose.', mc: 'ENERGY_FIRST',
           fb: 'ATP came after glucose got in, not before. Until the transporters existed, ATP stayed low.' },
         { t: 'The cell sensed the glucose and let it in.', mc: 'CELL_DECIDES',
-          fb: 'Nothing sensed anything. Glucose crosses only through a transporter it happens to fit.' },
+          fb: 'No one let it in. Glucose crossed only once transporters it happens to fit were sitting in the membrane.' },
       ],
     },
     d2: {
       prompt: 'What is the transporter?',
       options: [
         { t: 'A machine: a protein whose shape lets glucose through the membrane.', ok: true,
-          fb: 'Right. Its shape gives it the job; while it lasts, it carries glucose across, one molecule at a time.' },
+          fb: 'Its shape gives it the job; while it lasts, it carries glucose across, one molecule at a time.' },
         { t: 'Food that the cell uses up for energy.', mc: 'PROTEIN_AS_FOOD',
-          fb: 'The transporter is not eaten. It keeps working, carrying many glucose molecules every second.' },
+          fb: 'The transporter is not used up. Each one carries many glucose molecules across every second, for as long as it lasts.' },
         { t: 'Building material that makes the membrane stronger.', mc: 'PROTEIN_AS_MATERIAL',
-          fb: 'It sits in the membrane, but not as material: without it the membrane holds, and no glucose gets in.' },
+          fb: 'It sits in the membrane, but not as material: without it the membrane holds, and only a trickle of glucose gets in by a slow side route.' },
         { t: 'A message that tells the cell to eat.', mc: 'CELL_DECIDES',
-          fb: 'Nothing in the cell reads messages and obeys. The transporter carries the glucose itself.' },
+          fb: 'Nothing in the cell takes orders. The transporter is the machine: glucose crosses the membrane through it.' },
       ],
     },
     echo1: 'Your gut and muscle cells take in glucose through transporter proteins too, made the same way: gene, mRNA, protein.',
-    echo2: 'Yours come from other gene families (GLUTs and SGLTs). In muscle, insulin moves GLUT4 transporters into the membrane after a meal.',
+    echo2: 'Yours are GLUTs and SGLTs, not PtsG\'s family. In muscle, insulin signalling moves stored GLUT4 transporters into the membrane after a meal.',
     cards: { transporter: 'Transporter protein' },
     hud: {
       goal: 'Find the glucose transporter', goalShort: 'Find the transporter',
       found: 'Found it · growth {pct}% of normal', foundShort: 'Found · growth {pct}%',
       timer: '{time} left',
-      counter: 'Experiments {n} · target 3', counterShort: '{n} / 3',
+      counter: 'Experiments {n} · target 3', counterShort: '{n}/3 tests',
+      counterOver: 'Experiments {n} · over par (3)', counterOverShort: '{n}/3 tests',
     },
-    medium: 'Glucose stays in. Lactose and amino acids are yours to add, and adding them does not count as an experiment.',
+    medium: 'The glucose outside is fixed. Lactose and amino acids are yours to add; adding them is not an experiment.',
     result: {
       used: 'You used {n} experiments; par is 3 or fewer.', usedOne: 'You used 1 experiment; par is 3 or fewer.',
       second: 'You also saw the job of gene {letter} (Expert).',
@@ -138,6 +141,8 @@
       heading: 'The six genes',
       line: 'Gene {letter}: {name} ({symbol}), {where}',
       membrane: 'in the membrane', inside: 'inside the cell',
+      // Flagellin is exported to build a flagellum in a real cell; this strain has none of the other flagellum genes.
+      fliC: 'made inside the cell; here it is not exported to a flagellum',
     },
     narr: {
       revealGlucose: 'Glucose now gets in through {N}, so {its} gene is named after that job.',
@@ -147,6 +152,12 @@
       nofit: 'Ribosomes are making {N}, but no glucose gets in through {it}.',
       nosplit: 'Lactose gets in, but almost none of it is split inside.',
       busy: 'Ribosomes busy with {n} are not making other proteins, so growth slows over a few generations.',
+      // Gene → mRNA → protein in plain words (the lab's rules 16a–16c lose to "too little glucose" all through the search).
+      waiting: '{G} {is} switched on; RNA polymerase has not started on {it} yet.',
+      tx: '{G} {is} being copied into mRNA; no protein yet.',
+      rising: '{N} {is} building up; each mRNA is read by many ribosomes before it decays.',
+      trickle: 'Only a trickle of glucose gets in, through a slow side route, so ATP is low and growth is slow.',
+      start: 'Glucose is outside, but only a trickle of it can get in, through a slow side route.',
     },
   };
 
@@ -160,7 +171,7 @@
   const REVEAL_KEY = { ptsG: 'revealGlucose', aaImp: 'revealAmino', lacY: 'revealLactose', lacZ: 'revealSplit' };
 
   const DEF = {
-    id: '1.1', code: '11', order: 1, version: 1, title: 'title', challenge: 'challenge', text: TEXT,
+    id: '1.1', code: '11', order: 1, version: CONTENT, title: 'title', challenge: 'challenge', text: TEXT,
     mode: 'operator', scored: true, los: ['LO1'],
     misconceptions: ['DNA_DIRECT', 'ENERGY_FIRST', 'PROTEIN_AS_FOOD', 'PROTEIN_AS_MATERIAL', 'PROTEIN_LOCATION', 'CELL_DECIDES'],
     estMinutes: 8, engine: '1.1',
@@ -181,7 +192,7 @@
         seed: K.seedFor(v.seed, role), strain: 'm2-l11', start: 'birth',
         medium: { glucose_mM: 10, lactose_mM: 0, aminoAcids_mM: 0 },
         genes, flags: { backupGlucoseUptake: true, userGenes: CANDIDATES.slice() },
-        variant: { levelId: '1.1', content: 1, seed: v.seed, order: v.order.slice() },
+        variant: { levelId: '1.1', content: CONTENT, seed: v.seed, order: v.order.slice() },
       };
     },
 
@@ -210,8 +221,12 @@
           short: s.found ? K.fill(TEXT.hud.foundShort, { pct }) : TEXT.hud.goalShort,
           progress: s.found ? Math.min(1, s.lambda60 / (0.8 * L.lambdaRef)) : null, done: !!s.done,
         },
-        timer: { text: K.fill(TEXT.hud.timer, { time: K.clock(left, false) }), short: K.fill(TEXT.hud.timer, { time: K.clock(left, false) }) },
-        counter: { text: K.fill(TEXT.hud.counter, { n: s.n }), short: K.fill(TEXT.hud.counterShort, { n: s.n }) },
+        // On a phone the minutes alone ("171 min left"), so the goal chip keeps its words.
+        timer: { text: K.fill(TEXT.hud.timer, { time: K.clock(left, false) }), short: K.fill(TEXT.hud.timer, { time: Math.ceil(left / 60) + ' min' }) },
+        // Over par the counter says so in words (and the HUD colours it): more than 3 experiments.
+        counter: s.n > PAR_N
+          ? { text: K.fill(TEXT.hud.counterOver, { n: s.n }), short: K.fill(TEXT.hud.counterOverShort, { n: s.n }), over: true }
+          : { text: K.fill(TEXT.hud.counter, { n: s.n }), short: K.fill(TEXT.hud.counterShort, { n: s.n }) },
       };
     },
 
@@ -322,7 +337,8 @@
       return {
         heading: TEXT.complete.heading,
         lines: v.order.map((id, k) => K.fill(TEXT.complete.line, {
-          letter: LETTERS[k], name: names(id).name, symbol: id, where: MEMBRANE.indexOf(id) >= 0 ? TEXT.complete.membrane : TEXT.complete.inside,
+          letter: LETTERS[k], name: names(id).name, symbol: id,
+          where: MEMBRANE.indexOf(id) >= 0 ? TEXT.complete.membrane : id === 'fliC' ? TEXT.complete.fliC : TEXT.complete.inside,
         })),
       };
     },
@@ -352,10 +368,17 @@
      */
     narratorRules: (function () {
       const mon = (lv) => (lv && lv.phase === 'run' && lv.monitor && lv.monitor.revealTick ? lv.monitor : null);
-      const recent = (m, id, tick) => m.revealed[id] && tick - m.revealTick[id] <= 60;
+      // A reveal speaks for 10 game-min and may replace the line on screen after half a second: at 1 s = 1 min a
+      // one-minute window was shorter than the narrator's 1.5-s hold, so the reveal was never shown.
+      const recent = (m, id, tick) => m.revealed[id] && tick - m.revealTick[id] <= REVEAL_TICKS;
       const reveal = (id) => ({
-        key: 'l11.' + REVEAL_KEY[id], template: TEXT.narr[REVEAL_KEY[id]], gene: id,
+        key: 'l11.' + REVEAL_KEY[id], template: TEXT.narr[REVEAL_KEY[id]], gene: id, preempt: true,
         when: (f, mem, tick, lv) => { const m = mon(lv); return !!m && recent(m, id, tick); },
+      });
+      // The gene the student last switched on, while it is on its way to protein (the lab's 16a–16c in plain words).
+      const phase = (key, ph) => ({
+        key: 'l11.' + key, template: TEXT.narr[key], gene: (f, mem) => mem.gene,
+        when: (f, mem, tick, lv) => !!mon(lv) && mem.gene !== null && mem.phase === ph && CANDIDATES.indexOf(mem.gene) >= 0,
       });
       return [
         reveal('ptsG'), reveal('aaImp'), reveal('lacY'), reveal('lacZ'),
@@ -377,6 +400,13 @@
               f.aa === 'ok' && !f.justDivided && f.lactoseBlock === null && mem.phase === null &&
               (mem.recoverTick === null || tick - mem.recoverTick > 300);
           } },
+        phase('waiting', 'waiting'), phase('tx', 'transcribing'), phase('rising', 'rising'),
+        // Before the first tick (the paused start, behind the sheets): no flux yet, and ATP not yet low.
+        { key: 'l11.start', template: TEXT.narr.start,
+          when: (f, mem, tick, lv) => tick === 0 && !!lv && !!lv.monitor && !lv.monitor.found && f.medium !== 'none' },
+        // The search: the side route keeps the cell alive but short of ATP (the lab's "none of it gets in" is not true here).
+        { key: 'l11.trickle', template: TEXT.narr.trickle,
+          when: (f, mem, tick, lv) => { const m = mon(lv); return !!m && !m.found && mem.phase === null && f.energy !== 'normal' && f.medium !== 'none'; } },
       ];
     }()),
 

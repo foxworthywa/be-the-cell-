@@ -45,8 +45,12 @@
   const JITTER_PX = 1.2;
   const MARKER_LIFE_S = 0.6;             // flux marker lifetime, render time
   const MARKERS = 128;                   // per flux
-  const NF = 5;                          // fluxes: glucose in, lactose in, amino acids in, products out, protein cut up
+  const NF = 6;                          // fluxes: glucose in, lactose in, amino acids in, products out, protein cut up, glucose by the side route
   const CUT = 4;                         // the "cut up" marker (degradation, LEVELS §7.4.2)
+  const SIDE = 5;                        // glucose through the slow side route (level 1.1's backup uptake)
+  // The side route's two places on the membrane (perimeter fractions): drawn as a glyph of its own, so glucose
+  // never appears to cross bare membrane (M2 biology review).
+  const SIDE_AT = [0.19, 0.69];
   const GHOST_S = 180;                   // sister ghost fades over 3 sim-min
 
   // Glyph kinds.
@@ -54,6 +58,7 @@
     GLC_OUT: 1, LAC_OUT: 2, AA_OUT: 3, NASCENT: 4, MRNA_FOCUS: 5, MRNA: 6, RIB: 7, RIB_FREE: 8, RIB_STALLED: 9,
     POLY: 10, PROT: 11, ATP: 12, ADP: 13, AA: 14, LAC_IN: 15, LOCUS: 16, RNAP: 17,
     OPER: 18, REP_BOUND: 19, INDUCER: 20,        // the lac operator, LacI sitting on it, allolactose on free LacI (m2-lac)
+    SIDE: 21,                                    // the slow side route for glucose (m2-l11 backup uptake), in the membrane
   };
 
   // ---------------------------------------------------------------------------
@@ -314,11 +319,13 @@
       this.mX1 = new Float32Array(NF * MARKERS); this.mY1 = new Float32Array(NF * MARKERS);
       this.mA = new Float32Array(NF * MARKERS);         // the angle a "cut up" marker is drawn at
       this.mNext = new Int32Array(NF);
-      this.emitters = [new D.FluxEmitter(1e3), new D.FluxEmitter(1e3), new D.FluxEmitter(1e3), new D.FluxEmitter(1e3), new D.FluxEmitter(1)];
+      this.emitters = [new D.FluxEmitter(1e3), new D.FluxEmitter(1e3), new D.FluxEmitter(1e3), new D.FluxEmitter(1e3), new D.FluxEmitter(1), new D.FluxEmitter(1e3)];
       this.emitCount = new Int32Array(NF);
       this.markerN = new Float64Array(NF).fill(1e3);
       this.markerN[CUT] = 1;
       this.cutGene = -1;                                // the gene whose protein is being cut up (lacY in level 1.4)
+      this.sideX = new Float32Array(2); this.sideY = new Float32Array(2); this.sideA = new Float32Array(2);
+      this.sideN = 0;                                   // side-route glyphs drawn (0 when the cell has no side route)
       this.tau = 0;                                     // render time: advances only while running
       this.visible = true;
       this.dirty = true;
@@ -595,6 +602,20 @@
         this.geneRange[2 * i + 1] = this.n;
       }
 
+      // The slow side route (level 1.1): two fixed places in the membrane, drawn apart from every gene's protein.
+      this.sideN = 0;
+      if (this.sideCapacity(view) > 0) {
+        this.group(K.SIDE, 'muted', 1, 0);
+        for (let k = 0; k < SIDE_AT.length; k++) {
+          G.perimeter(SIDE_AT[k], g, this.tmp);
+          const a = Math.atan2(this.tmp.ny, this.tmp.nx);
+          this.sideX[k] = this.tmp.x; this.sideY[k] = this.tmp.y; this.sideA[k] = a;
+          this.push(K.SIDE, 255, k, this.tmp.x, this.tmp.y, a, 0, 0);
+          this.sideN++;
+        }
+        this.endGroup();
+      }
+
       this.built.tick = view.tick; this.built.epoch = epoch; this.built.focus = f; this.built.model = this.model();
       this.built.w = this.cssW; this.built.h = this.cssH; this.built.dosage = view.cell.dosage;
       this.built.length = g.L; this.built.pinch = g.pinch;
@@ -828,7 +849,35 @@
       c.strokeStyle = P.membrane; c.lineWidth = 1.2;
       c.beginPath(); G.trace(c, g, 1.6); G.trace(c, g, -1.6); c.stroke();
       this.drawProteins(c, P, true, A * 0.4, tau);
+      this.drawSideRoute(c, P);
       this.drawMarkers(c, P, reduced);
+    }
+
+    /** The slow side route: a dashed gate across the membrane at each of its places, labelled "side route" once. */
+    drawSideRoute(c, P) {
+      if (!this.sideN) return;
+      c.save();
+      c.setLineDash([2.5, 2]);
+      c.strokeStyle = P.ink; c.lineWidth = 1.4;
+      c.fillStyle = P.panel || P.inside;
+      for (let k = 0; k < this.sideN; k++) {
+        c.beginPath(); sideGlyph(c, this.sideX[k], this.sideY[k], this.sideA[k]); c.fill(); c.stroke();
+      }
+      c.restore();
+      // One label, outside the membrane beside the first place (beyond where its markers start), clamped to the stage.
+      const a = this.sideA[0], lx = this.sideX[0] + Math.cos(a) * 24, ly = this.sideY[0] + Math.sin(a) * 24;
+      c.font = '600 11px ' + FONT;
+      c.textBaseline = 'middle';
+      const w = c.measureText(C.cell.sideRoute).width;
+      const left = Math.cos(a) < -0.3;
+      let x = left ? lx - w : Math.cos(a) > 0.3 ? lx : lx - w / 2;
+      x = Math.max(4, Math.min(this.cssW - w - 4, x));
+      const y = Math.max(8, Math.min(this.cssH - 8, ly + (Math.abs(Math.cos(a)) <= 0.3 ? Math.sign(Math.sin(a) || 1) * 4 : 0)));
+      c.fillStyle = P.outside; c.globalAlpha = 0.85;
+      c.fillRect(x - 2, y - 7, w + 4, 14);
+      c.globalAlpha = 1;
+      c.fillStyle = P.ink; c.textAlign = 'left';
+      c.fillText(C.cell.sideRoute, x, y);
     }
 
     insideColor(P, E) {
@@ -873,7 +922,7 @@
       for (let gi = 0; gi < this.ng; gi++) {
         const kind = this.gKind[gi];
         if (kind < k0 || kind > k1) continue;
-        if (kind === K.PROT) continue;
+        if (kind === K.PROT || kind === K.SIDE) continue;
         this.drawGroup(c, P, gi, A, tau);
       }
     }
@@ -1003,10 +1052,30 @@
       return N;
     }
 
+    /**
+     * Glucose capacity of the slow side route (glucose/s at saturation): the engine's backup uptake, which level 1.1
+     * turns on (flags.backupGlucoseUptake). Read from the cell, never written.
+     */
+    sideCapacity(view) {
+      const cell = this.app.cell;
+      const u = cell && typeof cell.uBasal === 'number' ? cell.uBasal : 0;
+      return u > 0 ? u * view.cell.V_fL : 0;
+    }
+    /** The share of the glucose coming in that takes the side route (the rest comes through PtsG). */
+    sideShare(view) {
+      const side = this.sideCapacity(view);
+      if (!(side > 0)) return 0;
+      const cell = this.app.cell, g = view.geneById.ptsG;
+      const pts = g && cell.p ? g.protein * cell.p.k_pts : 0;
+      return side / (side + pts);
+    }
+
     spawnMarkers(view, dtSim) {
       const fl = view.flux, speed = this.app.speed();
       const rates = FLUX_RATE;
-      rates[0] = fl.glucoseIn; rates[1] = fl.lactoseIn; rates[2] = fl.aaImported; rates[3] = fl.fermentationProductsOut;
+      const side = this.sideN ? this.sideShare(view) : 0;
+      rates[0] = fl.glucoseIn * (1 - side); rates[SIDE] = fl.glucoseIn * side;
+      rates[1] = fl.lactoseIn; rates[2] = fl.aaImported; rates[3] = fl.fermentationProductsOut;
       // Proteins cut up by proteases (R-E10): the visible gene with the most degradation, from its glyphs.
       let cut = -1, cutRate = 0;
       for (let i = 0; i < this.nGenes; i++) {
@@ -1026,10 +1095,15 @@
     spawn(k) {
       const g = this.geom, o = this.tmp;
       const e = this.emitCount[k]++;
-      const gene = k === CUT ? this.cutGene : this.fluxGene[k];
+      const gene = k === CUT ? this.cutGene : k === SIDE ? -1 : this.fluxGene[k];
       let x, y, nx, ny;
       const r0 = gene >= 0 ? this.geneRange[2 * gene] : 0, r1 = gene >= 0 ? this.geneRange[2 * gene + 1] : 0;
-      if (gene >= 0 && r1 > r0) {
+      if (k === SIDE || (k === 0 && !(gene >= 0 && r1 > r0) && this.sideN)) {
+        // Through one of the side route's two places (glucose never crosses bare membrane).
+        if (!this.sideN) return;
+        const q = Math.floor(D.hash01(FX_KEY[k], e, 0) * this.sideN) % this.sideN;
+        x = this.sideX[q]; y = this.sideY[q]; nx = Math.cos(this.sideA[q]); ny = Math.sin(this.sideA[q]);
+      } else if (gene >= 0 && r1 > r0) {
         // Through a transporter glyph chosen by hash.
         const bi = r0 + Math.floor(D.hash01(FX_KEY[k], e, 0) * (r1 - r0));
         x = this.bx[bi]; y = this.by[bi]; nx = Math.cos(this.bang[bi]); ny = Math.sin(this.bang[bi]);
@@ -1070,7 +1144,7 @@
             if (Math.min(2, Math.floor(fr * 3)) !== band) continue;
             const t = reduced ? 0.5 : fr;
             const x = this.mX0[j] + (this.mX1[j] - this.mX0[j]) * t, y = this.mY0[j] + (this.mY1[j] - this.mY0[j]) * t;
-            if (k === 0) hex(c, x, y, 3.2); else if (k === 1) hex2(c, x, y, 2.4); else if (k === 2) tri(c, x, y, 3);
+            if (k === 0 || k === SIDE) hex(c, x, y, 3.2); else if (k === 1) hex2(c, x, y, 2.4); else if (k === 2) tri(c, x, y, 3);
             else if (k === CUT) broken(c, x, y, this.mA[j] + Math.PI / 2, 9, 5, fr);
             else circle(c, x, y, 2.4);
             any = true;
@@ -1297,6 +1371,7 @@
         case K.ADP: return F.fill(C.chip.adp, { N: N(p.atpN) });
         case K.AA: return F.fill(C.chip.aa, { N: N(p.aaN) });
         case K.LAC_IN: return F.fill(C.chip.lacIn, { N: N(p.lacN) });
+        case K.SIDE: return C.chip.sideRoute;
       }
       return '';
     }
@@ -1370,6 +1445,10 @@
       add((c) => { c.beginPath(); tri(c, 12, 13, SZ.aaOut + 0.5); c.fillStyle = P.aa; c.fill(); }, K2.aaOut, N(p.aaOutN));
       const M = (k) => F.fill(C.key.perMarker, { N: F.count(this.markerN[k]) });
       add((c) => { c.beginPath(); hex(c, 12, 12, 3.2); c.strokeStyle = P.sugar; c.lineWidth = 1.4; c.stroke(); }, K2.fluxGlc, M(0));
+      if (this.sideN) {
+        add((c) => { c.setLineDash([2.5, 2]); c.beginPath(); sideGlyph(c, 12, 12, 0); c.fillStyle = P.panel || P.inside; c.fill(); c.strokeStyle = P.ink; c.lineWidth = 1.4; c.stroke(); c.setLineDash([]); },
+          K2.sideRoute, M(SIDE));
+      }
       add((c) => { c.beginPath(); hex2(c, 12, 12, 2.4); c.strokeStyle = P.sugar; c.lineWidth = 1.4; c.stroke(); }, K2.fluxLac, M(1));
       add((c) => { c.beginPath(); tri(c, 12, 12, 3); c.fillStyle = P.aa; c.fill(); }, K2.fluxAa, M(2));
       add((c) => { c.beginPath(); circle(c, 12, 12, 2.4); c.fillStyle = P.products; c.fill(); }, K2.fluxOut, M(3));
@@ -1418,7 +1497,20 @@
 
   const PAUSED_PENDING = C.cell.pausedBadge + ' · ' + C.cell.pendingNote;
   const FLUX_RATE = new Float64Array(NF);
-  const FX_KEY = ['fx0', 'fx1', 'fx2', 'fx3', 'fx4'], FP_KEY = ['fp0', 'fp1', 'fp2', 'fp3', 'fp4'];
+  const FX_KEY = ['fx0', 'fx1', 'fx2', 'fx3', 'fx4', 'fx5'], FP_KEY = ['fp0', 'fp1', 'fp2', 'fp3', 'fp4', 'fp5'];
+
+  const FONT = 'system-ui, -apple-system, "Segoe UI", Roboto, sans-serif';
+  /** The side route's gate: a rounded box across the membrane with an opening through it (a, the outward normal). */
+  function sideGlyph(c, x, y, a) {
+    const ca = Math.cos(a), sa = Math.sin(a), L = 6.5, W = 4.5;      // half-lengths along and across the normal
+    const pt = (u, v) => [x + ca * u - sa * v, y + sa * u + ca * v];
+    const q = [pt(-L, -W), pt(L, -W), pt(L, W), pt(-L, W)];
+    c.moveTo(q[0][0], q[0][1]);
+    for (let i = 1; i < 4; i++) c.lineTo(q[i][0], q[i][1]);
+    c.closePath();
+    const m0 = pt(-L, 0), m1 = pt(L, 0);
+    c.moveTo(m0[0], m0[1]); c.lineTo(m1[0], m1[1]);
+  }
 
   /** Mixes two #rrggbb colours: t = 0 gives a, 1 gives b. */
   function mix(a, b, t) {

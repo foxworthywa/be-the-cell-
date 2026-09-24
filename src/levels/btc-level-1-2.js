@@ -27,30 +27,32 @@
 
   const SETTLE_MIN = 10, DEMO_MIN = 20;
   const GRID = K.sketch.GRID;
+  // Content version (LEVELS §3.2: bumped on any change to variants, goals, scoring or questions): the M2 review reworded the Expert question and the debrief.
+  const CONTENT = 2;
 
   const TEXT = {
     title: 'One gene, many copies',
-    challenge: 'Make enough permeases by a deadline, using as few mRNAs as possible.',
+    challenge: 'Many permeases, few mRNAs, one deadline.',
     task: {
       goal: '{T} LacY in the membrane by minute {D}.',
       core: ['Reach {T} LacY by minute {D}.', 'Use at most {mPar} mRNAs; the count is on screen.'],
-      expert: ['Before the test run, work out how many LacY one mRNA makes, within 30%.',
+      expert: ['Before the test run, work out how many LacY are made from one mRNA, within 30%.',
         'Sketch the amounts, not only the shape: 75% accuracy or better.'],
     },
     story: {
       intro: [
-        { who: 'narrator', text: 'Orders from the top: {T} lactose permeases in the membrane by minute {D}.' },
+        { who: 'narrator', text: 'Orders from the top: {T} lactose permeases (lactose transporters) in the membrane by minute {D}.' },
         { who: 'commander', text: 'Build them one at a time. Starting now.' },
-        { who: 'ribosome', text: 'The gene is one copy. I read the mRNA, not the gene, and I am not the only ribosome.' },
+        { who: 'ribosome', text: 'There is one copy of the gene. I read the mRNA, not the gene, and I am not the only ribosome.' },
         { who: 'narrator', text: 'Each extra permease costs amino acids and ATP. The mRNA count is being watched.' },
       ],
       outro: [
-        { who: 'narrator', text: 'You switched the gene off. The permeases kept arriving; they were already on their way.' },
+        { who: 'narrator', text: 'You switched the gene off. The permeases kept arriving anyway, read from mRNA that was already there.' },
         { who: 'narrator', text: 'One gene, a few dozen mRNAs, several hundred proteins. The middle step is where the copies come from.' },
       ],
       // The outro when the target was not reached by the deadline.
       missed: [
-        { who: 'narrator', text: 'The deadline came first. More mRNA, made sooner, would have delivered the permeases in time.' },
+        { who: 'narrator', text: 'The deadline came first. More mRNA, made sooner, would have been read into enough permeases in time.' },
         { who: 'narrator', text: 'One gene, a few dozen mRNAs, several hundred proteins. The middle step is where the copies come from.' },
       ],
       // The outro when lacY was still on at the deadline (its first line would not be true).
@@ -60,7 +62,7 @@
       ],
     },
     ppm: {
-      prompt: 'A ribosome starts on each LacY mRNA about every {sec} seconds, and an mRNA lasts about {min} minutes. How many LacY does one mRNA make?',
+      prompt: 'A ribosome starts on each LacY mRNA about every {sec} seconds, and an mRNA lasts about {min} minutes on average. How many LacY per mRNA?',
       unit: 'LacY per mRNA',
     },
     sketch: {
@@ -89,7 +91,7 @@
       prompt: 'You switched the gene off, yet LacY kept rising for minutes. Why?',
       options: [
         { t: 'mRNA made before the switch-off was still being read by ribosomes.', ok: true,
-          fb: 'Right. Each mRNA lasts a few minutes, and ribosomes keep reading it until it decays.' },
+          fb: 'Each mRNA lasts a few minutes, and ribosomes keep reading it until it decays.' },
         { t: 'The gene took a while to register that it was off.', mc: 'CELL_DECIDES',
           fb: 'Genes register nothing. RNA polymerase stopped starting new copies at once; the copies already made remained.' },
         { t: 'LacY makes more LacY once there is enough of it.', mc: 'PROTEIN_SELF_COPY',
@@ -99,10 +101,10 @@
       ],
     },
     d2: {
-      prompt: 'Why does the cell make mRNA copies instead of reading the gene directly?',
+      prompt: 'Why is the gene copied into mRNA, instead of ribosomes reading the gene directly?',
       options: [
         { t: 'Many copies can be made, and each is read many times, so one gene gives many proteins.', ok: true,
-          fb: 'Right. Here one gene gave a few dozen mRNAs and each gave about twenty LacY. Copies also decay, so output stops soon after the gene does.' },
+          fb: 'Here one gene gave a few dozen mRNAs and each gave about twenty LacY. Copies also decay, so output stops soon after the gene does.' },
         { t: 'mRNA is a spare copy kept in case the DNA is damaged.', mc: 'MIDDLEMAN',
           fb: 'mRNA is read, not stored. Each copy lasts only minutes before it decays.' },
         { t: 'Ribosomes cannot reach the DNA.', mc: 'OTHER',
@@ -112,20 +114,24 @@
       ],
     },
     echo1: 'A beta cell in your pancreas makes insulin the same way: one gene, copied into many mRNAs, each read by many ribosomes.',
-    echo2: 'Your cells hold two copies of the insulin gene, one from each parent. The insulin itself comes from the many mRNA copies.',
+    echo2: 'Nearly every cell in your body has the same two copies of the insulin gene, one from each parent. It is copied into mRNA only in beta cells.',
     cards: { mRNA: 'mRNA' },
     hud: {
       goal: 'LacY {count} / {T}', reached: 'LacY {count} · {T} reached', reachedShort: 'LacY {count} · reached',
-      settle: 'Deadline passed · watching 10 more min', settleShort: 'Deadline passed',
+      settle: 'Reached · watching 10 more min', settleShort: 'Reached · watching',
       timer: 'deadline in {time}', timerShort: 'due in {time}', settleTimer: '{time} left',
-      counter: 'mRNAs {m} / {mPar}', counterShort: '{m} / {mPar}',
+      counter: 'mRNAs {m} / {mPar}', counterShort: '{m}/{mPar} mRNA',
+      counterOver: 'mRNAs {m} / {mPar} · over par', counterOverShort: '{m}/{mPar} mRNA',
       demoGoal: 'Test run · LacY {count}', demoGoalShort: 'LacY {count}', demoTimer: '{time} of 20 min', demoTimerShort: 'min {t} of 20',
       demoCounter: 'mRNAs {m}', demoCounterShort: '{m} mRNAs',
     },
     narr: {
       settle: 'The deadline has passed; the permeases still arriving come from mRNA that was already there.',
     },
-    result: { used: 'You used {m} mRNAs; par is {mPar} or fewer.' },
+    result: {
+      used: 'You used {m} mRNAs; par is {mPar} or fewer.',
+      hint: 'mRNA already made keeps being read into LacY, so switching the gene off earlier needs fewer mRNAs.',
+    },
   };
 
   const L = LC.l12;
@@ -148,7 +154,7 @@
   }
 
   const DEF = {
-    id: '1.2', code: '12', order: 2, version: 1, title: 'title', challenge: 'challenge', text: TEXT,
+    id: '1.2', code: '12', order: 2, version: CONTENT, title: 'title', challenge: 'challenge', text: TEXT,
     mode: 'operator', scored: true, los: ['LO2'], misconceptions: ['MIDDLEMAN', 'PROTEIN_SELF_COPY', 'DELAY_MISATTRIBUTED', 'INSTANT', 'CELL_DECIDES'],
     estMinutes: 8, engine: '1.1',
     phases: ['intro', 'task', 'predict', 'demo', 'run', 'result', 'debrief', 'echo', 'complete'],
@@ -172,7 +178,7 @@
         medium: { glucose_mM: 10, lactose_mM: 0, aminoAcids_mM: 0 },
         genes: { lacY: { level: 'off' } },
         flags: { userGenes: ['lacY'] },
-        variant: { levelId: '1.2', content: 1, seed: v.seed, T: v.T, tOff: v.tOff, D: v.D, mPar: v.mPar },
+        variant: { levelId: '1.2', content: CONTENT, seed: v.seed, T: v.T, tOff: v.tOff, D: v.D, mPar: v.mPar },
       };
       if (role === 'demo') {
         // The scripted test run: ×4 now, off at tOff; the student only watches.
@@ -191,7 +197,8 @@
         showNames: true, genesVisible: ['lacY'], controls: { genes: true, medium: false, drugs: false },
         lockedGenes: demo ? ['lacY'] : [],
         mediumRows: { glucose: 'locked', lactose: 'locked', aminoAcids: 'locked' },
-        speedOptions: [10, 60], defaultSpeed: 60, startPaused: !demo,
+        // The run opens at 1 s = 10 s: at 1 s = 1 min the decision (when to switch off) lasts about two seconds.
+        speedOptions: [10, 60], defaultSpeed: demo ? 60 : 10, startPaused: !demo,
         tabs: ['cell', 'genes', 'graphs'], graphGenes: ['lacY'], focusGene: 'lacY', hud: true,
         // The demo shows the Protein plot (with the sketch over it) above the mRNA plot, on a fixed 20-min axis.
         plots: demo ? ['protein', 'mRNA'] : null,
@@ -222,7 +229,9 @@
         goal: { text: K.fill(goalText, { count, T: v.T }), short: K.fill(goalShort, { count, T: v.T }),
           progress: settle && s.reached ? null : Math.min(1, s.count / v.T), done: !!s.reached },
         timer: { text: timer, short },
-        counter: { text: K.fill(TEXT.hud.counter, { m: s.m, mPar: v.mPar }), short: K.fill(TEXT.hud.counterShort, { m: s.m, mPar: v.mPar }) },
+        counter: s.m > v.mPar
+          ? { text: K.fill(TEXT.hud.counterOver, { m: s.m, mPar: v.mPar }), short: K.fill(TEXT.hud.counterOverShort, { m: s.m, mPar: v.mPar }), over: true }
+          : { text: K.fill(TEXT.hud.counter, { m: s.m, mPar: v.mPar }), short: K.fill(TEXT.hud.counterShort, { m: s.m, mPar: v.mPar }) },
       };
     },
 
@@ -324,6 +333,8 @@
 
     /** The result sheet's line under the efficiency bar. */
     resultLines(v, comp) { return typeof comp.m === 'number' ? [K.fill(TEXT.result.used, { m: comp.m, mPar: v.mPar })] : []; },
+    /** Goal met but over par: what to do differently (the leftover mRNA is the lesson). */
+    resultHint(v, comp, m, goal) { return goal && typeof comp.m === 'number' && comp.m > v.mPar ? [TEXT.result.hint] : []; },
 
     flags: [
       { id: 'KEPT_ON_PAST_TARGET', mc: 'MIDDLEMAN' }, { id: 'SKETCH_STOPS_AT_OFF', mc: 'MIDDLEMAN' },

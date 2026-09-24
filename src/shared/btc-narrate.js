@@ -77,7 +77,7 @@
     ['16g', 'gene.gone', 'The mRNA for {n} is gone; the protein remains and is shared out at each division.'],
     ['17a', 'burden.lac', 'With no lactose here, {n} does no work, and making it slows growth over a few generations.'],
     ['17b', 'burden', 'Ribosomes busy with {n} are not making other proteins, so growth slows over a few generations.'],
-    ['18', 'growth.aa', 'Amino acids from the medium spare the cell from making them, so it grows faster.'],
+    ['18', 'growth.aa', 'Amino acids come in from the medium, so fewer have to be made inside and the cell grows faster.'],
     ['19', 'growth.lactose', 'The cell is growing on lactose, which {Z} splits into glucose and galactose.'],
     ['19b', 'growth.both', 'The cell is growing steadily on glucose and lactose.'],
     ['20', 'growth.low', 'Glucose is scarce, so growth is slow.'],

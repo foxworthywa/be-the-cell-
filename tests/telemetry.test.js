@@ -123,3 +123,16 @@ test('L-9: a level run file includes only its own attempt\'s events', () => {
   assert.equal(file.level.code, second.code);
   assert.equal(file.records.task.finalHash.slice(0, 6).toUpperCase(), second.code.split('-')[7]);
 });
+
+test('M2 review: two tabs keep each other\'s events (the stored log is merged before a write); clear empties it', () => {
+  const st = memStorage();
+  const A = TEL.create({ storage: st, now: clock(), session: 'aaaaaaaa' });
+  const B = TEL.create({ storage: st, now: clock(), session: 'bbbbbbbb' });
+  A.log('screen', { name: 'home' }); A.flush();
+  B.log('screen', { name: 'lab' }); B.flush();
+  A.log('screen', { name: 'level' }); A.flush();
+  const stored = JSON.parse(st.getItem(TEL.KEY)).events;
+  assert.deepEqual(stored.map((e) => e.s + ':' + e.d.name).sort(), ['aaaaaaaa:home', 'aaaaaaaa:level', 'bbbbbbbb:lab']);
+  A.clear();
+  assert.deepEqual(JSON.parse(st.getItem(TEL.KEY)).events, []);
+});

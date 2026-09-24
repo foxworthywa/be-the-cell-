@@ -41,7 +41,7 @@ test('L-3: 5 variants (half-life 3/4/5 min × ×1/×2, without half-life 5 min a
   }
   assert.equal(seen.size, 5);
   assert.ok(!seen.has('5/2'), 'half-life 5 min at ×2 was removed (content version 2)');
-  assert.equal(def.version, 2);
+  assert.equal(def.version, 3, 'content 2: a variant removed; 3: the M2 review reworded its questions');
 });
 
 test('L-4/L-5: every solution meets its expectation on every variant (4 seeds each; at least 2 of 4, and 85% of the 20)', (t) => {

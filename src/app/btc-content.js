@@ -32,7 +32,7 @@
     gly: {
       slot: 1, name: 'Glucose-processing enzymes', symbol: 'gapA et al.', plural: true,
       job: 'Break glucose down, making ATP.',
-      about: 'Stands for about 10 glycolysis enzymes, drawn as one. Each glucose broken down here gives 2 ATP.',
+      about: 'Stands for about 10 enzymes that break glucose down, drawn as one. Each glucose broken down here gives 2 ATP.',
       genePhrase: 'the glucose-processing genes', noun: 'the glucose-processing enzymes', protein: 'glucose-processing enzyme',
     },
     aaSyn: {
@@ -56,7 +56,7 @@
     lacZ: {
       slot: 5, name: 'β-galactosidase', symbol: 'lacZ', plural: false, short: 'LacZ',
       job: 'Splits lactose into glucose and galactose.',
-      about: 'Four LacZ chains join into one working enzyme, drawn as a four-lobed cluster.',
+      about: 'Four LacZ chains join into one working enzyme, drawn as a four-lobed cluster. It also turns a little lactose into allolactose.',
       genePhrase: 'the β-galactosidase gene', noun: 'β-galactosidase', protein: 'β-galactosidase',
     },
     fliC: {
@@ -165,7 +165,7 @@
 
     app: {
       title: 'Be the Cell',
-      tagline: 'A bacterium you run by switching its genes on and off.',
+      tagline: 'A game about genes and proteins, in which you are in charge of a cell. In principle.',
     },
 
     tabs: { cell: 'Cell', genes: 'Genes', medium: 'Medium', graphs: 'Graphs' },
@@ -196,7 +196,7 @@
     // Cell view (LAB_UI §2).
     cell: {
       canvasLabel: '{sentence} Focus gene {name}: mRNA {m}, being made {n}, protein {p}.',
-      pausedBadge: 'Paused', pendingNote: 'Changes apply when time runs.',
+      pausedBadge: 'Paused', pendingNote: 'Changes apply when time runs.', sideRoute: 'side route',
       drugBadge: { rifampicin: 'Rifampicin on', chloramphenicol: 'Chloramphenicol on' },
       scaleBar: '1 µm · width ×2',
       outsideScale: 'outside: 1 dot = {N}',
@@ -241,6 +241,8 @@
       repressorInducer: 'Lac repressor with allolactose bound · 1 dot = 1',
       repressorBound: 'Lac repressor sitting on the operator',
       operator: 'Operator: the stretch of DNA that LacI binds',
+      // Level 1.1's backup uptake (engine flags.backupGlucoseUptake).
+      sideRoute: 'A slow side route for glucose: other transporters, not among the six genes, let a trickle in here.',
     },
     // Key sheet (LAB_UI §2.9).
     key: {
@@ -260,6 +262,7 @@
         repressor: 'lac repressor LacI (four chains)', repressorInducer: 'LacI with allolactose bound (dot in the V)',
         operator: 'operator on the DNA (LacI sits here while bound)', tuMRNA: 'lac mRNA: one strand, three genes in their colours',
         notDrawn: 'allolactose and cAMP are not drawn; the lac region panel shows where they act',
+        sideRoute: 'glucose by the slow side route (not one of the six genes)',
       },
       perDot: '1 dot = {N}',
       perMarker: 'each marker = {N}',
@@ -393,8 +396,8 @@
     },
     // Short forms of engine spec §18 items 1–21.
     about: [
-      'Each gene here has its own switch, and you set it; real cells switch genes with regulator proteins that sense conditions.',
-      'Real E. coli keeps its lac genes nearly off while glucose is present; here you control them.',
+      'In the free lab each gene has its own switch, and you set it; in real cells, regulator proteins that bind signals switch genes.',
+      'In real E. coli, LacI and CRP keep the lac genes nearly off while glucose is present; level 1.7 builds that in.',
       '"Off" still leaks a little, so a switched-off gene makes a few proteins.',
       'This strain has no second glucose transporter.',
       'Some genes stand for many: glucose processing for about 10, amino-acid making for about 100.',
@@ -452,7 +455,7 @@
       cardsEmpty: 'No cards yet. Finish a level to collect its cards.',
       aboutTitle: 'About Be the Cell',
       aboutText: [
-        'Every level gives the same kind of cell a goal. The only lever is which genes are expressed.',
+        'Every level sets you a goal in the same kind of cell. The only lever is which genes are expressed.',
         'Predictions come before the run, and questions after it. Wrong answers get their own explanation.',
         'Nothing leaves this device unless you send a file: a run file, or "Export my data".',
       ],
@@ -485,11 +488,12 @@
       sketch: {
         canvasLabel: 'Drawing area for the LacY count from minute 0 to minute 20. Draw with a finger or the mouse, or use the sliders.',
         chartLabel: 'Your sketch, dashed, over the LacY count of the test run, solid.',
-        start: 'Draw one line from left to right with your finger.',
+        start: 'Draw one line from left to right.',
         whole: 'Draw across the whole graph.',
         ready: 'Drawn from start to end. Redraw any part, or tap Done.',
         useSliders: 'Use sliders instead', useDrawing: 'Draw instead',
-        atMinute: 'minute {t}', less: 'Less at minute {t}', more: 'More at minute {t}',
+        atMinute: 'minute {t}', less: 'Less at minute {t}', more: 'More at minute {t}', valueAt: 'LacY at minute {t}',
+        sliderStart: 'Set the LacY count at each minute with − and +, or type it.', sliderReady: 'Change any value, or tap Done.',
         clear: 'Clear', done: 'Done', sketch: 'your sketch', cell: 'the cell',
         right: 'matched', wrong: 'did not match',
       },
@@ -505,14 +509,17 @@
         estimateWrong: 'Outside the range of what the cell did.',
         tryAgain: 'Try again', withoutGoal: 'Continue without the goal', continue: 'Continue',
         tryAgainNote: 'Try again gives the same cell a fresh start; your predictions stay as they are.',
+        tryAgainDesign: 'Change the DNA and run it again. Your predictions stay as they are.',
       },
-      echo: { heading: 'Meanwhile, in you', cardsHeading: 'Cards collected', universal: 'Universal', bacteria: 'Bacteria-only' },
+      // "Not in your cells", not "Bacteria-only": archaea have no nucleus either, and some animals have operons.
+      echo: { heading: 'Meanwhile, in you', cardsHeading: 'Cards collected', universal: 'Universal', bacteria: 'Not in your cells' },
       complete: {
         title: 'Level complete',
         goalMet: 'Goal met', goalNotMet: 'Goal not met', efficiency: 'Efficiency {v}', prediction: 'Prediction {v}',
         debrief: 'Debrief {a} of {b} right first time', expert: 'Expert {v}', expertOf: 'Expert {a} of {b}', total: 'Total {v}', notScored: 'Not scored',
         codeLabel: 'Completion code', copy: 'Copy code', share: 'Share', copied: 'Copied. Paste it into the Canvas quiz.',
         copyFailed: 'Press and hold the code to copy it.', keep: 'Paste your code into Canvas now; this device may not keep it.',
+        canvas: 'Paste it into the Canvas quiz for this level.',
         download: 'Download this run', again: 'Play again', next: 'Next level', startNamed: 'Start level {id}', levels: 'Levels',
         shareTitle: 'Be the Cell code', cardsCollected: 'Cards collected: {list}',
       },
@@ -522,7 +529,7 @@
       },
       reveal: 'Gene {letter} is now named: {name}.',
       table: {
-        note: 'Set every cell of the three strains; the fourth is Expert and may be left.', expert: 'Expert',
+        note: 'Answer both columns for the first three strains; the fourth is Expert and can be left blank.', expert: 'Expert',
         choose: 'Choose for {row}, {col}', differs: 'differs from normal',
       },
       design: {

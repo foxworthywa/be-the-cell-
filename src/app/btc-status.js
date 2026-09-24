@@ -76,13 +76,17 @@
       this.root = root;
     }
 
-    /** Level mode: shows the Levels button and the level title (null: the free-play lab). */
-    setLevel(title) {
+    /**
+     * Level mode: shows the Levels button and the level title. title null: no level; lab true: the
+     * free-play lab, which keeps the Levels button (home) without a title.
+     */
+    setLevel(title, lab) {
       const e = this.el, on = title !== null && title !== undefined;
-      e.levels.hidden = !on;
+      const btn = on || !!lab;
+      e.levels.hidden = !btn;
       e.title.hidden = !on;
       LY.setText(e.title, on ? title : '');
-      this.root.classList.toggle('has-levels', on);
+      this.root.classList.toggle('has-levels', btn);
       this.lastRunning = null;
     }
 

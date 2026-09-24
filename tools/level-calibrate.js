@@ -363,7 +363,10 @@ function calibrate11(base) {
 function calibrate17(base) {
   console.log('\nl17 (level 1.7)');
   const MED = { G: { glucose_mM: 10, lactose_mM: 0 }, L: { glucose_mM: 0, lactose_mM: PV.lactosePresent } };
-  const lac = (seed, design) => new Cell({ seed, strain: 'm2-lac', start: 'steady', design });
+  // The level's own parameter overrides (content 2: inducer exclusion, IEmax), so every measurement uses its cell.
+  const params = loadLevel('btc-level-1-7.js', base).params || {};
+  console.log('  level parameters: ' + (Object.keys(params).length ? JSON.stringify(params) : 'engine defaults'));
+  const lac = (seed, design) => new Cell({ seed, strain: 'm2-lac', start: 'steady', design, params: Object.assign({}, params) });
   const medium = (c, m) => c.command(Object.assign({ type: 'setMedium' }, m));
   // λL: the induced wild type growing on lactose (3 h of IPTG in glucose, then 3 h on lactose, then 1 h measured).
   const lams = [], Zinds = [];

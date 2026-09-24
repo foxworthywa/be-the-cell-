@@ -59,18 +59,25 @@
   // Par: the normal lac genes (§7.7.13 reference).
   const DESIGN_REF = Object.freeze({ lac: { promoter: 1, operator: true, crpSite: true }, lacI: { allele: 'wt', promoter: 1 } });
   const ROWS = ['wt', 'dlacI', 'Oc', 'Is'];
+  // Inducer exclusion (content version 2, M2 biology review): while glucose flows in, EIIA-Glc blocks up to 80% of
+  // LacY, so little lactose (and allolactose) gets in and the cell uses glucose first. Without it the cell used both
+  // sugars together after a lactose phase (lactose 20–59% of the sugar in both-sugar phases), against Monod's diauxie.
+  // IEmax 1 is not usable here: a cell that has never seen lactose then fails to adapt on some schedules.
+  const PARAMS = Object.freeze({ IEmax: 0.8 });
+  // Content version (LEVELS §3.2): 2 = inducer exclusion, the Expert objective relabelled, the questions reworded (M2 review).
+  const CONTENT = 2;
   const HOURS = ['zero', 'one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'nine', 'ten', 'eleven', 'twelve', 'thirteen',
     'fourteen', 'fifteen', 'sixteen', 'seventeen', 'eighteen', 'nineteen', 'twenty', 'twenty-one', 'twenty-two', 'twenty-three', 'twenty-four'];
 
   const TEXT = {
     title: 'Nobody\'s in charge',
-    challenge: 'Glucose and lactose come and go. Write the DNA, then let it run.',
+    challenge: 'Write the DNA, then let it run.',
     task: {
       goal: 'Keep the cell growing through every change, with no controls.',
       core: ['Grow on lactose in every lactose phase.',
-        'Stay within par for growth, waste and lag; par is the normal lac genes run on your schedule.'],
+        'Do about as well as the normal lac genes on your schedule: grow as much, waste little in glucose, start fast on lactose.'],
       // The fraction follows the calibrated threshold (§16.8); written in here so every reader (the codes page too) sees it.
-      expert: ['Glucose first: with both sugars present, make at most ' + (L.rBLMax <= 0.25 ? 'a quarter' : 'half') + ' as much lac protein as on lactose alone.',
+      expert: ['Glucose effect: with both sugars present, make at most ' + (L.rBLMax <= 0.25 ? 'a quarter' : 'half') + ' as much lac protein as on lactose alone.',
         'Predict all four strains and the CRP question correctly.'],
     },
     story: {
@@ -80,9 +87,11 @@
         { who: 'narrator', text: 'The sugars change without warning, for {hoursWord} hours. The console has lost its buttons.' },
         { who: 'narrator', text: 'You may write the DNA. After that it runs without you.' },
       ],
+      // The story's first letting-go beat: the Commander concedes (it comes after the debrief, LEVELS §4.1).
       outro: [
         { who: 'narrator', text: 'The cell kept growing through every change. You were not involved.' },
-        { who: 'ribosome', text: 'Still reading whatever lands on me.' },
+        { who: 'commander', text: 'Fine. I write the DNA, and after that I keep out of it.' },
+        { who: 'ribosome', text: 'Still reading whatever lands on me. It has worked so far.' },
         { who: 'narrator', text: 'Nobody switched anything. LacI, allolactose and a great many collisions did.' },
       ],
       onRun: [
@@ -103,6 +112,7 @@
     },
     table: {
       prompt: 'Which strains make LacZ?',
+      how: 'How the switch works: LacI sits on the operator and blocks RNA polymerase, unless allolactose, made from lactose, is bound to it.',
       rows: {
         wt: 'Normal lac genes', dlacI: 'No repressor gene', Oc: 'No operator', Is: 'Repressor that cannot bind allolactose',
       },
@@ -113,40 +123,40 @@
       prompt: 'Glucose and lactose are both present. Which design makes less LacZ?',
       options: [
         { t: 'The one with the CRP site.', ok: true,
-          fb: 'Right. With glucose getting in, cAMP is low, so CRP gives the lac promoter little help.' },
+          fb: 'With glucose getting in, cAMP is low, CRP seldom sits on its site, and the lac promoter fires less often.' },
         { t: 'The one without the CRP site.', mc: 'OTHER',
-          fb: 'Without the site, CRP cannot help or hold back; the promoter runs at its own strength, sugar or not.' },
+          fb: 'In this game a promoter without the site ignores CRP, so glucose holds it back much less. The real lac promoter is weak without CRP.' },
         { t: 'Both make the same.', mc: 'OTHER',
           fb: 'The CRP site ties the promoter to cAMP, and cAMP is low while glucose gets in.' },
       ],
     },
     d1: {
-      prompt: 'When lactose arrived, what switched the lac genes on?',
+      prompt: 'In the normal design, what switched the lac genes on when lactose arrived?',
       options: [
-        { t: 'Allolactose made from lactose fitted LacI and pulled it off the operator.', ok: true,
-          fb: 'Right. With the operator free, RNA polymerase started the lac genes. Nothing else was involved.' },
+        { t: 'Allolactose made from lactose bound to LacI, changed its shape, and LacI let go of the operator.', ok: true,
+          fb: 'The few LacY let lactose in, LacZ turned some into allolactose, and with the operator free RNA polymerase could start the lac genes.' },
         { t: 'The cell decided lactose was worth using.', mc: 'CELL_DECIDES',
           fb: 'Nothing decided. LacI lets go of the operator only when allolactose is bound to it.' },
         { t: 'You did, by designing the DNA.', mc: 'COMMANDER',
           fb: 'You wrote the parts before the run. During it, LacI and allolactose did the switching.' },
         { t: 'The ribosomes, once they saw lactose.', mc: 'RIBOSOME_DECIDES',
-          fb: 'Ribosomes see nothing. They read whatever mRNA lands on them.' },
+          fb: 'Ribosomes see nothing and read whatever mRNA lands on them. The switch was at the DNA: lac mRNA appeared once LacI let go.' },
       ],
     },
     d2: {
       prompt: 'Why did the normal design make so little LacZ in glucose?',
       options: [
         { t: 'With no lactose there was no allolactose, so LacI stayed on the operator.', ok: true,
-          fb: 'Right. RNA polymerase was blocked until something pulled LacI off.' },
+          fb: 'LacI sat on the operator and blocked RNA polymerase; with no allolactose, nothing changed its shape.' },
         { t: 'The cell switched the lac genes off to save energy.', mc: 'CELL_DECIDES',
-          fb: 'Nothing was saved on purpose. LacI stayed bound because nothing pulled it off.' },
+          fb: 'Energy was saved, but nobody saved it. With no allolactose to change its shape, LacI stayed on the operator.' },
         { t: 'Glucose damages the lac genes.', mc: 'OTHER',
-          fb: 'The genes were untouched. A protein sat on the operator, and they were read again once it came off.' },
+          fb: 'The genes were untouched. A protein sat on the operator, and they were transcribed again once it came off.' },
         { t: 'Ribosomes skip lac mRNA when glucose is present.', mc: 'RIBOSOME_DECIDES',
           fb: 'Ribosomes read any mRNA. There was little lac mRNA to read, because LacI blocked transcription.' },
       ],
     },
-    echo1: 'Your cells switch genes on and off with regulatory proteins called transcription factors. Each binds DNA when a signal fits it.',
+    echo1: 'In your cells, transcription factors switch genes on and off. Some block transcription, as LacI does; many change shape when a signal binds.',
     echo2: 'Your genes are not grouped into operons; most have their own promoter, and several factors act on each. Nobody is in charge there either.',
     cards: { repressor: 'Repressor protein', operon: 'Operon' },
     design: {
@@ -156,15 +166,16 @@
       lacUnit: 'lac operon',
       genes: 'lacZ, lacY, lacA: the genes, not editable',
       parts: {
-        'lacI.promoter': { label: 'promoter', name: 'Promoter of the repressor gene', desc: 'How often the repressor gene is transcribed.',
+        'lacI.promoter': { label: 'promoter', name: 'Promoter of the repressor gene', desc: 'How often the repressor gene is copied into mRNA; strong makes about ten times as much LacI.',
           options: [{ v: 1, t: 'normal' }, { v: 10, t: 'strong (Iq)' }] },
-        'lacI.allele': { label: 'lacI', name: 'Repressor gene (lacI)', desc: 'Its protein, LacI, sits on the operator unless allolactose is bound to it.',
+        'lacI.allele': { label: 'lacI', name: 'Repressor gene (lacI)', desc: 'Its protein, LacI, sits on the operator and blocks the lac genes, unless allolactose is bound to it.',
           options: [{ v: 'wt', t: 'normal' }, { v: 'deleted', t: 'deleted' }, { v: 'Is', t: 'cannot bind allolactose' }] },
-        'lac.crpSite': { label: 'CRP site', name: 'CRP site', desc: 'CRP with cAMP bound helps RNA polymerase start here.',
-          options: [{ v: true, t: 'present' }, { v: false, t: 'absent' }] },
+        'lac.crpSite': { label: 'CRP site', name: 'CRP site', desc: 'With the site, the lac promoter fires fully only when CRP with cAMP sits here. Without it, the promoter ignores CRP.',
+          note: 'That is this game\'s rule. The real lac promoter is weak without its CRP site.',
+          options: [{ v: true, t: 'present' }, { v: false, t: 'absent (promoter ignores CRP)', short: 'absent' }] },
         'lac.promoter': { label: 'promoter', name: 'Promoter of the lac genes', desc: 'How often RNA polymerase starts the lac genes when nothing blocks it.',
           options: [{ v: 0.5, t: '×½' }, { v: 1, t: '×1' }, { v: 2, t: '×2' }, { v: 4, t: '×4' }] },
-        'lac.operator': { label: 'operator', name: 'Operator', desc: 'The stretch of DNA that LacI binds.',
+        'lac.operator': { label: 'operator', name: 'Operator', desc: 'When LacI sits here, RNA polymerase cannot start the lac genes.',
           options: [{ v: true, t: 'present' }, { v: false, t: 'absent' }] },
       },
       summary: 'This design: {parts}.',
@@ -176,13 +187,13 @@
       keepEditing: 'Keep editing',
       runNow: 'Run',
     },
-    medium: 'The sugars follow the flask. The next change is not announced.',
+    medium: 'The flask sets the sugars. The next change is not announced.',
     fractions: { quarter: 'a quarter', half: 'half' },
     phases: { G: 'glucose', L: 'lactose', B: 'both sugars' },
     hud: {
       goal: 'Now: {phase} · {status}', goalShort: '{Phase} · {status}', goalFresh: 'Now: {phase}', goalFreshShort: '{Phase}',
       status: { growing: 'growing', slowed: 'slowed', stopped: 'stopped' },
-      timer: '{elapsed} of {total}', timerShort: '{elapsed}',
+      timer: '{elapsed} of {total}', timerShort: '{eh}/{th} h',
       counter: 'No controls', counterShort: 'No controls',
       toEnd: 'Run to the end', toEndShort: 'To the end',
       next: 'Next change: unknown',
@@ -195,12 +206,15 @@
       chart: 'Doublings over the run: your design (solid) and par (dashed), over the sugar phases.',
       yours: 'your design', par: 'par (normal lac genes)', x: 'h', y: 'doublings',
       working: 'Working out par…',
+      // The trade-offs a design made, in words (a design can win one bar by losing another).
+      tradeWaste: 'Ready for lactose at once, but it paid for that in glucose: the lac proteins made there cost amino acids and ATP.',
+      tradeLag: 'Little waste in glucose, but slow to start on lactose: few lac proteins were there when it arrived.',
     },
     narr: {
       super: 'This LacI cannot bind allolactose, so it stays on the operator even with lactose inside.',
       noop: 'With no operator, nothing blocks RNA polymerase, so the lac genes are transcribed all the time.',
       norep: 'With no LacI, nothing sits on the operator, so the lac genes are transcribed all the time.',
-      crp: 'Glucose is getting in, so cAMP is low and CRP gives the lac promoter little help.',
+      crp: 'Glucose is getting in, so cAMP is low, CRP seldom sits on its site, and the lac promoter fires less often.',
       lag: 'Only lactose is here, and the cell has few lac proteins yet, so it grows slowly until more are made.',
       induced: 'Allolactose is bound to LacI, so LacI has let go of the operator and the lac genes are transcribed.',
       repressed: 'LacI is sitting on the operator, so RNA polymerase rarely starts the lac genes.',
@@ -229,12 +243,12 @@
   const ANSWER = { wt: { glc: 0, lac: 1 }, dlacI: { glc: 1, lac: 1 }, Oc: { glc: 1, lac: 1 }, Is: { glc: 0, lac: 0 } };
 
   const DEF = {
-    id: '1.7', code: '17', order: 7, version: 1, title: 'title', challenge: 'challenge', text: TEXT,
+    id: '1.7', code: '17', order: 7, version: CONTENT, title: 'title', challenge: 'challenge', text: TEXT,
     mode: 'designer', scored: true, los: ['LO6'],
     misconceptions: ['CELL_DECIDES', 'COMMANDER', 'RIBOSOME_DECIDES', 'REPRESSOR_AS_ACTIVATOR', 'OPERATOR_IRRELEVANT'],
     estMinutes: 10, engine: '1.1',
     phases: ['intro', 'task', 'predict', 'design', 'run', 'result', 'debrief', 'echo', 'complete'],
-    designStart: DESIGN_START, designRef: DESIGN_REF, templates: TEMPLATES, media: MEDIA, lacLengths: LAC_LEN,
+    designStart: DESIGN_START, designRef: DESIGN_REF, templates: TEMPLATES, media: MEDIA, lacLengths: LAC_LEN, params: PARAMS,
     par: { design: DESIGN_REF, ticks: (v) => totalTicks(v) },
     spans, totalTicks, fullDesign,
 
@@ -270,9 +284,9 @@
       return {
         seed: K.seedFor(v.seed, role === 'par' ? 'task' : role), strain: 'm2-lac', start: 'steady', design,
         medium: Object.assign({ aminoAcids_mM: 0 }, MEDIA[sp[0].kind]),
-        flags: { controls: 'locked' },
+        flags: { controls: 'locked' }, params: Object.assign({}, PARAMS),
         schedule: sp.slice(1).map((p) => ({ tick: p.t0, cmd: Object.assign({ type: 'setMedium' }, MEDIA[p.kind]) })),
-        variant: { levelId: '1.7', content: 1, seed: v.seed, template: v.template, phases: v.phases },
+        variant: { levelId: '1.7', content: CONTENT, seed: v.seed, template: v.template, phases: v.phases },
       };
     },
 
@@ -304,7 +318,9 @@
       return {
         goal: { text: K.fill(fresh ? TEXT.hud.goalFresh : TEXT.hud.goal, vars), short: K.fill(fresh ? TEXT.hud.goalFreshShort : TEXT.hud.goalShort, vars),
           progress: Math.min(1, s.tick / total), done: false, sub: TEXT.hud.next },
-        timer: { text: K.fill(TEXT.hud.timer, { elapsed, total: K.clock(total, false) }), short: K.fill(TEXT.hud.timerShort, { elapsed }) },
+        // On a phone the whole hours, "3/15 h", so the phase and growth still fit (the goal chip's bar shows the same progress).
+        timer: { text: K.fill(TEXT.hud.timer, { elapsed, total: K.clock(total, false) }),
+          short: K.fill(TEXT.hud.timerShort, { eh: Math.floor(Math.min(s.tick, total) / 3600), th: Math.round(total / 3600) }) },
         counter: { text: TEXT.hud.counter, short: TEXT.hud.counterShort },
         action: s.tick < total ? { id: 'runToEnd', text: TEXT.hud.toEnd, short: TEXT.hud.toEndShort } : null,
       };
@@ -314,6 +330,7 @@
       {
         id: 'tt', kind: 'table', prompt: TEXT.table.prompt,
         rows: ROWS.map((id) => ({ id, label: TEXT.table.rows[id] })),
+        intro: TEXT.table.how,
         cols: [{ id: 'glc', label: TEXT.table.cols.glc }, { id: 'lac', label: TEXT.table.cols.lac }],
         choices: TEXT.table.choices, answer: ANSWER,
         coreRows: (v) => v.rows.slice(),
@@ -457,6 +474,14 @@
         { key: 'lag', label: R.lag, value: comp.sub.lag, line: K.fill(R.lagLine, { l: Math.round(a.lag), p: Math.round(b.lag) }) },
       ];
     },
+    /** A design can win one bar by losing another: the trade-off in words (the Commander's always-on design). */
+    resultHint(v, comp, m, goal) {
+      const b = comp && comp.sub;
+      if (!goal || !b) return [];
+      if (b.waste < 0.8 && b.lag >= 0.8) return [TEXT.result.tradeWaste];
+      if (b.lag < 0.8 && b.waste >= 0.8) return [TEXT.result.tradeLag];
+      return [];
+    },
     /** The result sheet's chart: doublings over the run, the design against par, over the phases. */
     resultChart(v, comp) {
       if (!comp.mine || !comp.par) return null;
@@ -482,6 +507,8 @@
       cards: [{ id: 'repressor', title: 'cards.repressor', stamp: 'universal' }, { id: 'operon', title: 'cards.operon', stamp: 'bacteria' }],
     },
     story: { intro: TEXT.story.intro, outro: TEXT.story.outro, extra: { onRun: TEXT.story.onRun, missed: TEXT.story.missed, alwaysOn: TEXT.story.alwaysOn } },
+    /** LacI's line at the start of the run is not true of a design without lacI. */
+    skipBeat(name, v, design) { return name === 'onRun' && !!design && fullDesign(design).lacI.allele === 'deleted'; },
     /** "LacI, allolactose … did" is true only when the design keeps a working switch; otherwise another outro. */
     outroKey(v, m, goal) {
       if (!goal) return 'missed';

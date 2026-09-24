@@ -183,9 +183,20 @@ mannose uptake system is deleted (ΔmanXYZ), so PtsG is the only way glucose get
   binding (half at 1.3 µM, Hill 2); a repressor on the operator is pulled off more slowly and
   only at higher levels. `Is` repressors cannot bind inducer.
 - Glucose first: while glucose flows in through the PTS, cAMP is low and CRP gives the free
-  promoter little help (≈15% in 10 mM glucose), so with both sugars the operon makes about a
-  tenth of what it makes on lactose alone. The leak from a bound operator is not scaled by CRP.
-  Inducer exclusion (EIIA-Glc blocking LacY) is off by default.
+  promoter little help (≈15% in 10 mM glucose), so with both sugars the operon makes a tenth to
+  a quarter (0.08–0.28 before inducer exclusion; 0.13–0.25 with it, level 1.7 content 2) of what
+  it makes on lactose alone. The leak from a bound operator is not scaled by CRP.
+  Inducer exclusion (EIIA-Glc blocking LacY while glucose flows in) is off by default (`IEmax`
+  0); level 1.7 sets `IEmax` 0.8 (M2 biology review): without it, a cell that had just been on
+  lactose kept using both sugars in the next both-sugar phase (lactose 20–59% of its sugar),
+  against Monod's diauxie (Kimata 1997, doi:10.1073/pnas.94.24.12914; Inada 1996,
+  doi:10.1046/j.1365-2443.1996.24025.x). With it, lactose is 8% of the sugar in
+  both-sugar phases (median over 20 variants; 1–26%), and every 1.7 solution still meets its
+  expectation. `IEmax` 1 is not used: on one variant in 20 the wild type then never adapts.
+- The CRP site in level 1.7: with it, the lac promoter fires fully only when CRP–cAMP sits there;
+  without it the promoter ignores CRP (a lacUV5-like promoter, crpFactor 1). That is the game's
+  rule, and the designer says so: the real lac promoter is weak without its CRP site (more than
+  50-fold; Kuhlman 2007).
 - Switching from glucose to lactose alone, a wild-type cell that carries a few basal LacY and
   LacZ adapts after a lag of about two hours (125–146 min on 12 seeds; median 132): it pauses at
   a charge of 0.12–0.4 while its permeases bring in a trickle of lactose, induces the operon
@@ -358,16 +369,21 @@ Engineering tests (determinism, replay, mass balance, fuzzing, build checks) are
 Each item gives the short form for students first (the lab's "About this cell" sheet carries
 short forms like these), then the detail for instructors.
 
-1. **Lab strain.** *"Each gene here has its own switch, and you set it; real cells switch genes
-   with regulator proteins that sense conditions."* Also: *"Real E. coli keeps its lac genes
-   nearly off while glucose is present; here you control them."* and *"'Off' still leaks a
+1. **Lab strain.** *"In the free lab each gene has its own switch, and you set it; in real cells,
+   regulator proteins that bind signals switch genes."* Also: *"In real E. coli, LacI and CRP keep
+   the lac genes nearly off while glucose is present; level 1.7 builds that in."* and *"'Off' still leaks a
    little, so a switched-off gene makes a few proteins."* and *"This strain has no second
    glucose transporter."*
    The lab strain has no lac operon and no regulation. "Off" leaves a 1/1,000 leak; a knockout
    removes the gene (engine only; not offered in the lab). Strain `m2-lac` (level 1.7) has the
    regulated lac operon ("The lac operon"). The strain lacks the mannose uptake
    system, so without PtsG no glucose gets in. A backup-transporter option (engine config only
-   in M1) reproduces the real ΔptsG growth rate.
+   in M1) reproduces the real ΔptsG growth rate. Level 1.1 turns it on and says so: "A slow side
+   route lets a trickle of glucose in" (about 15% of normal uptake, growth 0.35–0.46 λ_ref, charge
+   0.56–0.63). The cell view draws the route as a dashed gate labelled "side route" at two fixed
+   places in the membrane, and the glucose that takes it (its share uBasal·V ÷ (uBasal·V +
+   PtsG·k_pts)) is drawn entering only there, never through bare membrane. Real ΔptsG cells take
+   glucose in through other transporters (the mannose PTS, GalP, Mgl).
 2. **Lumped genes.** *"Some genes stand for many: the glucose-processing card for about 10
    genes, the amino-acid-making card for about 100."*
    The importer card stands for about 10 genes. The rest of the proteome is three sectors with
@@ -463,7 +479,12 @@ short forms like these), then the detail for instructors.
     - The loop between operators is lumped into one operator per gene copy with a small leak
       while bound; the leak does not depend on CRP (CRP also tightens the loop; Kuhlman 2007).
     - cAMP follows the glucose flux through PtsG at once, with no cAMP pool, synthesis or
-      export; inducer exclusion (EIIA-Glc blocking LacY) is left out by default.
+      export; inducer exclusion (EIIA-Glc blocking LacY) is left out by default, and level 1.7
+      turns it on at 80% (`IEmax` 0.8). Without it the 1.7 cell used both sugars together after
+      a lactose phase (lactose 20–59% of the sugar in both-sugar phases); with it 8% (median;
+      1–26%). Real cells block LacY more completely while glucose flows in.
+    - A lac promoter without its CRP site ignores CRP here (full strength); the real one is weak
+      without it (Kuhlman 2007). Level 1.7 tells the student so.
     - Allolactose is a signal pool: its carbon is counted as split lactose at once; it is broken
       down by LacZ and halved at division.
     - IPTG in the medium is inside at once (it diffuses in within seconds).

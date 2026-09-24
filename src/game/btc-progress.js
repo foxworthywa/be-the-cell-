@@ -12,6 +12,10 @@
  * and resuming continues the same attempt. A think-aloud override (?v=) is
  * attempt 0 and does not count as completed. Every storage access is wrapped
  * in try/catch: the app works when storage throws, it just forgets.
+ *
+ * Two tabs share storage: every change re-reads the stored progress first (sync()), and the app
+ * re-reads it when another tab writes it (the storage event), so neither tab writes an old copy
+ * back over the other's codes and attempts.
  */
 (function (root, factory) {
   if (typeof module === 'object' && module.exports) {
@@ -45,6 +49,8 @@
     try { if (storage) storage.removeItem(key); } catch (e) { /* ignored */ }
   }
 
+  const valid = (x) => !!x && typeof x === 'object' && x.v === 1 && typeof x.deviceSeed === 'number' && !!x.levels && typeof x.levels === 'object';
+
   class Progress {
     /** o: {storage, today() → 'YYYY-MM-DD', randomU32() → uint32, deviceSeed? (fixed, e.g. ?test=1&seed=)} */
     constructor(o) {
@@ -52,10 +58,24 @@
       this.storage = opts.storage || null;
       this.today = opts.today || (() => '1970-01-01');
       this.randomU32 = opts.randomU32 || (() => 0);
+      this.fixedSeed = opts.deviceSeed !== undefined && opts.deviceSeed !== null ? opts.deviceSeed >>> 0 : null;
       const saved = read(this.storage, KEY);
-      this.data = saved && saved.v === 1 && typeof saved.deviceSeed === 'number' && saved.levels ? saved : this.fresh();
-      if (opts.deviceSeed !== undefined && opts.deviceSeed !== null) this.data.deviceSeed = opts.deviceSeed >>> 0;
+      this.data = valid(saved) ? saved : this.fresh();
+      if (this.fixedSeed !== null) this.data.deviceSeed = this.fixedSeed;
       if (!saved) this.save();
+    }
+
+    /**
+     * Re-reads the stored progress, so a second tab (or the installed app beside a browser tab)
+     * never writes an old copy back over a newer one: every change starts from what is stored now.
+     * A fixed device seed (?test=1&seed=) is kept. Returns true when the stored copy was adopted.
+     */
+    sync() {
+      const saved = read(this.storage, KEY);
+      if (!valid(saved)) return false;
+      this.data = saved;
+      if (this.fixedSeed !== null) this.data.deviceSeed = this.fixedSeed;
+      return true;
     }
 
     fresh() {
@@ -78,6 +98,7 @@
      */
     attemptFor(id, overrideSeed) {
       if (overrideSeed !== undefined && overrideSeed !== null) return { attempt: 0, variantSeed: overrideSeed >>> 0, override: true };
+      this.sync();
       const e = this.entry(id);
       if (e.current) return Object.assign({}, e.current);
       return { attempt: e.completed + 1, variantSeed: K.variantSeed(this.data.deviceSeed, id, e.completed), override: false };
@@ -85,12 +106,14 @@
 
     /** A new attempt (Play again): the next attempt number and its variant. */
     nextAttempt(id) {
+      this.sync();
       const e = this.entry(id);
       return { attempt: e.completed + 1, variantSeed: K.variantSeed(this.data.deviceSeed, id, e.completed), override: false };
     }
 
     /** Marks an attempt as open (Continue on the home screen). */
     open(id, ref) {
+      this.sync();
       this.entry(id).current = { attempt: ref.attempt, variantSeed: ref.variantSeed, override: !!ref.override };
       this.data.lastLevel = id;
       this.save();
@@ -98,6 +121,7 @@
 
     /** Records a finished attempt; it is no longer open. */
     complete(id, result) {
+      this.sync();
       const e = this.entry(id);
       e.results.push(result);
       if (!result.override) e.completed++;
@@ -118,6 +142,7 @@
     }
 
     addCards(ids) {
+      this.sync();
       let added = 0;
       for (const id of ids) if (!this.data.cards[id]) { this.data.cards[id] = true; added++; }
       if (added) this.save();

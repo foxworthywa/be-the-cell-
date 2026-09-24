@@ -6,8 +6,10 @@
  *   [ goal chip (flex, tap: task card) ][ timer ][ counter ]
  *
  * The level supplies the words through def.hud(variant, monitorState):
- * {goal: {text, short?, progress: 0..1|null, done, gauge?}, timer: {text, short?}, counter: {text, short}}.
- * Under 400 px of width the counter (and the goal and timer, when they have one) show their short forms.
+ * {goal: {text, short?, progress: 0..1|null, done, gauge?}, timer: {text, short?}, counter: {text, short, over?}}.
+ * Under 400 px of width the counter (and the goal and timer, when they have one) show their short forms; the
+ * short counter keeps one word of unit ("2/3 tests", "32/32 mRNA", "1/2 changes"), and counter.over (past par)
+ * marks it in the warning colour, with "over par" in its long form.
  * A goal with a gauge {lo, hi, max, value} (1.4) draws a band gauge along the chip's
  * bottom instead of a progress bar: the band marked, a tick at the value. State is
  * never colour alone: the goal chip carries words. When the run ends with the
@@ -57,6 +59,8 @@
       } : null,
       timer: (m.timer && ((narrow && m.timer.short) || m.timer.text)) || '',
       counter: m.counter && !(narrow && act) ? (narrow && m.counter.short ? m.counter.short : m.counter.text) : '',
+      // Over par: the long form says so in words; both forms are marked (a colour on top of the numbers).
+      over: !!(m.counter && m.counter.over),
       label: F.fill(G.taskLabel, { text: goal.text || '' }),
     };
   }
@@ -99,6 +103,7 @@
       LY.setText(this.el.timer, t.timer);
       LY.setText(this.el.counter, t.counter);
       this.el.counter.hidden = !t.counter;
+      this.el.counter.classList.toggle('is-over', t.over);
       LY.setText(this.el.sub, t.sub);
       this.el.sub.hidden = !t.sub;
       this.el.action.hidden = !t.action;

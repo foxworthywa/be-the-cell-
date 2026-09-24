@@ -160,11 +160,13 @@ test('the level narrator rules are true whenever they speak, and no line names a
   const facts = OBS.createFacts();
   const seen = new Set();
   const seeds = byRank([0, 1, 0, 1]);
-  const scenarios = ['reference', 'expert', 'reasoned', 'lactoseRoute', 'shotgun'];
+  // 'idle' runs a while before any gene is switched on: the side route's line (l11.trickle).
+  const scenarios = ['reference', 'expert', 'reasoned', 'lactoseRoute', 'shotgun', 'idle'];
+  const idle = { every: 5, act() {} };
   for (const { vs } of seeds) {
     for (const name of scenarios) {
       const r = new RUN.LevelRunner({ def, variantSeed: vs, attempt: 1 }).start();
-      const c = r.run.cell, v = r.variant, sol = def.solutions[name];
+      const c = r.run.cell, v = r.variant, sol = name === 'idle' ? idle : def.solutions[name];
       const ids = c.observe().genes.map((g) => g.id);
       // The rules as the runner hands them to the narrator, reading this loop's monitor (the runner itself is still at the intro).
       const lv = { phase: 'run', monitor: null, variant: v };
@@ -174,7 +176,7 @@ test('the level narrator rules are true whenever they speak, and no line names a
         return rule;
       });
       const mem = N.createMemory({ showNames: false });
-      const limit = Math.min(def.limitMin * 60, 90 * 60);
+      const limit = name === 'idle' ? 20 * 60 : Math.min(def.limitMin * 60, 90 * 60);
       for (let t = 0; t < limit && !r.run.monitor.end(); t++) {
         if (t % sol.every === 0) sol.act(c.observe(), c.tick, { command: (cmd) => c.command(cmd) }, v);
         c.step();                                                 // the run's recorder feeds the monitor
@@ -191,14 +193,25 @@ test('the level narrator rules are true whenever they speak, and no line names a
         seen.add(out.key);
         const g = out.gene ? vw.geneById[out.gene] : null;
         if (/^l11\.reveal/.test(out.key)) {
-          assert.ok(g && g.functionSeen && m.revealed[out.gene] && c.tick - m.revealTick[out.gene] <= 60, where);
+          assert.ok(g && g.functionSeen && m.revealed[out.gene] && c.tick - m.revealTick[out.gene] <= 600, where);
           assert.ok(out.text.includes(C.genes[out.gene].noun) || out.text.includes(C.genes[out.gene].short || '\u0000'), where + ' names the revealed gene');
         }
         if (out.key === 'l11.nofit') assert.ok(g && out.gene !== 'ptsG' && g.level !== 'off' && g.protein > 0 && !m.revealed[out.gene], where);
         if (out.key === 'l11.nosplit') assert.ok(vw.lactose.inside > 0 && !m.revealed.lacZ, where);
         if (out.key === 'l11.busy') assert.ok(g && ['lacY', 'lacZ'].includes(out.gene) && g.level !== 'off' && !m.revealed[out.gene], where);
+        // Gene → mRNA → protein: the gene is on; "no protein yet" while its episode has none; "building up" once it has.
+        if (/^l11\.(waiting|tx|rising)$/.test(out.key)) assert.ok(g && CAND.includes(out.gene) && g.level !== 'off', where);
+        if (out.key === 'l11.tx') assert.ok(g.episode.firstProteinTick === null && g.mRNA + g.nascent > 0, where);
+        if (out.key === 'l11.rising') assert.ok(g.protein > 0, where);
+        // The side route: glucose comes in, most of it not through PtsG, and ATP is low.
+        if (out.key === 'l11.trickle') {
+          const pts = vw.geneById.ptsG.protein * c.p.k_pts, side = c.uBasal * vw.cell.V_fL;
+          assert.ok(!m.found && vw.flux.glucoseIn > 0 && side > pts && vw.energy.E <= 0.7, where);
+        }
       }
     }
   }
-  for (const key of ['l11.revealGlucose', 'l11.revealLactose', 'l11.nofit']) assert.ok(seen.has(key), key + ' was never reached: ' + [...seen].join(', '));
+  for (const key of ['l11.revealGlucose', 'l11.revealLactose', 'l11.nofit', 'l11.trickle', 'l11.tx', 'l11.rising']) {
+    assert.ok(seen.has(key), key + ' was never reached: ' + [...seen].join(', '));
+  }
 });

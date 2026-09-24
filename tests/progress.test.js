@@ -118,3 +118,28 @@ test('L-10: storage that throws: nothing throws, the app just forgets', () => {
   st.setItem(PROG.KEY, '{not json');
   assert.equal(PROG.create(opts(st)).deviceSeed, 3141592653);
 });
+
+test('M2 review: two tabs on one device never write an old copy of the progress over the other\'s codes', () => {
+  const st = memStorage();
+  const A = PROG.create(opts(st)), B = PROG.create(opts(st));        // both open on the home screen
+  const a1 = A.attemptFor('1.4');
+  A.open('1.4', a1);
+  A.complete('1.4', { attempt: 1, variantSeed: a1.variantSeed, total: 80, code: 'CODE-A', override: false });
+  A.addCards(['protein-turnover']);
+  // Tab B, loaded before any of that, opens another level: its change starts from what is stored now.
+  const b1 = B.attemptFor('1.1');
+  B.open('1.1', b1);
+  const fresh = PROG.create(opts(st));
+  assert.equal(fresh.latestResult('1.4').code, 'CODE-A', 'tab A\'s code survives tab B\'s write');
+  assert.deepEqual(fresh.cardIds(), ['protein-turnover']);
+  assert.equal(fresh.attemptFor('1.4').attempt, 2, 'attempt 1 is not replayed with the same variant');
+  assert.equal(B.attemptFor('1.4').attempt, 2, 'tab B sees it too');
+  assert.equal(fresh.openLevel(), '1.1');
+  // sync() keeps a fixed device seed (?test=1&seed=), and ignores a broken stored copy.
+  const T = PROG.create(Object.assign(opts(st), { deviceSeed: 7 }));
+  assert.equal(T.sync(), true);
+  assert.equal(T.deviceSeed, 7);
+  st.setItem(PROG.KEY, '{broken');
+  assert.equal(T.sync(), false);
+  assert.equal(T.latestResult('1.4').code, 'CODE-A');
+});

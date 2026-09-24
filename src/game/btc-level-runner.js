@@ -83,12 +83,18 @@
           if (monitor.start) monitor.start(cell);
           st = { logIdx: 0, endReason: null, endTick: null };
           cell.attachRecorder(monitorFeed(monitor, st));
+          // Building the cell is a slice of its own: the first frame does nothing else.
+          if (ms !== Infinity) return false;
         }
         const t0 = nowMs();
         let n = 0;
         while (!st.endReason) {
           cell.step();
-          if ((++n & 255) === 0) { cell.takeEvents(); if (ms !== Infinity && nowMs() - t0 >= ms) break; }
+          // The clock is read every 16 steps, so a slice stays close to its budget on a slow phone.
+          if ((++n & 15) === 0) {
+            if ((n & 255) === 0) cell.takeEvents();
+            if (ms !== Infinity && nowMs() - t0 >= ms) break;
+          }
         }
         cell.takeEvents();
         if (st.endReason) {
@@ -218,6 +224,8 @@
     };
   }
 
+  const clampRuns = (n) => Math.min(99, Math.max(1, n || 0));
+
   /**
    * G, E, P, D, X, flags, total and the code of an attempt (§6, §10), from the level's score
    * components. o: {goal, comp, debrief (state), variantSeed, attempt, runs, override, record}.
@@ -240,7 +248,8 @@
     const digest = scored && o.record ? o.record.finalHash.slice(0, 6).toUpperCase() : '000000';
     const engine = (o.record && o.record.engineVersion) || ENG.ENGINE_VERSION;
     const attempt = o.override ? 0 : o.attempt;
-    const runs = Math.max(1, o.runs || 0);
+    // The code has two digits for runs (N1–N99): from the 100th run it says 99.
+    const runs = clampRuns(o.runs);
     const code = CODE.encode({
       level: def.code, variantSeed: o.variantSeed, G, E: S.percent(E), P: S.percent(P), D, X,
       flags: S.flagMask(flagIds, evidence), attempt, runs, engine, content: def.version, digest,
@@ -321,7 +330,7 @@
 
     enter(i) {
       this.phaseIndex = i;
-      const p = this.phase, def = this.def;
+      const p = this.phase;
       this.log('phase', { name: p });
       if (p === 'intro') this.beat = { name: 'intro', index: 0 };
       else if (p === 'scenes') this.scene = { index: 0, line: 0 };
@@ -332,13 +341,13 @@
         const onRun = this.beatLines('onRun');
         if (onRun.length && !this.onRunShown) this.beat = { name: 'onRun', index: 0 };
         this.log('run_start', { speed: this.speedFn ? this.speedFn() : null });
-      } else if (p === 'result') {
-        if (this.goal && def.story.outro.length && !this.outroShown) this.beat = { name: 'outro', index: 0 };
       } else if (p === 'epilogue') {
         this.epilogue = { startTick: this.run ? this.run.cell.tick : 0, done: false, started: false };
       } else if (p === 'echo') {
+        // The outro comes after the debrief, whether or not the goal was met (LEVELS §4.1): shown earlier,
+        // its lines would answer the debrief questions for the student.
         this.echoIndex = 0;
-        if (!this.outroShown && def.story.outro.length) this.beat = { name: 'outro', index: 0 };
+        if (!this.outroShown && this.beatLines('outro').length) this.beat = { name: 'outro', index: 0 };
       } else if (p === 'complete') this.finish();
     }
 
@@ -361,6 +370,9 @@
         }
         case 'demo': return this.demo.done ? { ok: true } : { ok: false, reason: 'demo' };
         case 'run': return this.run && this.run.endReason ? { ok: true } : { ok: false, reason: 'run' };
+        // A designer level's result waits for its par run (worked out in idle frames), so the score never
+        // has to finish it in one long frame (LEVELS §16).
+        case 'result': return this.par && !this.par.done ? { ok: false, reason: 'par' } : { ok: true };
         case 'epilogue': return this.epilogue.done ? { ok: true } : { ok: false, reason: 'epilogue' };
         case 'debrief': {
           const open = this.def.debrief.filter((q) => !(this.debriefState[q.id] && this.debriefState[q.id].solved));
@@ -368,7 +380,7 @@
         }
         case 'echo': return this.echoIndex >= this.def.echo.screens.length - 1 ? { ok: true } : { ok: false, reason: 'echo' };
         case 'complete': return { ok: false, reason: 'complete' };
-        default: return { ok: true };    // intro (after its beat), task, design, result
+        default: return { ok: true };    // intro (after its beat), task, design
       }
     }
     canContinue() { return this.gate().ok; }
@@ -399,6 +411,8 @@
     /** A beat's lines; the outro may be swapped for one in story.extra when the level's outroKey names it. */
     beatLines(name) {
       const def = this.def;
+      // A level may drop a beat that would not be true of this run (1.7: LacI's line when the design deleted lacI).
+      if (def.skipBeat && def.skipBeat(name, this.variant, this.design)) return [];
       if (name === 'outro' && def.outroKey) {
         const key = def.outroKey(this.variant, this.monitorResult || {}, this.goal);
         const alt = key && def.story.extra && def.story.extra[key];
@@ -646,13 +660,17 @@
       return true;
     }
 
-    /** Try again after a failed run: same variant and seed, a fresh cell, predictions kept. */
+    /**
+     * Try again after a failed run: same variant and seed, a fresh cell, predictions kept. A designer
+     * level (1.7) goes back to the DNA editor, since the run itself has no controls: running the same
+     * design again would only repeat the same run.
+     */
     retry() {
       if (this.phase !== 'result' || this.goal) return { ok: false, reason: 'phase' };
       if (this.run) this.run.cell.detachRecorder(this.run.recorder);
       this.run = null; this.record = null; this.monitorResult = null; this.goal = false;
       this.newRun();
-      this.enter(this.phases.indexOf('run'));
+      this.enter(this.phases.indexOf(this.has('design') ? 'design' : 'run'));
       return { ok: true, phase: this.phase };
     }
 
@@ -671,6 +689,7 @@
 
     // --- demo (1.2) and design (1.7) --------------------------------------------------
     startDemo() {
+      if (this.demo.done && this.demo.cell) return this.demo.cell;     // a finished demo is not played again
       const cell = this.makeCell(this.def.config(this.variant, 'demo', this.extra()));
       const mon = this.def.demo && this.def.demo.monitor ? this.def.demo.monitor(this.variant) : null;
       this.demo = { done: false, cell, record: null, result: null, monitor: mon };
@@ -808,7 +827,7 @@
       const r = this.result;
       const level = {
         id: this.def.id, content: this.def.version, variantSeed: this.variantSeed, variant: copy(this.variant),
-        attempt: this.override ? 0 : this.attempt, runs: Math.max(1, this.runs), override: this.override,
+        attempt: this.override ? 0 : this.attempt, runs: clampRuns(this.runs), override: this.override,
         answers, debrief: copy(this.taps),
         result: r ? { G: r.G, E: r.E, P: r.P, D: r.D, X: r.X, flags: copy(this.flagEvidence), total: r.total } : null,
         code: this.code,
@@ -859,8 +878,10 @@
   /** Rebuilds a runner from save(); a saved run gets its cell back from the snapshot, paused. */
   LevelRunner.restore = function (def, s, opts) {
     const o = Object.assign({}, opts || {}, { def, variantSeed: s.variantSeed, attempt: s.attempt, override: s.override, deviceSeed: s.deviceSeed });
-    const r = new LevelRunner(o);
     if (s.levelId !== def.id) throw new Error('saved level ' + s.levelId + ' is not ' + def.id);
+    // A save from another content version would run the old cell against new variants and scoring.
+    if (s.content !== def.version) throw new Error('saved level ' + s.levelId + ' has content ' + s.content + ', not ' + def.version);
+    const r = new LevelRunner(o);
     r.started = true;
     r.phaseIndex = Math.max(0, def.phases.indexOf(s.phase));
     r.runs = s.runs || 0;
@@ -876,6 +897,12 @@
     r.withoutGoal = !!s.withoutGoal;
     r.design = copy(s.design) || null;
     r.demo = { done: !!(s.demo && s.demo.done), cell: null, record: s.demo ? copy(s.demo.record) : null, result: s.demo ? copy(s.demo.result) : null };
+    // A finished demo (1.2) is rebuilt from its record, so it is shown at its end instead of playing again.
+    if (r.demo.done && r.demo.record && def.demo) {
+      const rep = replayWithMonitor(r.demo.record, () => (def.demo.monitor ? def.demo.monitor(r.variant) : { onTick() {}, end() { return null; } }));
+      r.demo.cell = rep.cell;
+      r.demo.monitor = def.demo.monitor ? rep.monitor : null;
+    }
     r.epilogue = copy(s.epilogue) || { startTick: null, done: false, started: false };
     if (r.par && s.par) r.par.set(s.par);
     r.onRunShown = !!s.onRunShown;

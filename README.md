@@ -98,12 +98,19 @@ Numbers are for the reference cell (glucose High, default dials), measured with 
   also draw on stored reserves, which are not modelled.
 - The wild-type lac strain of level 1.7 (m2-lac) lags about 2 h (125–146 min) when moved from
   glucose to lactose alone, and about 1 h (64–71 min) after time in both sugars;
-  oxygen-breathing E. coli usually adapts faster (docs/BIOLOGY.md, "The lac operon").
+  oxygen-breathing E. coli usually adapts faster (docs/BIOLOGY.md, "The lac operon"). Level 1.7
+  adds inducer exclusion (glucose blocks most LacY), so with both sugars the cell uses glucose
+  first; a lac promoter without its CRP site ignores CRP in the game, while the real one is weak
+  without it (the designer says so).
+- Level 1.1's cell starves slowly, not completely: a slow side route (other transporters, not
+  among the six genes) lets a trickle of glucose in, and the level says so and draws it.
 
-**Levels and completion codes (M2, in progress).** The home screen lists the Prologue and the
-levels built so far (1.2 "One gene, many copies", 1.4 "Nothing lasts"; 1.1 and 1.7 follow),
-specified in [`docs/LEVELS.md`](docs/LEVELS.md). A finished level shows a completion code for
-the Canvas quiz. The instructor's decoder is published beside the app at
+**Levels and completion codes (M2).** The home screen lists the Prologue and levels 1.1
+"Starving next to a feast", 1.2 "One gene, many copies", 1.4 "Nothing lasts" and 1.7 "Nobody's
+in charge", specified in [`docs/LEVELS.md`](docs/LEVELS.md) (§16.11 has the fixes made after the
+M2 reviews). A finished level shows a completion code and asks for it to be pasted into the
+Canvas quiz for that level. Progress stays on the device and is shared safely between two open
+tabs; an autosave from an older content version of a level is not resumed. The instructor's decoder is published beside the app at
 https://foxworthywa.github.io/be-the-cell-/tools/codes.html (paste codes or a Canvas "Student
 analysis" CSV; duplicates are flagged; a student's downloaded run file can be replayed and its
 score recomputed; nothing leaves the browser). From a checkout the same work is done by
@@ -142,12 +149,16 @@ to serve the unbuilt source files directly (no service worker is registered then
 that seed), `?reset=1` (ignore the autosaved cell), `?test=1` (no autosave or service worker,
 seed 1, and test hooks on `window.__btc.app.test`). The app opens on the level list (or the last
 screen used); `?lab=1` opens the free-play lab, `?level=<id>` a level, and `?level=<id>&v=<6
-characters>` a given variant as a think-aloud attempt 0 (docs/LEVELS.md §5.11).
+characters>` a given variant as a think-aloud attempt 0 (docs/LEVELS.md §5.11). These four are
+used once: the app takes them out of the address, so a reload resumes where the student was
+(the think-aloud attempt included). The free-play lab has a Levels button back to the list.
 
 `npm run ui-check` needs Playwright and Chromium installed globally (it never installs them,
 and prints "skipped" without them). It checks five screen sizes (360×740, 375×553, 740×360,
 768×1024, 1280×800) plus switching a gene on, removing glucose, rifampicin, reset, replay and
-the `file://` page. Screenshots go to `test-artifacts/screens/` (or `-- --out <dir>`).
+the `file://` page, then every level (docs/LEVELS.md §12.2: the Prologue to its code, each level
+end to end, runs ending on the real loop, the lab's way home, two tabs, resume rules).
+Screenshots go to `test-artifacts/screens/` and `test-artifacts/levels/` (or `-- --out <dir>`).
 `node tools/make-icons.js` re-renders the PNG icons from `icons/*.svg` the same way; the PNGs
 are committed.
 

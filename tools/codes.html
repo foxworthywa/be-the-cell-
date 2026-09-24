@@ -119,7 +119,7 @@
       <li>An honest score: the checksum catches typos and casual edits, not a determined forger (the method is public).</li>
       <li>A first attempt: clearing site data or using another browser starts again at attempt 1.</li>
       <li>Re-checking without the run file: only a run file can be replayed, and a replay still does not show who made it.</li>
-      <li>Comparability across content versions: codes with different C values may differ in variants or scoring.</li>
+      <li>Comparability across content versions: codes with different content versions may differ in variants or scoring.</li>
     </ul>
   </details>
   <p class="muted" id="build"></p>
@@ -131,8 +131,8 @@
   var rows = [];
   // Warnings (duplicates, overrides, other engines) sit next to Valid, so they are on screen without scrolling the table.
   var COLS = [['student', 'Student'], ['valid', 'Valid'], ['warnings', 'Warnings'], ['level', 'Level'], ['variant', 'Variant'], ['variantValues', 'Variant values'],
-    ['G', 'G'], ['E', 'E'], ['P', 'P'], ['D', 'D'], ['total', 'Total'], ['expert', 'Expert met'], ['attempt', 'Attempt'], ['runs', 'Runs'],
-    ['flags', 'Flags'], ['engine', 'Engine'], ['content', 'C'], ['code', 'Code']];
+    ['G', 'Goal met'], ['E', 'Efficiency'], ['P', 'Prediction'], ['D', 'Debrief right first time'], ['total', 'Total'], ['expert', 'Expert met'],
+    ['attempt', 'Attempt'], ['runs', 'Runs'], ['flags', 'Flags'], ['engine', 'Engine'], ['content', 'Content version'], ['code', 'Code']];
   var WRAP = { flags: 1, warnings: 1, variantValues: 1 };
   function el(tag, cls, text) { var e = document.createElement(tag); if (cls) e.className = cls; if (text !== undefined) e.textContent = text; return e; }
   function render() {
@@ -173,6 +173,14 @@
       var ex = d.text.task && d.text.task.expert;
       if (!levels[d.id] || !ex || !ex.length) return;
       key.appendChild(el('p', null, 'Level ' + d.id + ' Expert objectives: ' + ex.map(function (t, k) { return (k + 1) + ' = ' + t; }).join('  ')));
+    });
+    // What each level's flags mean (the misconception behind each, or the behaviour when none is mapped).
+    B.levels.list.forEach(function (d) {
+      if (!levels[d.id] || !d.flags || !d.flags.length) return;
+      key.appendChild(el('p', null, 'Level ' + d.id + ' flags: ' + d.flags.map(function (f) {
+        var id = typeof f === 'string' ? f : f.id, mc = typeof f === 'string' ? null : f.mc;
+        return id + ' = ' + (mc && mc !== 'OTHER' ? B.misconceptions.text(mc) : 'a behaviour, no mapped misconception');
+      }).join('; ')));
     });
     var bad = rows.filter(function (r) { return !r.valid; }).length, warn = rows.filter(function (r) { return r.warnings; }).length;
     $('summary').textContent = rows.length ? rows.length + ' code(s): ' + (rows.length - bad) + ' valid, ' + bad + ' invalid, ' + warn + ' with warnings.'

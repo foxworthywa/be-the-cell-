@@ -33,7 +33,11 @@ test('L-13: HUD texts: the counter\'s short form under 400 px; words, not colour
   assert.equal(met.progress, null, 'no bar on the Continue button');
   assert.equal(Hud.texts(model, 360, 'continue').goal, C.game.hud.continue);
   assert.equal(Hud.texts({ goal: { text: 'x', progress: 7 } }, 360, null).progress, 1, 'progress is clamped');
-  assert.deepEqual(Hud.texts(null, 360, null), { action: null, sub: '', goal: '', progress: null, gauge: null, timer: '', counter: '', label: 'Goal: . Open the task card.' });
+  assert.deepEqual(Hud.texts(null, 360, null), { action: null, sub: '', goal: '', progress: null, gauge: null, timer: '', counter: '', over: false, label: 'Goal: . Open the task card.' });
+  // Over par: the counter is marked (and its long form says so in words).
+  const over = { counter: { text: 'mRNAs 35 / 32 · over par', short: '35/32 mRNA', over: true } };
+  assert.deepEqual([Hud.texts(over, 360, null).counter, Hud.texts(over, 360, null).over], ['35/32 mRNA', true]);
+  assert.equal(Hud.texts(over, 1280, null).counter, 'mRNAs 35 / 32 · over par');
   // 1.7: an action button ("Run to the end") takes the counter's place under 400 px; while it runs it shows its progress.
   const act = Object.assign({}, model, { action: { id: 'runToEnd', text: 'Run to the end', short: 'To the end' }, goal: Object.assign({ sub: 'Next change: unknown' }, model.goal) });
   assert.deepEqual([Hud.texts(act, 360, null).action.text, Hud.texts(act, 360, null).counter], ['To the end', '']);
@@ -60,7 +64,7 @@ test('L-13: the home list model: names, challenges, status chips, minutes, Conti
   const p = PROG.create({ storage: memStorage(), today: () => '2026-09-24', randomU32: () => 9 });
   let m = Home.model([P, T], p);
   assert.deepEqual(m.rows.map((r) => [r.name, r.status]), [['Prologue · You, right now', 'new'], ['T · Test bench', 'new']]);
-  assert.equal(m.rows[0].challenge, 'From you to one cell, then to a bacterium.');
+  assert.equal(m.rows[0].challenge, 'From you to one cell, then a bacterium.');
   assert.equal(m.rows[0].minutes, 'about 3 min');
   assert.equal(m.continueRow, null);
   p.open('T', p.attemptFor('T'));

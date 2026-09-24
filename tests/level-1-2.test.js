@@ -41,7 +41,7 @@ test('L-3: 9 variants (T 400/500/600 × tOff 4/5/6), deterministic, JSON-safe; m
     seen.add(v.T + '/' + v.tOff);
     for (const role of ['task', 'demo']) {
       const c = new Cell(def.config(v, role));
-      assert.deepEqual(c.config.variant, { levelId: '1.2', content: 1, seed: vs, T: v.T, tOff: v.tOff, D: v.D, mPar: v.mPar });
+      assert.deepEqual(c.config.variant, { levelId: '1.2', content: def.version, seed: vs, T: v.T, tOff: v.tOff, D: v.D, mPar: v.mPar });
     }
   }
   assert.equal(seen.size, 9);

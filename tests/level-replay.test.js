@@ -99,6 +99,14 @@ test('L-8: the decoded table names the Expert objectives and flags met, and the 
   const [unknown] = CODE.table([{ student: 'X', code: CODE.encode({ level: '99', variantSeed: 1, G: 1, E: 1, P: 1, D: [0, 1], X: 0, flags: 0, attempt: 1, runs: 1, engine: '1.1.0', content: 1, digest: '000000' }) }], levels(), {});
   assert.equal(unknown.valid, false);
   assert.match(unknown.reason, /unknown level 99/);
+  // A code from an older content version (1.7 went from 1 to 2): no variant values from this build, and a warning.
+  const d17 = byId['1.7'];
+  const old = CODE.encode({ level: d17.code, variantSeed: 777, G: 1, E: 100, P: 100, D: [2, 2], X: 1, flags: 0, attempt: 1, runs: 1,
+    engine: '1.1.0', content: d17.version - 1, digest: 'abc123' });
+  const [orow] = CODE.table([{ student: 'Ada', code: old }], levels(), { engine: '1.1.0' });
+  assert.equal(orow.valid, true);
+  assert.equal(orow.variantValues, '');
+  assert.match(orow.warnings, new RegExp('content v' + (d17.version - 1) + ': older than this build'));
 });
 
 test('§10.4: the build publishes tools/codes.html as one file with the engine, game and level scripts inlined, and no request leaves it', () => {

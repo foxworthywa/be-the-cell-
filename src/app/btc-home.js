@@ -7,7 +7,7 @@
  * order. The free-play lab is always one tap away. "My codes" lists each
  * level's first-attempt and latest codes with Copy buttons; "Cards" shows the
  * collected "Meanwhile, in you" cards, each stamped Universal or
- * Bacteria-only; "Export my data" hands over progress and telemetry.
+ * "Not in your cells"; "Export my data" hands over progress and telemetry.
  *
  * HomeView.model(levels, progress) is pure (test L-13).
  */
