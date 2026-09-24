@@ -51,6 +51,15 @@ to build. So:
   to reason with it.
 - **Predictions invite a guess; feedback explains the cause.** A wrong prediction is the start
   of an explanation, never a failed test.
+- **Each level teaches before it asks.** Every level follows one pattern: watch it happen up
+  close (the gene close-up, one step at a time, gated on the student) → guess, then see →
+  try a small concrete task that uses exactly what was just seen → explain. Scores and codes
+  apply only to the last two parts.
+- **Few readouts, added in tiers.** Early levels show only the one or two quantities the lesson
+  is about, as big plain counters or a single simple graph. Graph options (gene chips, lin/log,
+  windows), the ATP-spending bar and the status-strip readouts appear later, one at a time, each
+  introduced with one plain sentence saying what it shows. The free-play lab opens in a simple
+  mode with an "All controls" option.
 
 ### The player is the genome
 
