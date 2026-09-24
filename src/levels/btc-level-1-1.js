@@ -123,7 +123,7 @@
       ],
     },
     echo1: 'Your gut and muscle cells take in glucose through transporter proteins too, made the same way: gene, mRNA, protein.',
-    echo2: 'Yours are GLUTs and SGLTs, not PtsG\'s family. In muscle, insulin signalling moves stored GLUT4 transporters into the membrane after a meal.',
+    echo2: 'Your transporters are different proteins that do the same job. After a meal, insulin makes muscle cells add more to their membranes.',
     cards: { transporter: 'Transporter protein' },
     hud: {
       goal: 'Find the glucose transporter', goalShort: 'Find the transporter',

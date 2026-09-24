@@ -896,7 +896,7 @@ one." Expert: "Also reveal a second gene's job, with at most 4 experiments in to
 
 #### 7.1.10 Meanwhile, in you
 - "Your gut and muscle cells take in glucose through transporter proteins too, made the same way: gene, mRNA, protein."
-- "Yours come from other gene families (GLUTs and SGLTs). In muscle, insulin moves GLUT4 transporters into the membrane after a meal."
+- "Your transporters are different proteins that do the same job. After a meal, insulin makes muscle cells add more to their membranes."
 - Card: Transporter protein · Universal.
 
 #### 7.1.11 Story
