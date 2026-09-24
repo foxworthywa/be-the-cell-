@@ -142,7 +142,8 @@ arrives only after the student has seen it work.
 
 | First said as | Named after its job is seen | Where it is named |
 |---|---|---|
-| the instructions for one protein, a stretch of letters | gene | opening B1 |
+| the long threads the DNA is split into | chromosome | opening A4 |
+| stretches along the DNA; the instructions for one protein, a stretch of letters | gene | opening A7 (the bands along the DNA), then B1 (a stretch of letters) |
 | the four building blocks of DNA, written A, C, G and T | (bases are not named; "letters") | opening A9 |
 | a copy of a gene | messenger RNA, mRNA | opening C5 |
 | the machine that builds the copy | RNA polymerase | opening C5 |
@@ -151,15 +152,19 @@ arrives only after the student has seen it work.
 | the building blocks of a chain | amino acids | opening E2 |
 | a protein that carries something across the membrane | transporter | opening F6 |
 | the cell's energy currency, spent on everything | ATP | opening part 2, spine |
-| machines inside that break sugar down and make ATP | enzymes ("sugar-splitting enzymes") | part 2, spine |
-| the everyday sugar | glucose | part 2, Q5 |
+| machines inside the cell that break glucose down, releasing energy | enzymes ("glucose-processing enzymes") | opening F7 (a machine card, job first); part 2, spine (with ATP) |
+| the sugar that proteins in the membrane carry into your cells | glucose | opening F3; part 2, Q5 adds "the everyday sugar" |
 | the sugar in milk | lactose | part 2, Q6 |
-| carries lactose in | lactose transporter (LacY) | 1.2 watch |
-| splits lactose into two smaller sugars | lactose splitter (β-galactosidase, LacZ) | 1.2 task card |
+| carries lactose in | lactose transporter (LacY) | part 2, Q7 card; 1.2 watch |
+| splits lactose into two sugars, glucose and galactose | lactose-splitting enzyme (β-galactosidase, LacZ) | part 2, Q7 card; 1.2 task card |
 | a protein that clamps the DNA so it cannot be copied | repressor (LacI) | 1.7 watch W1 |
 | a lactose-shaped molecule the lactose machines make | allolactose | 1.7 watch W2 |
 | the stretch of DNA the repressor clamps | operator | 1.7 design |
 | machines that cut up worn-out proteins | proteases | 1.4 intro |
+
+The two sugar machines keep one name each everywhere a student sees them: "glucose-processing
+enzymes" and "lactose-splitting enzyme" (the slice's biology review, M2). Test ST-2
+(`tests/story.test.js`) checks this table's order against the order of play.
 
 Rules: gene symbols (*lacY*) appear only in muted italics after the plain name; numbers under
 10,000 are digits in labels and counters but words in story lines where it reads better; units are
@@ -174,7 +179,7 @@ Taught in part 2 of the opening (§2.4.2, scenes S1–S9), then used by every le
                         ▼
   membrane: [transporter]            (a machine; each sugar has its own)
                         ▼
-  inside:   [enzymes] ──► ATP ◆◆◆   (energy currency; 2 ATP per glucose in this bacterium)
+  inside:   [enzymes] ──► ATP ◆◆◆   (energy currency; 2 ATP per glucose with no oxygen, as here)
                               │ spent on everything:
                               ├──► building proteins: about 4 ATP per amino acid (the biggest single cost)
                               ├──► other building (membrane, wall, DNA)
@@ -197,7 +202,8 @@ half a million glucose come in each second and about a million ATP are made and 
 building proteins takes about 4 of every 10 ATP (the largest single share: `ledger` translation
 40.6%, other building 27.4%, upkeep 26.6%); one transporter of about 450 amino acids costs about
 1,800 ATP to build (4 ATP per amino acid, `c_tl`), the ATP from about 900 glucose at 2 ATP each
-(this bacterium ferments; with oxygen, cells get far more, which a later unit covers).
+(this bacterium ferments; with oxygen, cells get far more, which a later unit covers; S3 says "with no
+oxygen" so the 2 is not read as true of every cell).
 
 ### 1.4 The level pattern: Watch, Guess then see, Try, Explain
 
@@ -270,7 +276,7 @@ never says it at all.
 
 **The cast** (three speakers; the others go):
 
-| Speaker (label) | Teaching role | Lines per level |
+| Speaker (label) | Teaching role | Lines per level (per play path) |
 |---|---|---|
 | Narrator | explains cause and effect, one sentence at a time; sets up each question | 3–6 |
 | The Commander (label "You") | voices the student's naive expectation, just before the screen shows what really happens, so the correction lands on something the student may also have thought; ends each level with what they now understand | 1–4 |
@@ -364,7 +370,7 @@ sequence data by a small exact model at run time. Nothing is a canned picture of
 gene in your DNA is longer than the copy shown, because two stretches (introns) are copied and then
 cut out before the mRNA leaves the nucleus (chapter 2); the real mRNA also gets a cap at its front
 and a tail of many A's at its back; the ribosomes that make insulin sit on a membrane network next
-to the nucleus (the ER), which the chain's first 24 amino acids lead them to.
+to the nucleus (the ER), where the chain's first 24 amino acids dock them before they are cut off.
 
 ### 2.3 Part 1: "How a gene becomes a machine"
 
@@ -378,12 +384,12 @@ palette tokens (as today's Prologue), ≤ 6 KB each, pure (`svg(rung, text)`), l
 |---|---|---|---|---|
 | A0 You | a neutral human outline, about 1.7 m | about 2 m tall | 50 cm | "This is you. Some of your cells are making a protein called insulin right now." |
 | A1 Pancreas | the pancreas (about 15 cm) with stomach outline in muted ink; one islet marked by a ring because it is too small to see at this scale | about 20 cm | 5 cm | "This is your pancreas, about as long as your hand. The ring marks one tiny cluster of cells." |
-| A2 Islet | a slice through one islet (about 150 µm), about 150 cells in section, beta cells tinted | about 200 µm | 50 µm | "A slice through that cluster. After a meal, its beta cells release insulin into your blood." |
+| A2 Islet | a slice through one islet (about 150 µm), about 150 cells in section, beta cells tinted (about 55% of them, as in a human islet) | about 200 µm | 50 µm | "A slice through that cluster. After a meal, its beta cells release insulin into your blood." |
 | A3 Beta cell | one beta cell (about 12 µm) in section: nucleus, insulin packets (about 300 nm, drawn to scale as 6 px dots) | about 15 µm | 5 µm | "One beta cell. Each small dot is a packet of insulin, ready to be released." |
-| A4 Nucleus | the nucleus (about 6 µm) with its envelope, pores (about 120 nm) and chromosome regions, chromosome 11's tinted | about 7 µm | 1 µm | "The nucleus holds the cell's DNA, split into 46 long threads called chromosomes." |
-| A5 Chromosome 11 | one chromosome region (about 2 µm) as a loose tangle of thread; the insulin gene's place marked near one end | about 2.5 µm | 500 nm | "This is chromosome 11. In a cell that is not dividing, it is a loose tangle, not the X shape seen in pictures." |
+| A4 Nucleus | the nucleus (about 6 µm) with its envelope, pores (about 120 nm) and chromosome regions; both chromosome 11s tinted ("your two chromosome 11s") | about 7 µm | 1 µm | "The nucleus holds the cell's DNA, split into 46 long threads called chromosomes." |
+| A5 Chromosome 11 | one chromosome region (about 2 µm) as a loose tangle of thread; the insulin gene's place marked near one end; a note: "drawn far shorter: stretched out, this DNA is about 4.6 cm long" | about 2.5 µm | 500 nm | "This is one of your two chromosome 11s. In a cell that is not dividing, it is a loose tangle, not the X shape seen in pictures." |
 | A6 Spools | DNA wound on protein spools (nucleosomes, about 11 nm) | about 100 nm | 20 nm | "The thread is DNA, wound around protein spools." (rung optional, open question 6) |
-| A7 A stretch of DNA | DNA drawn straightened as a line with genes as bands; the insulin gene (1,431 letters on the chromosome) coloured, neighbours grey, "start" and "end" ticks; letters too small to show | about 5,000 letters (1.7 µm straightened) | 1,000 letters (340 nm) | "Along the DNA are genes. The coloured stretch is the insulin gene, one of about 20,000 genes in your DNA." |
+| A7 A stretch of DNA | DNA drawn straightened as a line; the insulin gene (1,431 letters on the chromosome) coloured, with "start" and "end" ticks; its real neighbourhood: the end of the next gene (tyrosine hydroxylase, which ends about 2,700 letters before the insulin gene starts) grey, labelled "the next gene", and DNA between genes; letters too small to show | about 5,000 letters (1.7 µm straightened) | 1,000 letters (340 nm) | "Along the DNA are genes. The coloured stretch is the insulin gene, one of about 20,000 genes for proteins in your DNA." |
 | A8 Helix | the double helix at the start of the insulin instructions; strands in ink, pairs as rungs | about 20 nm | 2 nm | "DNA is two strands twisted around each other." |
 | A9 Letters | the helix untwisted into a ladder with letters; 10–11 pairs across 328 px (30 px per pair) | about 3.7 nm | 1 nm | line 1: "Each strand is a chain of four building blocks, written A, C, G and T." · line 2: "Across the two strands, A always pairs with T, and C with G." |
 
@@ -421,10 +427,12 @@ letters"; the other strand is drawn in muted ink.
 #### 2.3.3 Transcription (scenes C1–C5)
 
 Model state: `k` = letters of the copy made so far (0 … 465), `copy = transcribe(INS.mRNA).slice(0, k)`.
-The drawing: coding strand on top, template strand below, opened into a bubble around RNA
+The drawing: coding strand on top, labelled "the gene's letters (coding strand)", template strand
+below, labelled "the strand the copy is built on (template strand)", opened into a bubble around RNA
 polymerase (a ring-shaped machine, drawn to scale at about 13 nm across the bubble), the copy
 growing out of the bubble with U drawn in the accent colour. A 10–11 letter window follows the
-polymerase. A counter reads "letters copied {k} of 465".
+polymerase. A counter reads "letters copied {k} of 465". "Machine drawn smaller than scale" stays
+on screen whenever the bubble is drawn, the run included (beside "shown at about real speed").
 
 | Scene | Line (exact) | Interaction | Gate |
 |---|---|---|---|
@@ -432,18 +440,22 @@ polymerase. A counter reads "letters copied {k} of 465".
 | C2 | "A machine opens the two strands and builds the copy one letter at a time, matching the letters of one strand." | polymerase moves to the gene's first letter (animation, 300 ms) | Next |
 | C3 | "The copy pairs letters the same way, with one change: across from an A in the DNA, the copy has U, not T." | – | Next |
 | C4 | prompt: "Fill in the copy. Which letter goes across from each DNA letter?" | **letter fill:** keypad A, C, G, T, U (five 56 × 48 px keys); six letters; the template letters are `T C G G G A`; each pick is checked by `rnaPartner` | all six placed |
-| C4 run | "Let it run" button (48 px) | the polymerase copies the rest at 30 letters a second (about real speed for your cells; label "shown at about real speed") | copy complete (`k = 465`), then Next |
-| C5 | "The machine is called RNA polymerase. The copy is called messenger RNA, or mRNA." | the finished copy peels away; the DNA closes | Next |
+| C4 run | "Let it run" button (48 px) | the polymerase copies the rest at 30 letters a second (about real speed for your cells; labels "shown at about real speed" and "machine drawn smaller than scale") | copy complete (`k = 465`), then Next |
+| C5 | "The machine is called RNA polymerase. The copy is called messenger RNA, or mRNA." · "Built across from the other strand, the copy spells out the gene's letters, with U in place of T." | the finished copy peels away; the DNA closes | Next |
 
 **Letter-fill feedback** (per pick; nothing is marked wrong; the right letter always goes in):
 - right: the letter settles in place (no text).
-- template A and the student picks T: "The copy has no T. Across from A, it puts U."
-- any other mismatch: "Across from {dna}, the copy puts {rna}." (filled from `BTC.seq`).
+- template A and the student picks T: "The copy has no T. Across from A, the copy has U."
+- any other mismatch: "Across from {dna}, the copy has {rna}." (filled from `BTC.seq`).
 The telemetry records each pick (§9).
 
 #### 2.3.4 Export, and why a copy (scenes D1–D3)
 
 Picture: zoom out one rung (the nucleus, A4's drawing, now with one mRNA near a pore).
+
+The scene's line sets the picture up without voicing a guess option: "Here is the nucleus again,
+with the finished copy near a pore." (The Commander's "Surely the gene goes out with it now" was
+cut in the review: it pre-voiced option 2.)
 
 **Guess D1** (logged; misconception flags as listed):
 Prompt: "The copy is finished. What happens to the gene now?"
@@ -453,7 +465,7 @@ Prompt: "The copy is finished. What happens to the gene now?"
 | "It stays in the nucleus, and can be copied again." (the cause) | – | "The gene stayed put. Only the mRNA copy left, and the same gene can be copied again and again." |
 | "It leaves the nucleus with the copy." | `DNA_DIRECT` | "The gene stayed put. Only the mRNA copy left, through a pore in the nucleus." |
 | "It is used up by the copying." | `DNA_DIRECT` | "Copying left the gene as it was. The same gene can be copied again and again." |
-| "It becomes part of the protein." | `DNA_DIRECT` | "The gene is never built into anything. Ribosomes read the mRNA copy, not the gene." |
+| "It becomes part of the protein." | `DNA_DIRECT` | "The gene is never built into anything. The protein is built from the mRNA copy, out in the cell." (no "ribosome" before E1 names it) |
 
 Then "See what happens": the mRNA passes through a pore (a process marker on a fixed path, 1 s);
 the DNA stays. The gate is the marker's arrival (state of the scene model).
@@ -474,9 +486,9 @@ beads and plain beads after that.
 | Scene | Line (exact) | Interaction | Gate |
 |---|---|---|---|
 | E1 | "Out in the cell, a machine called a ribosome reads the mRNA three letters at a time." | the ribosome slides from the leader to the first AUG | Next |
-| E2 | "Each group of three letters, a codon, stands for one amino acid. Amino acids are the building blocks of a protein." | – | Next |
+| E2 | "Each group of three letters, a codon, stands for one amino acid or for stop. Amino acids are the building blocks of a protein." | – | Next |
 | E3 | prompt: "Which amino acid does this codon stand for?" | **codon decode**, twice (AUG, then GCC): a small code table of six 48 px rows, each a button: AUG Met (start) · GCC Ala · CUG Leu · UGG Trp · GGC Gly · UAG stop; "Full table" opens all 64 codons from `BTC.seq.CODE` | both decoded |
-| E3 run | "Let it run" | the ribosome reads the rest at 5 codons a second (about real speed for your cells); the chain grows bead by bead; counter "amino acids {c} of 110" | stop codon reached |
+| E3 run | "Let it run" | the ribosome reads the rest at 5 codons a second (about real speed for your cells; "shown at about real speed" stays for the whole run); the chain grows bead by bead; counter "amino acids {c} of 110" | stop codon reached |
 | E3 end | "UAG means stop. The chain is finished: 110 amino acids, in the order the gene spelled out." | – | Next |
 | E4 | "Several ribosomes can read the same mRNA at once, each a little further along." | four ribosomes drawn on the mRNA, each chain the computed prefix at its codon | Next |
 
@@ -485,19 +497,23 @@ stands for {three} ({name})." and the right row is highlighted; the student taps
 
 #### 2.3.6 Folding, the job, and the machine (scenes F1–F7)
 
-Pictures are schematic 2D folds in the language of §4, labelled "Shape drawn flat and simplified".
+Pictures are schematic 2D folds in the language of §4, labelled "Shape drawn flat and simplified". The
+order is the cell's: the first 24 amino acids (the signal) are cut off as the chain is made and
+enters the ER, the rest (proinsulin) folds and forms its links there, and the middle piece is cut
+out later, in the packets. Insulin is drawn in its own colour (the palette's `insulin`, the
+prologue's `--gene`), not a lab gene's.
 Chain membership and bonds come from `INS.parts` and the computed sequence (the cysteine pairs are
 drawn as short links between the right beads).
 
 | Scene | Picture | Line (exact) | Gate |
 |---|---|---|---|
-| F1 | the 110-bead chain collapses into a folded blob (preproinsulin) | "The chain folds up on itself." | Next |
-| F2 | the first 24 beads cut away, then the middle piece (C-peptide) cut out; two chains remain, joined by links | "Two pieces are cut away. What is left is insulin: two short chains held together." | Next |
-| F3 | insulin leaves the cell; a muscle cell's membrane gains transporters | "Insulin travels in your blood. In your muscles, it leads cells to put more glucose transporters into their membranes." | Next |
+| F1 | the chain's first 24 beads faded aside ("cut away (24)"); the other 86 collapse into a folded blob (proinsulin) | "The first 24 amino acids are cut off as the chain is made, and the rest folds up on itself." | Next |
+| F2 | the middle piece (the C-peptide with the pairs at its ends, 35 beads) cut out, faded ("cut away (35)"); two chains remain, joined by links | "A middle piece is cut out. What is left is insulin: two short chains held together by links." | Next |
+| F3 | insulin in the blood; a muscle cell's membrane with its glucose carriers ("proteins that carry glucose"), and three more in small packets inside the cell with arrows up ("stored inside the cell") | "Insulin travels in your blood. Where it reaches muscle cells, stored proteins that carry glucose move into their membranes." (insulin moves stored transporters; it makes none; "transporter" is named at F6) | Next |
 | F4 | a patch of membrane (oily middle shaded), glucose outside, no protein | guess F4 (below) | guess picked |
-| F5 | a protein appears across the membrane: pocket open to the outside, glucose fits, shape change, glucose released inside (cycle at 0.8 s, shown repeatedly) | "This protein sits across the membrane. Glucose fits its pocket, the protein changes shape, and the glucose comes out inside." | Next |
-| F6 | a bigger sugar (two joined hexagons) bumps the pocket and bounces off | "A bigger sugar does not fit this pocket, so it does not get through. A protein that carries things across a membrane is a transporter." | Next |
-| F7 | a row of small machine cards: transporter, enzyme, insulin | "Every protein is made this way, from its gene, including the transporters that let glucose into your cells." | Next → cards, completion |
+| F5 | a protein appears across the membrane: pocket open to the outside, glucose fits, shape change, glucose released inside (cycle at 0.8 s, shown repeatedly; labelled "shown much slower than in your cells": a real one carries about a hundred a second) | "This protein sits across the membrane. Glucose fits its pocket, the protein changes shape, and the glucose comes out inside." | Next |
+| F6 | a bigger sugar (two joined hexagons) bumps the pocket and bounces off (the same "much slower" label) | "A bigger sugar does not fit this pocket, so it does not get through. A protein that carries things across a membrane is a transporter." | Next |
+| F7 | a row of small machine cards: "Carries glucose across the membrane · Glucose transporter"; "Break glucose down, releasing energy · Glucose-processing enzymes"; "A signal in your blood: stored transporters move into muscle cell membranes · Insulin" | "Every protein is made this way, from its gene, including the transporters that let glucose into your cells." | Next → cards, completion |
 
 **Guess F4** (logged):
 Prompt: "Glucose is outside this membrane. Can it get through on its own?"
@@ -522,16 +538,17 @@ Universal; Genetic code · Universal. Completion screen: "Next: Prologue 2" and 
 
 | Scene | Picture (to its scale bar) | Line (exact) |
 |---|---|---|
-| Q1 | a beta cell outline (12 µm) with a bacterium beside it (about 2 µm long), then zoom to the bacterium | "This is a bacterium, much smaller than one of your cells. Bacteria of this kind live in your gut." |
-| Q2 | its ribosomes and an mRNA, same glyphs as part 1 | "It reads the same genetic code, with the same kind of ribosome." |
-| Q3 | its DNA: one loop, loose in the cell; no nucleus | "It has no nucleus. Its DNA is one loop of about 4.6 million letters, with about 4,300 genes, loose in the cell." |
+| Q1 | a beta cell outline (12 µm) with a bacterium beside it (about 2 µm long), then zoom to the bacterium (Q2, Q3: about 2 × 1 µm to their 1 µm bar) | "This is a bacterium, much smaller than one of your cells. Bacteria of this kind live in your gut." |
+| Q2 | a few of its ribosomes (labelled "a few of its many thousands of ribosomes") and an mRNA, same glyphs as part 1 | "It reads the same genetic code, with ribosomes that do the same job as yours." (not "the same kind": bacterial and human ribosomes differ, which the Magic bullet level depends on) |
+| Q3 | its DNA: one loop, lying free in the cell, labelled "drawn far shorter: stretched out, this DNA is about 1.6 mm long"; no nucleus | "It has no nucleus. Its DNA is one loop of about 4.6 million letters, with about 4,300 genes, lying free in the cell." |
 | Q4 | RNA polymerase making an mRNA from the insulin sequence, ribosomes already reading its front end (computed: ribosomes only on codons already copied) | "With no nucleus in the way, ribosomes start reading an mRNA while it is still being made." |
-| Q5 | glucose glyph, large, with a blood drop and a bacterium | "Glucose is the everyday sugar. It is in your blood, and it is this bacterium's usual food." |
+| Q5 | glucose glyph, large, with a blood drop and a bacterium | "Glucose is the everyday sugar. It is in your blood, and it is the sugar this bacterium uses first when it can." |
 | Q6 | lactose glyph (two joined hexagons) with a milk glass | "Lactose is the sugar in milk. Some of it reaches the bacteria in your gut." |
-| Q7 | two machine pairs: glucose transporter + sugar-splitting enzymes; lactose transporter + lactose splitter | "Each sugar has its own transporter to get in and its own enzyme to split it. Lactose is useful to a cell only once it has both." |
+| Q7 | two machine pairs, as cards (job first, no ATP yet: `cardsQ7`): "Carries glucose across the membrane · Glucose transporter" + "Break glucose down inside the cell · Glucose-processing enzymes"; "Carries lactose across the membrane · Lactose transporter" + "Splits lactose into two sugars: glucose and galactose · Lactose-splitting enzyme" | "Each sugar gets in through its own transporter. Lactose must also be split in two by its own enzyme before the cell can use it." (glucose needs no splitting) |
 
-Q4's About row (tap to open): "Bacteria given an insulin gene without its introns make the insulin
-chain. Most insulin for people with diabetes is made this way." (open question 8).
+Q4's About row (tap to open): "Bacteria given an insulin gene with no cut-out stretches make its
+chain; enzymes then cut it into insulin. Much insulin is made this way." (open question 8; "introns"
+is never explained here, and about half of today's insulin is made in yeast, Baeshen 2014).
 
 #### 2.4.2 The economy (scenes S1–S9)
 
@@ -543,11 +560,11 @@ cell (engine 1.1.0) and are filled from the calibration constants, not typed int
 |---|---|---|
 | S1 | the cell outline | "A cell runs as a small economy." (not "like": the lint forbids the word) |
 | S2 | sugar outside, a transporter | "Food first: sugar gets in only through transporter machines in the membrane." |
-| S3 | enzymes, ATP diamonds | "Enzyme machines inside break the sugar down and make ATP, the cell's energy currency. Here, each glucose gives 2 ATP." |
-| S4 | ATP arrows to building, upkeep | "ATP is spent on everything the cell does. The biggest single cost is building proteins: about 4 ATP for every amino acid." |
+| S3 | enzymes, ATP diamonds | "Enzyme machines inside break the sugar down and make ATP, the cell's energy currency." · "Here, with no oxygen, each glucose gives 2 ATP." (two lines) |
+| S4 | ATP arrows to building, upkeep | "ATP is spent on everything the cell does. The biggest single cost is building proteins: about 4 ATP to join each amino acid on." |
 | S5 | a transporter with a price tag | "So one transporter, about 450 amino acids long, costs about 1,800 ATP: the energy from about 900 glucose." |
 | S6 | gene → mRNA → ribosome | "Genes hold the instructions for every machine. mRNA copies carry them to the ribosomes." |
-| S7 | a worn machine being cut up | "Machines wear out and are cut up, so new ones are always being made." |
+| S7 | a worn machine being cut up | "Machines wear out and are cut up, and new ones are made all the time." |
 | S8 | the cell elongates and divides (drawing) | "When the economy runs well, the cell grows, copies its DNA and divides in two." |
 | S9 | the live cell appears; the goal and the lever (§2.8.2), then guess E9 | "Your job: keep this cell fed and growing, until it divides in two." (and the lines of §2.8.2) |
 
@@ -557,7 +574,7 @@ transporters."): "What will happen to its ATP?"
 
 | Option (exact) | mc | What happened (fb, exact) |
 |---|---|---|
-| "It runs low, because no sugar gets in." (the cause) | – | "Its ATP ran low: without transporters, only a trickle of sugar got in to be broken down." |
+| "It runs low, because little sugar gets in." (the cause) | – | "Its ATP ran low: without glucose transporters, only a trickle of sugar got in to be broken down." |
 | "It stays high: sugar outside is enough." | `ENERGY_FIRST` | "Sugar outside makes no ATP. Only sugar that gets in and is broken down by enzymes does." |
 | "It rises, because the cell saves energy." | `CELL_DECIDES` | "Nothing saves anything on purpose. ATP fell, because too little sugar got in." |
 
@@ -622,7 +639,7 @@ the pointer appears; the same run replayed stops at the same tick):
 | H10 | a membrane glyph | "They sit across the membrane. A hollow mark means fewer than half a dot's worth." | – | state `inPlace` → tap; "Speed up" offered | – |
 | H11 | glucose markers | "Glucose now comes in through them. Each moving mark stands for {N} glucose." | – | state `workOver(1)` → tap; offer "Look at one transporter" (Protein) | "Glucose came in only once transporters sat in the membrane." |
 | H12 | energy word | "With glucose coming in, energy is back to normal. Growth picks up over the next half hour." | – | state `energyNormal` → tap | – |
-| H13–H14 | – | the closing story lines of §2.8.2 (the Commander's "It did exactly what I told it.", the narrator's cause, the Ribosome, and the set-up for 1.1) | – | tap per line | – |
+| H13–H14 | – | the closing story lines of §2.8.2 (the Commander's "It did exactly what I told it.", the narrator's cause, and the set-up for 1.1) | – | tap per line | – |
 
 **Guess H5** (logged):
 Prompt: "When you switch this gene on, what will you see first?"
@@ -641,8 +658,8 @@ during H7–H11 is allowed (the switch is real); the pointer then says "The gene
 copies are started. Switch it on to carry on." (a step note, not narrator) and the current state
 test keeps waiting. Nothing times out.
 
-**Cards collected at the end of part 2:** No nucleus · Not in your cells; One loop of DNA · Not in
-your cells; Reading mRNA while it is made · Not in your cells; ATP, the energy currency ·
+**Cards collected at the end of part 2:** No nucleus · Not in your cells; All its genes on one loop of DNA ·
+Not in your cells; Reading mRNA while it is made · Not in your cells; ATP, the energy currency ·
 Universal.
 
 ### 2.5 Screens and layouts
@@ -674,19 +691,19 @@ Universal.
 ┌──────────────────────────────────────┐
 │ [≡ Levels]  How a gene becomes a …   │
 ├──────────────────────────────────────┤
-│ the gene's letters →                 │ muted label, 13 px
+│ the gene's letters (coding strand) → │ muted label, 13 px
 │  A  G  C  C  C  T  C  C  A  G  G     │ 22 px letters, 30 px per pair
 │  ╭──────────────╮ RNA polymerase     │ bubble (to scale, about 13 nm)
 │  A  G  C  C  C  ?                    │ the copy; U in accent
 │  ╰──────────────╯                    │
-│  T  C  G  G  G  A  G  G  T  C  C     │ the other strand (template)
+│  T  C  G  G  G  A  G  G  T  C  C     │ the other strand (template strand)
 │ ├── 1 nm ──┤   letters copied 5 of 465│
 ├──────────────────────────────────────┤
 │ Fill in the copy. Which letter goes  │
 │ across from each DNA letter?         │
 │ [ A ] [ C ] [ G ] [ T ] [ U ]        │ five 56 × 48 px keys
 │ The copy has no T. Across from A,    │ feedback (after a pick)
-│ it puts U.                           │
+│ the copy has U.                      │
 │                     [ Let it run › ] │ enabled after six letters
 └──────────────────────────────────────┘
 ```
@@ -737,14 +754,19 @@ for full labels; keys and table rows keep 48 px.
 ### 2.6 Disclosures ("What is simplified" sheet)
 
 Reached from a 44 px "What is simplified" row on each part's completion screen and from the
-opening's menu. Plain lines, one each:
+opening's menu. Plain lines, one each. Part 1:
 1. "The drawings of your body, pancreas and cells are to their scale bars, but simplified."
 2. "Your insulin gene is longer than the copy shown: two stretches are copied, then cut out before the mRNA leaves the nucleus (chapter 2)."
 3. "A real mRNA also gets a cap at its front and a long tail of A's at its back."
-4. "Insulin's ribosomes sit on a membrane network next to the nucleus. The chain's first 24 amino acids lead them there."
+4. "Insulin's ribosomes sit on a membrane network next to the nucleus. The chain's first 24 amino acids dock them there, then are cut off."
 5. "Protein shapes are drawn flat. Real proteins are three-dimensional; the fit between pocket and molecule is real."
 6. "The copying and reading run at about the speed they do in your cells."
-7. "The bacterium you run is a lab strain: each of its genes has its own switch."
+
+Part 2 (the bacterium's line moved here from part 1, where no bacterium has been met):
+1. "The drawings of cells are to their scale bars, but simplified; what is not says so."
+2. "Protein shapes are drawn flat. Real proteins are three-dimensional; the fit between pocket and molecule is real."
+3. "The bacterium you run is a lab strain: each of its genes has its own switch."
+4. "Each dot on the cell stands for many molecules; the line under the cell says how many."
 
 ### 2.7 Old Prologue parts that go
 
@@ -768,14 +790,14 @@ only here and are added to the scenes' `lines` arrays in this order.
 |---|---|---|---|---|
 | A0 | the student's outline | narrator | "This is you. Some of your cells are making a protein called insulin right now." | T |
 | A0 | same | You | "Good. Who gives the order to make it?" | S |
-| A0 | same | narrator | "Watch, and see who does." | S |
+| A0 | same | narrator | "Watch and see." | S |
 | A1 | pancreas | narrator | "This is your pancreas, about as long as your hand. The ring marks one tiny cluster of cells." | T |
 | A2 | islet slice | narrator | "A slice through that cluster. After a meal, its beta cells release insulin into your blood." | T |
 | A3 | beta cell | narrator | "One beta cell. Each small dot is a packet of insulin, ready to be released." | T |
 | A4 | nucleus | narrator | "The nucleus holds the cell's DNA, split into 46 long threads called chromosomes." | T |
-| A5 | chromosome 11 | narrator | "This is chromosome 11. In a cell that is not dividing, it is a loose tangle, not the X shape seen in pictures." | T |
+| A5 | chromosome 11 | narrator | "This is one of your two chromosome 11s. In a cell that is not dividing, it is a loose tangle, not the X shape seen in pictures." | T |
 | A6 | spools (optional rung) | narrator | "The thread is DNA, wound around protein spools." | T |
-| A7 | a stretch of DNA | narrator | "Along the DNA are genes. The coloured stretch is the insulin gene, one of about 20,000 genes in your DNA." | T |
+| A7 | a stretch of DNA | narrator | "Along the DNA are genes. The coloured stretch is the insulin gene, one of about 20,000 genes for proteins in your DNA." | T |
 | A8 | helix | narrator | "DNA is two strands twisted around each other." | T |
 | A9 | letters | narrator | "Each strand is a chain of four building blocks, written A, C, G and T." | T |
 | A9 | same | narrator | "Across the two strands, A always pairs with T, and C with G." | T |
@@ -786,25 +808,26 @@ only here and are added to the scenes' `lines` arrays in this order.
 | C3 | the bubble | narrator | "The copy pairs letters the same way, with one change: across from an A in the DNA, the copy has U, not T." | T |
 | C4 | letter fill, then the run | – | (the activity's prompt and feedback, §2.3.3) | T |
 | C5 | the finished copy | narrator | "The machine is called RNA polymerase. The copy is called messenger RNA, or mRNA." | T |
-| D1 | the nucleus with the copy | You | "The copy is done. Surely the gene goes out with it now." | S (guess D1 follows) |
+| C5 | same | narrator | "Built across from the other strand, the copy spells out the gene's letters, with U in place of T." | T |
+| D1 | the nucleus with the copy | narrator | "Here is the nucleus again, with the finished copy near a pore." | S (guess D1 follows) |
 | D2 | the copy leaves by a pore | narrator | "The mRNA leaves through a pore in the nucleus. The gene stays inside and can be copied again." | R |
 | D3 | "Copy again" | narrator | "Tap to copy the gene again." | T |
 | D3b | three copies | narrator | "One gene can give many copies, and each copy can be read many times." | R |
 | E1 | ribosome on the copy | narrator | "Out in the cell, a machine called a ribosome reads the mRNA three letters at a time." | T |
 | E1 | same | Ribosome | "I read whatever mRNA reaches me, three letters at a time. I have never once made a decision." | T |
-| E2 | codon frames | narrator | "Each group of three letters, a codon, stands for one amino acid. Amino acids are the building blocks of a protein." | T |
+| E2 | codon frames | narrator | "Each group of three letters, a codon, stands for one amino acid or for stop. Amino acids are the building blocks of a protein." | T |
 | E3 | decode, then the run | – | (the activity's prompt and feedback, §2.3.5) | T |
 | E3 end | the finished chain | narrator | "UAG means stop. The chain is finished: 110 amino acids, in the order the gene spelled out." | R |
 | E4 | a polysome | narrator | "Several ribosomes can read the same mRNA at once, each a little further along." | T |
-| F1 | folding | narrator | "The chain folds up on itself." | T |
-| F2 | cutting | narrator | "Two pieces are cut away. What is left is insulin: two short chains held together." | T |
-| F3 | insulin at a muscle cell | narrator | "Insulin travels in your blood. In your muscles, it leads cells to put more glucose transporters into their membranes." | T |
+| F1 | folding | narrator | "The first 24 amino acids are cut off as the chain is made, and the rest folds up on itself." | T |
+| F2 | cutting | narrator | "A middle piece is cut out. What is left is insulin: two short chains held together by links." | T |
+| F3 | insulin at a muscle cell | narrator | "Insulin travels in your blood. Where it reaches muscle cells, stored proteins that carry glucose move into their membranes." | T |
 | F4 | membrane, glucose outside | You | "Glucose is right there. Just let it in." | S (guess F4 follows) |
 | F5 | the transporter at work | narrator | "This protein sits across the membrane. Glucose fits its pocket, the protein changes shape, and the glucose comes out inside." | R |
 | F6 | a bigger sugar bounces off | narrator | "A bigger sugar does not fit this pocket, so it does not get through. A protein that carries things across a membrane is a transporter." | R |
 | F7 | machine cards | narrator | "Every protein is made this way, from its gene, including the transporters that let glucose into your cells." | T |
 | F7 | same | You | "I watched the whole thing. Nobody gave an order." | R |
-| F7 | same | narrator | "No. A gene was copied, the copy was read, and the chain folded. Each step happened because molecules bumped together and fit." | R |
+| F7 | same | narrator | "Nobody did. A gene was copied, the copy was read, and the chain folded. Each step happened because molecules bumped together and fit." | R |
 | F7 | same | narrator | "Next, a cell you can run yourself." | S |
 
 #### 2.8.2 Part 2: "A cell's economy"
@@ -812,22 +835,22 @@ only here and are added to the scenes' `lines` arrays in this order.
 | Scene | On screen | Speaker | Line (exact) | Job |
 |---|---|---|---|---|
 | Q1 | beta cell and bacterium | narrator | "This is a bacterium, much smaller than one of your cells. Bacteria of this kind live in your gut." | T |
-| Q2 | its ribosomes | narrator | "It reads the same genetic code, with the same kind of ribosome." | T |
+| Q2 | its ribosomes | narrator | "It reads the same genetic code, with ribosomes that do the same job as yours." | T |
 | Q2 | same | Ribosome | "Different cell, same code, same job. I read what reaches me." | T |
-| Q3 | its DNA loop | narrator | "It has no nucleus. Its DNA is one loop of about 4.6 million letters, with about 4,300 genes, loose in the cell." | T |
+| Q3 | its DNA loop | narrator | "It has no nucleus. Its DNA is one loop of about 4.6 million letters, with about 4,300 genes, lying free in the cell." | T |
 | Q4 | copying and reading at once | narrator | "With no nucleus in the way, ribosomes start reading an mRNA while it is still being made." | T |
-| Q5 | glucose | narrator | "Glucose is the everyday sugar. It is in your blood, and it is this bacterium's usual food." | T |
+| Q5 | glucose | narrator | "Glucose is the everyday sugar. It is in your blood, and it is the sugar this bacterium uses first when it can." | T |
 | Q6 | lactose | narrator | "Lactose is the sugar in milk. Some of it reaches the bacteria in your gut." | T |
-| Q7 | two machine pairs | narrator | "Each sugar has its own transporter to get in and its own enzyme to split it. Lactose is useful to a cell only once it has both." | T |
+| Q7 | two machine pairs | narrator | "Each sugar gets in through its own transporter. Lactose must also be split in two by its own enzyme before the cell can use it." | T |
 | S0 | the bacterium | You | "A cell of my own. What does it do all day?" | S |
 | S1 | the cell outline | narrator | "A cell runs as a small economy." | R |
 | S2 | sugar, transporter | narrator | "Food first: sugar gets in only through transporter machines in the membrane." | T |
-| S3 | enzymes, ATP | narrator | "Enzyme machines inside break the sugar down and make ATP, the cell's energy currency. Here, each glucose gives 2 ATP." | T |
-| S4 | spending | narrator | "ATP is spent on everything the cell does. The biggest single cost is building proteins: about 4 ATP for every amino acid." | T |
+| S3 | enzymes, ATP | narrator | "Enzyme machines inside break the sugar down and make ATP, the cell's energy currency." | T |
+| S3 | same | narrator | "Here, with no oxygen, each glucose gives 2 ATP." | T |
+| S4 | spending | narrator | "ATP is spent on everything the cell does. The biggest single cost is building proteins: about 4 ATP to join each amino acid on." | T |
 | S5 | a price tag | narrator | "So one transporter, about 450 amino acids long, costs about 1,800 ATP: the energy from about 900 glucose." | T |
-| S5 | same | You | "Expensive. I will only build what the cell uses." | S |
 | S6 | gene → copy → ribosome | narrator | "Genes hold the instructions for every machine. mRNA copies carry them to the ribosomes." | T |
-| S7 | a worn machine cut up | narrator | "Machines wear out and are cut up, so new ones are always being made." | T |
+| S7 | a worn machine cut up | narrator | "Machines wear out and are cut up, and new ones are made all the time." | T |
 | S8 | growth and division | narrator | "When the economy runs well, the cell grows, copies its DNA and divides in two." | T |
 | S9 | the live cell appears | narrator | "Your job: keep this cell fed and growing, until it divides in two." | S |
 | S9 | same | You | "Fed, growing, dividing. I will give the orders." | S |
@@ -836,7 +859,6 @@ only here and are added to the scenes' `lines` arrays in this order.
 | H1–H12 | the guided experiment | narrator | the step lines of §2.4.3, in order | T and R |
 | H13 | energy back to normal | You | "It did exactly what I told it." | R |
 | H13 | same | narrator | "You switched one gene on. RNA polymerase copied it, ribosomes read the copies, and the transporters let glucose in." | R |
-| H13 | same | Ribosome | "I read those copies because they reached me. I would have read any others." | R |
 | H14 | the cell, then six grey genes | narrator | "Next time this cell starts over with six unlabelled genes. One of them holds the instructions for the transporter." | S |
 | H14 | same | You | "Then I will switch on the right one." | S |
 | H14 | same | narrator | "First you will have to find it." | S |
@@ -895,16 +917,16 @@ the DNA runs along the long axis.
 | Element | Drawn as | Source (view path; §7 for new fields) | Count rule |
 |---|---|---|---|
 | The gene's DNA | double line in `--dna`, the gene body in the gene colour, 0.34 nm per letter at the stage's px/nm; one copy, or two stacked when `cell.dosage` = 2 | `genes[f].mRNA_nt` (3L + 60 letters, leaders included), `cell.dosage` | – |
-| Promoter | bent arrow at the gene's front, gene colour; "promoter" label on first show (tier intro) | `genes[f].level`, `rate_perS` | – |
+| Promoter | bent arrow at the gene's front; named "copying starts here (promoter)" in the in-picture legend (beside the arrow when the legend has no room) | `genes[f].level`, `rate_perS` | – |
 | Operator, CRP site (m2-lac) | the lac region's parts as in the 1.7 enlarged panel; LacI clamped on the operator while `lac.operatorBound > 0` for that copy | `view.lac` | 1 per copy |
 | RNA polymerase | ring, to scale (about 13 nm across) or 6 px minimum, on the DNA at `progress × gene length` | `genes[f].nascent`, `nascentProgress[j]` | one ring per transcript in progress (all drawn; capped by `rnapFootprint` in the engine anyway) |
 | Copy in progress | wavy strand growing from the ring, length ∝ progress | same | one per transcript |
 | Ribosomes on a copy in progress (bacteria) | two-lobed glyph on the growing strand | `genes[f].tlCopies` (includes transcripts already past the start), the ribosome spread (below) | as for mature copies |
 | mRNA copies | wavy strands in the gene colour, compressed to fit (disclosed); each keyed by molecule id | `genes[f].mRNAIds[0 … mRNA)`, `mRNABirthTick` | up to `MAXM` drawn (6 compact, 12 wide); the rest summarised |
-| Ribosomes on each drawn copy | two-lobed glyph, to scale (21–25 nm) or 6 px minimum | total `genes[f].ribosomes`, shared over `tlCopies` | per drawn copy `round(ribosomes / tlCopies)`, remainder to copies in `hash(id, epoch)` order (the overview's rule) |
+| Ribosomes on each drawn copy | two-lobed glyph, to scale (21–25 nm) or 6 px minimum: the small subunit on the strand, the large one above it, the new chain leaving the large one's top (as in the opening's E-scenes; the cell view and the key use the same orientation) | total `genes[f].ribosomes`, shared over `tlCopies` | per drawn copy `round(ribosomes / tlCopies)`, remainder to copies in `hash(id, epoch)` order (the overview's rule) |
 | Ribosome positions along a copy | at chain-progress values sampled from the gene's spread | `detail.ribosomeProgress[16]` (§7) | quantiles of the 16-bin spread, offset by `hash01('rp:' + id, k, epoch)` |
 | New chains | beaded tail from each ribosome, length ∝ progress × L (1 bead per 20 aa), gene colour | the same progress values | one per ribosome |
-| Chain into the membrane (membrane proteins) | the tail enters the membrane band as it grows (the ribosomes of a membrane gene are drawn docked at the membrane) | `genes[f].location === 'membrane'` | – |
+| Chain into the membrane (membrane proteins) | the tail enters the membrane band as it grows (a thin line up to it); the ribosomes stay in their lanes, and the key says "Ribosomes making a membrane protein are held at the membrane; here they are drawn in lanes below it, for clarity." | `genes[f].location === 'membrane'` | – |
 | Finished proteins | folded glyphs (§4) in their place: in the membrane band for membrane proteins, in the cytoplasm otherwise; up to 8 drawn, then "+{n} more" | `genes[f].protein` | `min(8, round(protein))` |
 | "New protein" marker | a short fold animation at a ribosome's end (process marker, below) | `genes[f].synthesis_perS` via `FluxEmitter` | the emitter's count (exact over time) |
 | mRNA broken down | the strand breaks into fragments that fade (process marker, 0.6 s render time) at the place of the molecule whose id vanished | id set difference between frames | one per vanished id |
@@ -990,13 +1012,15 @@ in two columns of lanes, the DNA along the bottom.
   per PtsG per second, lactose per LacY, lactose split per LacZ tetramer, hexose per lumped enzyme
   copy, amino acids per importer. The picture runs cycles at `r / k`, where `k` is the smallest of 1,
   10, 100, 1,000, 10,000 that puts one cycle between 0.6 and 3 s of real time; the line under the
-  picture says "Carries about {r} glucose a second. Shown {k} times slower." (`r` to 2 significant
+  picture says "Carries about {r} glucose molecules a second. Shown {k} times slower than real life." (`r` to 2 significant
   figures). If `r = 0`, no cycle runs, and the line gives the reason from the facts: "No glucose
   outside." / "Nothing here fits it." / "Energy is too low for it to work." (lint-safe, no digits).
 - **Simulated time:** the cycle advances only while the simulation runs (render time frozen when
   paused, as for markers); at game speeds above real time the per-copy rate is still the real one
   (a single molecule's cycle cannot be shown at 60× its real speed), and the line states both
-  ("the cell is running at 1 s = 1 min; this molecule is shown {k} times slower than real time").
+  ("Shown {k} times slower than real life; the cell itself runs at 1 s = 1 min."). Where the model's
+  per-copy rate is far from a measured one, the key sheet says so (LacY: "Rates are the model's; a real
+  lactose transporter carries about twenty a second."; BIOLOGY.md open item 8).
 - **Which state is drawn:** the cycle's phase is deterministic, `phase = frac(tRender · r / k)`.
   For a population state (LacI bound or not, allolactose in its pocket or not), the drawn molecule
   takes the state with a deterministic draw per display period: `hash01('m:' + gene, period, epoch)
@@ -1018,7 +1042,7 @@ in two columns of lanes, the DNA along the bottom.
 | lacY | membrane protein, lactose-shaped pocket, a proton site | open out → lactose + proton bound → open in → released | `lactoseIn / LacY` | glucose (does not fit the galactose end) |
 | aaImp (lumped) | membrane protein, triangle pocket | as ptsG, with an amino acid | `aaImported / aaImp` ("stands for about 10 importers") | glucose |
 | araE (1.1 decoy) | membrane protein, arabinose-shaped pocket | open out ↔ open in, empty | 0 (no arabinose ever present): "No arabinose here." | glucose bounces off |
-| lacZ | four-chain cluster, active site in a groove | lactose bound → split → glucose + galactose released | `lactoseSplit / (LacZ/4)` per four-chain enzyme | glucose (bounces off the groove) |
+| lacZ | four-chain cluster drawn to scale with its sugars (about 17.5 × 13.5 nm, Jacobson 1994), active site in a groove | lactose bound → split → glucose + galactose released | `lactoseSplit / (LacZ/4)` per four-chain enzyme | none (glucose, its own product, binds its pocket too, so it is not shown bouncing off) |
 | gly (lumped) | one enzyme drawn, "stands for about 10 enzymes" | a sugar piece bound → changed → released, with ADP → ATP at the steps that make ATP | `hexoseToGlycolysis / gly` in hexose per copy (the engine's unit, stated) | lactose |
 | aaSyn (lumped) | one enzyme drawn, "stands for about 100" | sugar pieces + ATP → amino acid | `aaMade / aaSyn` | – |
 | fliC | a rod-shaped subunit with matching faces top and bottom | in a real cell: copies stack into the swimming tail (dashed ghost labelled "in a cell with the other flagellum genes"); here: "Made, but not exported: it does no work here." | 0 | – |
@@ -1037,8 +1061,8 @@ in two columns of lanes, the DNA along the bottom.
 │ ════════╝      ╚═════════            │
 │ inside     ⬡ → ⬡⬡ glucose bounces off│ non-fitting molecule (fixed path)
 │ ├── 2 nm ──┤  shape drawn flat       │
-│ Carries about 50 lactose a second.   │ 15 px lines
-│ Shown 100 times slower.              │
+│ Carries about 50 lactose molecules a │ 15 px lines
+│ second. Shown 20 times slower than … │
 ├──────────────────────────────────────┤
 │ (focus bar, legend, narrator as in the Gene zoom)
 ```
@@ -1250,7 +1274,7 @@ energy and grows slowly. Find the gene for the machine that lets glucose in."
 - W1 (Protein zoom on bare membrane): glucose bumps the membrane; a trickle comes in through the
   side route. Line: "Glucose is all around, but it cannot cross the membrane without a transporter.
   Only a trickle gets in, by a slow side route."
-- W2 guess: "These sugar-splitting enzymes are made inside the cell. Could one of them carry glucose
+- W2 guess: "These glucose-processing enzymes are made inside the cell. Could one of them carry glucose
   in?" (the background gene `gly`, names shown): cause option "No: only a protein that sits in the
   membrane meets the glucose outside." Then the Gene zoom of `gly`: its chains fold in the
   cytoplasm. Cause: "A transporter has to sit in the membrane, where the glucose is."
@@ -1304,7 +1328,7 @@ membrane, and that an inside protein cannot help.
 | same | You | "Then order it to eat." | S |
 | same | narrator | "It cannot read orders. Glucose gets in only through a transporter, and this cell has none." | R |
 | same, six grey gene cards | narrator | "One of these six unlabelled genes holds the instructions for the transporter. Each gets its name once its protein is seen at work." | S |
-| watch W2, the sugar-splitting enzymes | You | "These enzymes are already made. Put them to work on the glucose." | S (guess follows) |
+| watch W2, the glucose-processing enzymes | You | "These enzymes are already made. Put them to work on the glucose." | S (guess follows) |
 | after W2's gate, their chains folded inside | narrator | "They sit inside the cell. The glucose is outside the membrane, where they cannot reach it." | R |
 | run, a protein seen inside (rule `l11.inside`) | narrator | "{N} stays inside the cell, so it cannot carry glucose across the membrane." | R |
 | run, a membrane protein with no glucose job (rule `l11.nofit`) | narrator | "{N} sits in the membrane, but no glucose gets in through it." | R |
@@ -1332,7 +1356,7 @@ gene is switched off.
 #### 6.2.2 Setup
 - Strain `m1-lab`, `start: 'birth'`, glucose 10 mM, lactose 0, amino acids 0.
 - `genes.lacY = {level: 'off', initial: {clear: true, protein: 0}}`; `genes.lacZ = {level: 1,
-  initial: {protein: LC.l12.lacZReady}}` (the lactose splitter at its ×1 level, "already made", a
+  initial: {protein: LC.l12.lacZReady}}` (the lactose-splitting enzyme at its ×1 level, "already made", a
   background gene with its name shown); other genes as the lab strain.
 - `config.schedule`: at `D·60` s, `setMedium {glucose_mM: 0, lactose_mM: 5}` and `setControls
   locked` (R-E11), both lesson commands.
@@ -1368,16 +1392,16 @@ and 25, and the words change with it.
 |---|---|---|---|---|
 | W1 | "This is the lactose transporter gene. It is switched off, so nothing is being copied." | **g1** (below) | act: switch lacY on (the student's tap; logged) | – |
 | W1b | "The first copy is outlined. Watch how many transporters it is read into." | – | state `firstMRNA` sets the watched copy (the first mature lacY mRNA after the switch-on); the counter "this copy: read into {n}" runs; gate `watchedGone` (pause) | "This copy was read into {n} transporters in {t}, then broken down. Meanwhile {k} more copies were made." |
-| W2 | "Ribosomes read each copy again and again until it is broken down." | **g2** (below) | act: switch lacY off | – |
-| W2b | "The gene is off. Count the copies still left." | – | counters "copies left {m}" and "transporters made since off: +{a}"; gate `allMRNAGone` (pause) | "Switching the gene off stopped new copies at once. The copies already made were still read, so {a} more transporters arrived." |
+| W2 | "Ribosome after ribosome reads each copy until it is broken down." | **g2** (below) | act: switch lacY off | – |
+| W2b | "The gene is off. Count the copies still left." | – | counters "copies left {m}" and "transporters made since off: +{a}"; gate `allMRNAGone` (pause) | "Switching the gene off stopped new copies from being started. The copies already made were still read, so {a} more transporters arrived." |
 | W3 | "So one copy gives about twenty transporters, and they keep arriving for a few minutes after the gene is off." | – | tap | – |
 
 **Guess g1:** "When you switch the gene on, how many transporters will one mRNA copy be read into before it is broken down?"
 
 | Option (exact) | mc | What happened (fb, exact; shown at W1b's gate) |
 |---|---|---|
-| "One." | `OTHER` | "Ribosomes read the same copy again and again. This one gave {n} before it was broken down." |
-| "About twenty." (the cause) | – | "Ribosomes read it again and again for a few minutes. This one gave {n}; the average is about twenty." |
+| "One." | `OTHER` | "Ribosome after ribosome read the same copy. This one gave {n} before it was broken down." |
+| "About twenty." (the cause) | – | "Ribosome after ribosome read it until it was broken down. This one gave {n}; the average is about twenty." |
 | "Thousands." | `OTHER` | "Each copy lasts only minutes, so it gives tens, not thousands. This one gave {n}." |
 | "It is never broken down, so it keeps going." | `MOLECULES_LAST` | "Copies are broken down within minutes. This one lasted {t} and gave {n}." |
 
@@ -1391,7 +1415,7 @@ and 25, and the words change with it.
 | "The transporters already made disappear." | `OTHER` | "The transporters stayed in the membrane. Only the copies were broken down." |
 
 **Task card (exact):**
-- Picture: two machine cards: "Carries lactose into the cell · Lactose transporter · lacY" (state: "none yet") and "Splits lactose into two smaller sugars · Lactose splitter · lacZ" (state: "ready").
+- Picture: two machine cards: "Carries lactose into the cell · Lactose transporter · lacY" (state: "none yet") and "Splits lactose into two sugars: glucose and galactose · Lactose-splitting enzyme · lacZ" (state: "ready").
 - Scenario: "At minute {D} the glucose runs out and milk sugar arrives."
 - Why it matters: "Without enough lactose transporters, the cell will be short of energy and grow slowly on milk sugar."
 - Goal: "Have {T} lactose transporters in the membrane by minute {D}."
@@ -1403,6 +1427,9 @@ and 25, and the words change with it.
 mark at minute D ("milk arrives"); control: Off/On (On = ×4).
 - HUD: goal "{n} / {T} transporters" (bar), after D "Milk sugar here · {n} transporters"; timer
   "milk in {time}", after D "watching {time} more"; counter "{M} copies" (over par: "{M} copies · over par").
+  On a phone (under 400 px): goal "Transporters {n} / {T}" (the protein by its job, no symbol), and the
+  counter chip gives way to it (the copies made are in the focus bar just below) until over par, when it
+  reads "over par" and the goal drops its "/ {T}"; in the watch the goal reads "Watching the gene".
 - At D (schedule): glucose goes, lactose arrives, the switch locks ("Set by this level."), the view
   moves to Cell zoom (the student sees lactose markers entering through the transporters) and the
   economy readouts appear with their introducing sentences if new: sugar coming in, energy, growth.
@@ -1410,7 +1437,7 @@ mark at minute D ("milk arrives"); control: Off/On (On = ×4).
 - Narrator rules (level): `l12.read` (gene on, copies > 0): "Ribosomes are reading every copy; each
   copy gives about twenty transporters before it is broken down." · `l12.leftover` (gene off,
   copies > 0): "The gene is off, but the copies already made are still being read." · `l12.milk`
-  (after D): "The glucose is gone; lactose gets in only through the transporters already in the
+  (after D): "The glucose is gone; lactose gets in only through the lactose transporters in the
   membrane." · `l12.short` (after D, energy low): "Too few transporters let too little lactose in, so
   energy is low and growth is slow." · `l12.fed` (after D, energy normal, growth normal): "Enough
   lactose gets in through the transporters, so the cell keeps growing."
@@ -1433,7 +1460,7 @@ mark at minute D ("milk arrives"); control: Off/On (On = ×4).
 - the cause: "Copies made before the switch-off were still being read by ribosomes." — "Each copy lasts a few minutes, and ribosomes keep reading it until it is broken down."
 - `CELL_DECIDES` "The gene took a while to notice it was off." — "Genes notice nothing. No new copy was started after the switch-off; the copies already made were still read."
 - `PROTEIN_SELF_COPY` "Transporters make more transporters once there are enough." — "Proteins are not copied from proteins. Every transporter was built by a ribosome reading an mRNA copy."
-- `DELAY_MISATTRIBUTED` "The switch-off took minutes to reach the DNA." — "The switch acted at once. The extra transporters came from copies already made."
+- `DELAY_MISATTRIBUTED` "The switch-off took minutes to reach the DNA." — "The switch acted at once: no new copy was started. The extra transporters came from copies already made."
 
 **d2** "Why does the cell make mRNA copies instead of reading the gene itself?"
 - the cause: "Many copies can be made, and each is read many times, so one gene gives many proteins." — "One gene gave {M} copies, each read into about twenty transporters. Copies are broken down, so making stops soon after the gene is off."
@@ -1441,7 +1468,11 @@ mark at minute D ("milk arrives"); control: Off/On (On = ×4).
 - `OTHER` "Ribosomes cannot reach the DNA." — "In this bacterium ribosomes start on a copy right beside the DNA, while it is still being made. Distance is not the reason."
 - `MIDDLEMAN` "mRNA is an early form of the protein." — "mRNA is a copy of the instructions. Ribosomes read it; it is never built into the protein."
 
-**Meanwhile, in you** (as now): insulin from many copies of one mRNA; card mRNA · Universal.
+**Meanwhile, in you:** insulin from many copies of one mRNA; "Nearly every cell in your body has the
+same two copies of the insulin gene. It is copied into mRNA almost only in beta cells." Card: "mRNA
+copies are temporary · Universal" (id `mrna-temporary`; Part 1 already gives the mRNA card), with one
+line under it on the last screen: "Your cells' mRNA copies are also broken down after a while. That is
+how a cell stops making a protein soon after its gene is switched off."
 
 **Outro:** chosen by `outroKey` from what happened (§6.2.8: `fed`, `keptOn`, `missed`), shown at
 the start of `echo` as now.
@@ -1463,16 +1494,16 @@ the story and are repeated here so the whole thread can be read at once.
 | Id | When, and what is on screen | Speaker | Line (exact) | Job |
 |---|---|---|---|---|
 | I1 | intro sheet over the paused Gene zoom (lacY off) | narrator | "Your cell is fed and growing on glucose. In half an hour the glucose runs out, and milk sugar arrives instead." | S |
-| I2 | same | narrator | "Milk sugar gets in only through lactose transporters, and this cell has none. Its lactose splitter is already made." | S |
+| I2 | same | narrator | "Milk sugar gets in only through lactose transporters, and this cell has none. Its lactose-splitting enzyme is already made." | S |
 | I3 | same | You | "Then build every transporter now, and stop when the milk arrives." | S |
 | I4 | same | narrator | "Each transporter is built from an mRNA copy of its gene. Before you plan, watch one copy at work." | S |
 | W1 | the lacY gene, off | narrator | "This is the lactose transporter gene. It is switched off, so nothing is being copied." | T (guess g1, switch on) |
 | W1b | the first copy outlined, its counter running | narrator | "The first copy is outlined. Watch how many transporters it is read into." | T |
 | W1b gate | the copy breaks up | narrator | "This copy was read into {n} transporters in {t}, then broken down. Meanwhile {k} more copies were made." | R |
-| W2 | many copies with ribosomes | narrator | "Ribosomes read each copy again and again until it is broken down." | T (guess g2, switch off) |
+| W2 | many copies with ribosomes | narrator | "Ribosome after ribosome reads each copy until it is broken down." | T (guess g2, switch off) |
 | W2b | copies left counting down | narrator | "The gene is off. Count the copies still left." | T |
-| W2b gate | the last copy gone | narrator | "Switching the gene off stopped new copies at once. The copies already made were still read, so {a} more transporters arrived." | R |
-| W2c | same | Ribosome | "I read each copy until it falls apart. Nobody tells me the gene is off." | R |
+| W2b gate | the last copy gone | narrator | "Switching the gene off stopped new copies from being started. The copies already made were still read, so {a} more transporters arrived." | R |
+| W2c | same | Ribosome | "I read each copy that reaches me until it is broken down. Nobody tells me the gene is off." | R |
 | W3 | same | narrator | "So one copy gives about twenty transporters, and they keep arriving for a few minutes after the gene is off." | R |
 | W3b | same | You | "About twenty from each copy. Then a handful of copies will do." | S |
 | W3c | same | narrator | "Feeding a cell on milk sugar takes thousands of transporters, so it takes a few hundred copies." | R |
@@ -1600,7 +1631,7 @@ energy went on them in every glucose phase.").
 
 | Level | Scenario and protein, in plain terms |
 |---|---|
-| 1.3 The price of a protein | "Building anything costs ATP. This cell is short of it: which machines are worth building first?" The sugar-splitting enzymes by job ("break sugar down and make ATP"), then their name. |
+| 1.3 The price of a protein | "Building anything costs ATP. This cell is short of it: which machines are worth building first?" The glucose-processing enzymes by job ("break glucose down and make ATP"), then their name. |
 | 1.5 Shape is function | "One letter of a gene changed in four strains. In one, the transporter no longer works. Which, and why?" The fold picture of §4.4 before any term ("mutation" named after the student has seen one change a fold). |
 | 1.6 Hijacked | "A virus is a set of instructions with no machines of its own. Your ribosomes read its mRNA as readily as yours." |
 | 1.8 Breathing room | "Oxygen arrives. Machines that use it make far more ATP from the same sugar, but they are costly to build." |
@@ -1709,8 +1740,8 @@ events; no absolute timestamps are added.
 | TI-2 | same | Simple and All modes of the lab expose the same commands |
 | L12-1…6 | `level-1-2.test.js` | the §6.2.7 solutions meet their expectations on 3 seeds per variant (40 in calibration); the watch gates open for the reference; the milk phase's growth line is true of the run; `LC.l12.ppm` lies in 15–25, so "about twenty" stays true |
 | C-1 | `level-content.test.js` (extended) | every student string of this file's levels (TEXT of P, P2, 1.2 and later 1.1, 1.4, 1.7), step lines, guesses, introducing sentences and machine card lines pass the lint of §1.1 |
-| ST-1 | `story.test.js` | every story line has a speaker in {narrator, commander, ribosome} and a job tag (`S`, `R` or `T`) in its level data; every Commander line is followed in its beat by a narrator line; per level at most 4 Commander and 1 Ribosome lines; every outro variant's first line is true of the run it is shown after (scripted runs for each `outroKey`) |
-| ST-2 | same | terms: each level's lines, in play order from P1, use a term of the §1.2 vocabulary (`TERMS`, with the step that introduces each) only at or after its introducing step |
+| ST-1 | `story.test.js` | every story line has a speaker in {narrator, commander, ribosome}; every Commander line is answered by the next line the student reads, a narrator's; **per play path** (not per file: 1.2's three outros are three paths) at most 4 Commander and 1 Ribosome lines (P 4 + 1, P2 4 + 1, 1.2 3–4 + 1 after the review cut D1's Commander line, S5's and H13's Ribosome line); every outro variant's first line is true of the run it is shown after (1.2's reference, keepOn and weak solutions, 3 seeds each). The job tags (S, R, T) live in §2.8 and §6.2.8, not in the level data |
+| ST-2 | same | terms: in play order from P1 (story lines, guesses and their feedback where shown, causes, notes, machine cards, About rows, task, result and debrief text), a term of the §1.2 vocabulary (`TERMS`, with the step that introduces each) appears only at or after its introducing step, and that step uses it |
 
 ### 10.2 Browser checks (`tools/ui-check-opening.js`, `tools/ui-check-zoom.js`, run by `tools/ui-check.js`)
 
@@ -1833,11 +1864,16 @@ review).
 | ATP per glucose here | 2 (fermentation; the lab cell has no oxygen) | engine `fermYield` |
 | Reference cell economy | glucose in 5.4 × 10⁵ /s; ATP made 9.2 × 10⁵ /s; translation 40.6% of ATP spent | engine 1.1.0, measured here (Appendix A) |
 | PtsG | tags glucose as glucose-6-phosphate while carrying it; per copy about 41 glucose/s in the reference cell | engine and Lab spec §2.9; measured here |
-| LacY | carries lactose in together with a proton; about 12 membrane-spanning stretches | memory (Abramson et al. 2003, *Science* 301:610) |
+| LacY | carries lactose in together with a proton; about 12 membrane-spanning stretches; about 20 lactose a second per copy (BioNumbers 112482), where the model's k_Y gives about 50 (BIOLOGY.md open item 8) | memory (Abramson et al. 2003, *Science* 301:610); slice biology review |
 | LacI | a four-chain repressor; allolactose binding changes its shape and loosens its hold on the operator | memory (Lewis et al. 1996, *Science* 271:1247) |
 | Flagellin | thousands of copies stack into one flagellum filament | memory |
 | GLUT4 | insulin moves GLUT4 transporters into muscle and fat cell membranes | textbook; already used in 1.1's "Meanwhile, in you" |
-| Recombinant insulin | made in *E. coli* from an intron-free gene since the early 1980s | memory |
+| Recombinant insulin | made in *E. coli* from an intron-free gene since the early 1980s (the chain is made, then cut into insulin by enzymes); about half of today's insulin is made in yeast | memory; Baeshen 2014 (slice biology review) |
+| Neighbourhood of INS | tyrosine hydroxylase (TH) ends about 2,700 letters before the insulin gene starts | OMIM 191290; GRCh38 coordinates (slice biology review) |
+| Chromosome 11 | about 135 million letters: 4.6 cm of DNA stretched out; two copies per cell | slice biology review |
+| *E. coli* | about 2 × 0.8–1 µm; its chromosome about 1.6 mm stretched out; tens of thousands of ribosomes in fast growth (about 11,000 in the model's reference cell) | slice biology review |
+| LacZ | a tetramer about 17.5 × 13.5 × 9 nm | Jacobson 1994 (slice biology review) |
+| Islet | about 55% beta cells in a human islet | slice biology review |
 
 ---
 

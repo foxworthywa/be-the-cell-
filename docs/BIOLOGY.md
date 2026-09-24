@@ -542,6 +542,13 @@ short forms like these), then the detail for instructors.
    enzymes; the seed only speeds the restart (13 s vs 6 s). The planned level 1.3 threshold
    ("too few enzymes never restart", engine spec §13.3) no longer exists; it would need a
    different mechanism.
+8. **LacY's per-copy rate** (slice biology review, M8). `k_Y` = 60 /s per copy is an estimate
+   (U); in the Protein close-up a LacY carries about 50–55 lactose a second, while the measured
+   turnover is about 20 a second (BioNumbers 112482). Decision for the slice: no engine change
+   (recalibrating k_Y moves 1.2's calibrated targets and 1.4/1.7); the close-up's key says "Rates are
+   the model's; a real lactose transporter carries about twenty a second." (`BTC.closeup.TEXT.protein.
+   rateNotes.lacY`). Before the spring release: lower k_Y towards 20 /s (with K_Y), regenerate the
+   constants with `tools/level-calibrate.js`, and drop the note if the rates then agree.
 
 ## Parameters
 

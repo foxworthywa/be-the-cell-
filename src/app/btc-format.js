@@ -101,7 +101,7 @@
 
   /**
    * A gene's finished proteins as the student counts them: working machines, so a four-chain LacZ is one
-   * lactose splitter (the engine counts chains). machinesRaw is the unrounded amount, for graph lines.
+   * lactose-splitting enzyme (the engine counts chains). machinesRaw is the unrounded amount, for graph lines.
    */
   function machinesRaw(gv) { const o = gv && gv.oligomer > 1 ? gv.oligomer : 1; return gv ? gv.protein / o : 0; }
   function machines(gv) {

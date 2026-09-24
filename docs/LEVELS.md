@@ -157,7 +157,7 @@ logic, and the lint (§12.1) walks `TEXT` only.
 | `score(variant, monitorResult, answers, extras)` | pure fn → components | §6.1; `extras` holds demo and par results |
 | `flags` | array of up to 8 ids | Bit order in the code's flag byte (§6.4) |
 | `debrief` | array of 1–2 questions | §3.3 |
-| `echo` | `{screens: [TEXT keys], cards: [{id, title, stamp}]}` | "Meanwhile, in you" (§5.8) |
+| `echo` | `{screens: [TEXT keys], cards: [{id, title, stamp, note?}]}` | "Meanwhile, in you" (§5.8); `note` (a TEXT key) is one plain line shown under the cards on the last screen |
 | `story` | `{intro: [lines], outro: [lines], extra?: {…}}` | §3.3 |
 | `narratorRules` | array | Level rules for `BTC.narrate` (§5.5.4) |
 | `solutions` | `{reference, …}` | For tests and tools only (§3.6) |
@@ -2263,6 +2263,25 @@ and "older version" on the home list, and keeps the full lab screen (no `labConf
 **Tests.** `tests/level-watch.test.js` (W-1 to W-11, on the stub level `tests/fixtures/level-watch-stub.js`),
 `tests/ui-tiers.test.js` (TI-1, TI-2), `tests/codes.test.js` (BTC2 and BTC1); browser checks in
 `tools/ui-check-tiers.js` (the stub injected into the page).
+
+### 16.14 The slice's biology and wording review (2026-09-24)
+
+Fixes to the opening and 1.2 from the review of commit 99dc8a2 (docs/PROLOGUE.md is updated line by
+line). What changes the level framework or 1.2 as LEVELS describes it:
+- **Content versions unchanged** (P 2, P2 1, 1.2 4): the fixes reword lines, cards, feedback, labels
+  and drawings; no variant, goal, scoring rule, option or flag changed (§3.2's rule), so codes and
+  autosaves stay valid.
+- **1.2's phone HUD** (under 400 px): goal "Transporters {count} / {T}" (was "LacY {count} / {T}"),
+  watch goal "Watching the gene". So that the goal fits whole, `counter.tiny` (new, optional) lets a
+  level's counter chip give way under 400 px ('' hides it): 1.2's copies are in the focus bar just
+  below; past par the chip reads "over par" and the goal drops "/ {T}". The long forms (400 px and
+  up) are unchanged. L12-6 and LV-4 check it.
+- **Echo cards** may carry `note` (a TEXT key), one plain line shown under the cards on the last
+  "Meanwhile, in you" screen. 1.2's card is now "mRNA copies are temporary · Universal" (id
+  `mrna-temporary`); Part 1 already gave the mRNA card, which 1.2 used to repeat.
+- **Story tests** `tests/story.test.js`: ST-1 counts Commander and Ribosome lines per play path
+  (1.2's three outros are three paths) and checks every outro's first line against scripted runs;
+  ST-2 checks the shared vocabulary's order of play (docs/PROLOGUE.md §1.2, §10.1).
 
 
 ---

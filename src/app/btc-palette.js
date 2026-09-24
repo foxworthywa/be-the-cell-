@@ -31,6 +31,8 @@
     'g-lacY': '#aa77aa', 'g-lacZ': '#990066', 'g-fliC': '#664400',
     // Level 1.7's repressor and the third lac gene (LEVELS §9 item 3; chosen by the §8.2 method, test U-5).
     'g-lacI': '#8800e0', 'g-lacA': '#e05010',
+    // The opening's insulin gene and chain: its own colour, not a lab gene's (the prologue's --gene).
+    insulin: '#0f766e',
     // Sugar phases shaded on the graphs (level 1.7): glucose, lactose, both.
     'band-G': '#2f6f95', 'band-L': '#95650a', 'band-B': '#4f7a3a',
     // ATP-spending bar: neutral greyscale steps, so it does not compete with gene colours.
@@ -49,6 +51,7 @@
     'g-ptsG': '#61a17d', 'g-gly': '#ffac89', 'g-aaSyn': '#91c9ff', 'g-aaImp': '#a690e4',
     'g-lacY': '#e8b7e7', 'g-lacZ': '#e970b1', 'g-fliC': '#b78e53',
     'g-lacI': '#a070ff', 'g-lacA': '#ff9a4d',
+    insulin: '#4fc0b0',
     'band-G': '#7fb3d9', 'band-L': '#e0b35c', 'band-B': '#9cc27f',
     'ledger-0': '#d6d9e0', 'ledger-1': '#aab0bc', 'ledger-2': '#838a98', 'ledger-3': '#646b79', 'ledger-4': '#4b515d', 'ledger-5': '#3a3f49',
   });

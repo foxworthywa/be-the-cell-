@@ -237,6 +237,7 @@
     def.echo.cards.forEach((c, i) => {
       if (!isObj(c) || !isStr(c.id)) fail('echo.cards[' + i + '].id', 'missing');
       if (textAt(def, c.title) === undefined) fail('echo.cards[' + i + '].title', 'must name a string in TEXT');
+      if (c.note !== undefined && textAt(def, c.note) === undefined) fail('echo.cards[' + i + '].note', 'must name a string in TEXT');
       if (STAMPS.indexOf(c.stamp) < 0) fail('echo.cards[' + i + '].stamp', 'universal or bacteria');
     });
     if (!isObj(def.story) || !Array.isArray(def.story.intro) || !Array.isArray(def.story.outro)) fail('story', '{intro, outro}');

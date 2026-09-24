@@ -44,6 +44,12 @@
     return '<path class="pl-sb" d="M' + x + ' ' + y + 'h' + r1(len) + 'M' + x + ' ' + (y - 5) + 'v10M' + r1(x + len) + ' ' + (y - 5) + 'v10"/>' +
       '<text class="pl-s" x="' + r1(long ? x : x + len / 2) + '" y="' + (y - 9) + '" text-anchor="' + (long ? 'start' : 'middle') + '">' + esc(text) + '</text>';
   }
+  /** A note in two lines, split after its first colon ("drawn far shorter:" / "stretched out, …"), anchored at x. */
+  function note2(x, y, text, anchor) {
+    const t = String(text || ''), i = t.indexOf(': ');
+    if (i < 0) return label(x, y, t, anchor, 'pl-s');
+    return label(x, y, t.slice(0, i + 1), anchor, 'pl-s') + label(x, y + 14, t.slice(i + 2), anchor, 'pl-s');
+  }
   // A small deterministic hash in [0, 1) for scattering dots (no random stream: every drawing is the same every time).
   const hash = (i, k) => { let h = (i * 374761393 + k * 668265263) | 0; h = (h ^ (h >>> 13)) * 1274126177; h ^= h >>> 16; return (h >>> 0) / 4294967296; };
   /** Circles as one path of arcs (compact: the islet has about 150 cells). */
@@ -81,7 +87,7 @@
           scaleBar(24, 282, 80, S.pancreas) + '</svg>',
       };
     },
-    /** A2: a slice through one islet (about 150 µm; 1.6 units per µm, 50 µm is 80): about 150 cells in section, beta cells tinted. */
+    /** A2: a slice through one islet (about 150 µm; 1.6 units per µm, 50 µm is 80): about 150 cells in section, beta cells (about 55%) tinted. */
     islet(T) {
       const L = T.labels, S = T.scale, beta = [], other = [];
       const cx = 160, cy = 138, sp = 17.5, rr = 112;
@@ -91,7 +97,7 @@
         for (let col = -8; col <= 8; col++) {
           const x = cx + col * sp + (row % 2 ? sp / 2 : 0);
           if ((x - cx) * (x - cx) + (y - cy) * (y - cy) > rr * rr) continue;
-          (hash(i++, 3) < 0.65 ? beta : other).push([x + (hash(i, 5) - 0.5) * 3, y + (hash(i, 7) - 0.5) * 3]);
+          (hash(i++, 3) < 0.55 ? beta : other).push([x + (hash(i, 5) - 0.5) * 3, y + (hash(i, 7) - 0.5) * 3]);
         }
       }
       return {
@@ -125,7 +131,7 @@
           scaleBar(14, 292, 107, S.betaCell) + '</svg>',
       };
     },
-    /** A4: the nucleus (about 6 µm; 45.7 units per µm, 1 µm is 46): envelope and pores (about 120 nm: 5.5 units), chromosomes; 11 tinted. */
+    /** A4: the nucleus (about 6 µm; 45.7 units per µm, 1 µm is 46): envelope and pores (about 120 nm: 5.5 units), chromosomes; both 11s tinted. */
     nucleus(T) {
       const L = T.labels, S = T.scale;
       let pores = '';
@@ -137,12 +143,17 @@
       return {
         ring: [150, 142],
         svg: open() + '<circle class="pl-l pl-nuc" cx="160" cy="150" r="133"/><circle class="pl-m" cx="160" cy="150" r="128" fill="none"/>' +
-          '<path class="pl-pore" d="' + pores + '"/><g class="pl-terr">' + terr + '</g><ellipse class="pl-chr11" cx="150" cy="142" rx="30" ry="24"/>' +
+          '<path class="pl-pore" d="' + pores + '"/><g class="pl-terr">' + terr + '</g>' +
+          // Two copies of chromosome 11, one from each parent: both tinted.
+          '<ellipse class="pl-chr11" cx="150" cy="142" rx="30" ry="24"/><ellipse class="pl-chr11" cx="210" cy="180" rx="30" ry="22"/>' +
           label(300, 20, L.envelope, 'end', 'pl-s') + label(310, 292, L.pore, 'end', 'pl-s') + leader(296, 280, 262, 238) +
-          label(150, 106, L.chr11, 'middle') + scaleBar(14, 294, 46, S.nucleus) + '</svg>',
+          label(160, 106, L.chr11Both || L.chr11, 'middle') + leader(212, 112, 212, 157) + scaleBar(14, 294, 46, S.nucleus) + '</svg>',
       };
     },
-    /** A5: chromosome 11 (about 2 µm; 128 units per µm, 500 nm is 64) as a loose tangle, the insulin gene's place near one end. */
+    /**
+     * A5: chromosome 11 (about 2 µm; 128 units per µm, 500 nm is 64) as a loose tangle, the insulin gene's place near one end.
+     * The thread is drawn far shorter than its DNA (about 135 million letters: 4.6 cm stretched out), and says so.
+     */
     chromosome(T) {
       const L = T.labels, S = T.scale;
       let d = 'M70 70', x = 70, y = 70, a = 0.3, end = null;
@@ -158,22 +169,26 @@
       return {
         ring: end,
         svg: open() + '<path class="pl-thread" d="' + d + '"/><circle class="pl-gmark" cx="' + r1(end[0]) + '" cy="' + r1(end[1]) + '" r="5"/>' +
-          label(r1(end[0] + 16), r1(end[1] - 14), L.geneHere) + scaleBar(18, 290, 64, S.chromosome) + '</svg>',
+          label(r1(end[0] + 16), r1(end[1] - 14), L.geneHere) + note2(312, 14, L.threadNote, 'end') + scaleBar(18, 290, 64, S.chromosome) + '</svg>',
       };
     },
-    /** A7: a stretch of DNA straightened (about 5,000 letters over 300 units: 1,000 letters is 60); genes as bands, the insulin gene coloured. */
+    /**
+     * A7: a stretch of DNA straightened (about 5,000 letters over 300 units: 1,000 letters is 60), the insulin gene coloured.
+     * Its real neighbourhood (GRCh38): the next gene, tyrosine hydroxylase, ends about 2,700 letters before the insulin
+     * gene starts, so only its last stretch is in view; the rest of the view is DNA between genes.
+     */
     stretch(T) {
       const L = T.labels, S = T.scale;
-      const u = 0.06, gx = 110, gw = 1431 * u;
+      const u = 0.06, gx = 190, gw = 1431 * u, nx1 = r1(gx - 2700 * u);
       return {
         ring: [gx, 150],
         svg: open() + '<path class="pl-bb" d="M10 146H310M10 154H310"/>' +
-          '<rect class="pl-other" x="18" y="140" width="' + r1(1200 * u) + '" height="20" rx="3"/><rect class="pl-other" x="232" y="140" width="' + r1(1100 * u) + '" height="20" rx="3"/>' +
+          '<rect class="pl-other" x="10" y="140" width="' + r1(nx1 - 10) + '" height="20" rx="3"/>' +
           '<rect class="pl-gband" x="' + gx + '" y="138" width="' + r1(gw) + '" height="24" rx="3"/>' +
           '<path class="pl-l" d="M' + gx + ' 132v36M' + r1(gx + gw) + ' 132v36"/>' +
           label(gx, 126, L.start, 'middle', 'pl-s') + label(r1(gx + gw), 126, L.end, 'middle', 'pl-s') +
-          label(r1(gx + gw / 2), 100, L.insulinGene, 'middle') + label(160, 196, L.otherGenes, 'middle', 'pl-s') +
-          leader(120, 186, 60, 162) + leader(200, 186, 260, 162) + label(310, 238, L.tooSmall, 'end', 'pl-s') +
+          label(r1(gx + gw / 2), 100, L.insulinGene, 'middle') + label(12, 200, L.nextGene, 'start', 'pl-s') +
+          leader(r1((10 + nx1) / 2), 188, r1((10 + nx1) / 2), 162) + label(310, 238, L.tooSmall, 'end', 'pl-s') +
           scaleBar(18, 290, 1000 * u, S.stretch) + '</svg>',
       };
     },
@@ -398,7 +413,13 @@
         box.appendChild(MV.MachineCard.create(CU.MACHINES.enzyme, 'g-gly', { job: W2.enzyme.job, name: W2.enzyme.name, where: W2.enzyme.where }));
         box.appendChild(this.insulinCard(W2.insulin));
       } else {
-        for (const id of ['ptsG', 'gly', 'lacY', 'lacZ']) box.appendChild(MV.MachineCard.forGene(id, { location: id === 'ptsG' || id === 'lacY' ? 'membrane' : 'cytoplasm' }));
+        // Q7: the part's own words (what each does, with no ATP before S3 names it), the gene symbol in muted italics.
+        const W2 = T.cardsQ7 || {}, G = this.app.BTC.content.genes;
+        for (const id of ['ptsG', 'gly', 'lacY', 'lacZ']) {
+          const wd = W2[id];
+          box.appendChild(wd ? MV.MachineCard.create(CU.machineOf(id), 'g-' + id, { job: wd.job, name: wd.name, symbol: G[id].symbol, where: wd.where })
+            : MV.MachineCard.forGene(id, { location: id === 'ptsG' || id === 'lacY' ? 'membrane' : 'cytoplasm' }));
+        }
         box.classList.add('is-pairs');
       }
       return box;
@@ -432,10 +453,18 @@
       if (this.key === 'fold') {
         c.fillStyle = P.inside; c.fillRect(0, 0, w, hh);
         const t = reduced ? 1 : Math.min(1, this.tau / 1.4);
-        // One bead per amino acid of the computed chain (110); oily stretches (none in insulin: the maximum is under the threshold) drawn thicker.
-        const SEQ = this.app.BTC.seq, protein = SS.model().protein, oily = SEQ.oilyStretches(protein);
-        art.drawChainFold(c, P, P['g-aaImp'], protein.length, t, w / 2, hh / 2, Math.min(w - 40, 420), Math.max(2.4, Math.min(4, w / 110)),
-          (i) => oily.some((x) => i + 1 >= x.from && i + 1 <= x.to));
+        // The chain's first 24 amino acids (INS.parts.signal) are cut off as it is made, so the rest folds: one bead per
+        // amino acid of the computed chain after them (86); oily stretches (none in insulin: the maximum is under the
+        // threshold) drawn thicker. Insulin's own colour (the prologue's gene colour), not a lab gene's.
+        const SEQ = this.app.BTC.seq, model = SS.model(), protein = model.protein, oily = SEQ.oilyStretches(protein), sig = model.parts.signal[1];
+        const col = P.insulin || P.muted, br = Math.max(2.4, Math.min(4, w / 110));
+        art.drawChainFold(c, P, col, protein.length - sig, t, w / 2, hh / 2 - 10, Math.min(w - 40, 420), br,
+          (i) => oily.some((x) => i + sig + 1 >= x.from && i + sig + 1 <= x.to));
+        // The piece cut off, faded beside the fold, with how long it is.
+        c.globalAlpha = 0.4; c.beginPath();
+        for (let i = 0; i < sig; i++) { const x = 14 + i * br * 2.4; c.moveTo(x + br * 0.8, hh - 40); c.arc(x, hh - 40, br * 0.8, 0, 6.283185307179586); }
+        c.fillStyle = col; c.fill(); c.globalAlpha = 1;
+        this.canvasLabel(c, P, L.cutAway + ' (' + sig + ')', 10, hh - 58);
         this.canvasLabel(c, P, L.fold, 10, 18);
         this.canvasLabel(c, P, L.flat, w - 10, hh - 12, 'right');
         return;
@@ -460,6 +489,8 @@
         labels: { outside: L.outside, membrane: L.membrane, inside: L.inside, pocket: L.pocket, nonfit: this.key === 'bounce' ? L.lactose + ': ' + L.notFit : '',
           picture: L.pictureOnly, strip: CU.TEXT.protein.strip },
       });
+      // The cycle here takes 0.8 s; in your cells a transporter carries about a hundred glucose a second (M6).
+      this.canvasLabel(c, P, L.slower, w - 10, 14, 'right');
       this.canvasLabel(c, P, L.flat, w - 10, hh - 12, 'right');
     }
     canvasLabel(c, P, text, x, y, align) {

@@ -65,7 +65,7 @@ test('L12-1: three targets from the calibration, each with its milk minute D and
       assert.deepEqual(c.config.variant, { levelId: '1.2', content: def.version, seed: vs, T: v.T, D: v.D, tMax: v.tMax });
       assert.equal(g.lacY.protein, 0, 'no lactose transporters yet');
       assert.equal(g.lacY.level, 'off');
-      // The lactose splitter is already made, and counted in whole four-chain enzymes where the student sees it.
+      // The lactose-splitting enzyme is already made, and counted in whole four-chain enzymes where the student sees it.
       assert.ok(Math.abs(g.lacZ.protein - L.lacZReady) <= 1, 'LacZ chains ' + g.lacZ.protein);
       assert.equal(F.machines(g.lacZ), Math.round(g.lacZ.protein / 4));
     }
@@ -201,7 +201,12 @@ test('L12-6: HUD texts (watch, run, milk; long and short forms) are filled for e
       for (const text of [h.goal.text, h.goal.short, h.timer.text, h.timer.short, h.counter.text, h.counter.short].filter((x) => x !== undefined)) {
         assert.ok(text.length <= 40 && !/[{}!]/.test(text) && !N.TELEOLOGY.test(text), text);
       }
-      if (st && !st.watch) assert.ok(h.goal.short.length <= 20, 'the short goal fits a phone: ' + h.goal.short);
+      // "Transporters 6,540 / 6,600" is 194 px at 360 px; with the timer it fits because the counter chip gives way
+      // there (its tiny form is '' until over par, then "over par" beside the goal without its target).
+      if (st && !st.watch) {
+        assert.ok(h.goal.short.length <= 26, 'the short goal fits a phone: ' + h.goal.short);
+        if (!st.milk && st.tick < v.D * 60) assert.ok(typeof h.counter.tiny === 'string' && h.counter.tiny.length <= 8, 'the counter gives way on a phone: ' + h.counter.tiny);
+      }
     }
   }
 });

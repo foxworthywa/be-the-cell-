@@ -467,7 +467,7 @@ There is one card per gene, in slot order. (Display-order variants, `variant.slo
 | 2 | aaSyn | Amino-acid-making enzymes | (many) | Build amino acids from sugar. | yes | 1 |
 | 3 | aaImp | Amino-acid importers | (several) | Bring amino acids in from outside. | yes | ¼ |
 | 4 | lacY | Lactose transporter | lacY | Carries lactose across the membrane. | no | Off |
-| 5 | lacZ | Lactose-splitting enzyme | lacZ | Splits lactose into glucose and galactose. | no | Off |
+| 5 | lacZ | Lactose-splitting enzyme | lacZ | Splits lactose into two sugars: glucose and galactose. | no | Off |
 | 6 | fliC | Flagellum protein | fliC | Part of the swimming tail; does no work here. | no | Off |
 
 Each entry also carries the phrases the narrator needs:

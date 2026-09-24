@@ -985,6 +985,8 @@
         if (s.last) {
           body.appendChild(h('h3', { text: G.echo.cardsHeading }));
           body.appendChild(h('div', { class: 'card-tiles' }, this.def.echo.cards.map((c) => Home.cardTile({ id: c.id, title: textAt(this.def, c.title), stamp: c.stamp }))));
+          // A card may carry one plain line on why it is stamped as it is (1.2: mRNA copies are temporary, in your cells too).
+          for (const c of this.def.echo.cards) if (c.note) body.appendChild(h('p', { class: 'sheet-note lv-card-note', text: textAt(this.def, c.note) }));
         }
         body.appendChild(h('div', { class: 'lv-sticky lv-actions' }, h('button', {
           class: 'btn primary lv-wide', type: 'button', 'data-primary': '',

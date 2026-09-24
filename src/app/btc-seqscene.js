@@ -126,7 +126,8 @@
     // Rows: the two strands paired (closed), held apart in the bubble; the copy pairs with the other strand there.
     const yC = (i) => (inB(i) ? 70 : edge(i) ? 104 : 126), yT = (i) => (inB(i) ? 236 : edge(i) ? 196 : 174);
     const X = (i) => x0 + PAIR * (i - w0);
-    let s = open(W, 300);
+    // A little taller than the other pictures: two rows of notes under the strands' names at the foot.
+    let s = open(W, 328);
     if (bubble) {
       const bx0 = Math.max(2, X(bubble[0]) - 18), bx1 = Math.min(W - 2, X(bubble[1]) + 18);
       s += '<rect class="pl-rnap" x="' + bx0 + '" y="46" width="' + (bx1 - bx0) + '" height="214" rx="36"/>';
@@ -159,10 +160,15 @@
       s += '<path class="pl-copy" d="M' + (x1 + 14) + ' 178Q' + (x1 - 10) + ' 190 ' + (x1 - 30) + ' 214T' + Math.max(4, x1 - 120) + ' 240"/>';
     }
     s += cp;
-    s += txt(8, 16, words.genesLetters + ' →', 'pl-s') + txt(8, 292, words.otherStrand, 'pl-s');
-    if (mode === 'fill' || mode === 'run') s += txt(W - 6, 16, fill(words.copied, { k, n: N }), 'pl-s pl-num', 'end');
-    if (mode === 'run') s += txt(W - 6, 292, words.realSpeed, 'pl-s', 'end');
-    else s += txt(W - 6, 292, bubble ? words.drawnSmaller : '', 'pl-s', 'end');
+    // The strands by what they do: the gene's letters (the coding strand) on top; the copy is built across from the
+    // other one (the template strand), so it spells out the gene's letters with U for T.
+    const top = words.coding || words.genesLetters, bot = String(words.template || words.otherStrand || ''), cut = bot.indexOf(' (');
+    s += txt(8, 16, top + ' →', 'pl-s');
+    s += cut < 0 ? txt(8, 282, bot, 'pl-s') : txt(8, 282, bot.slice(0, cut), 'pl-s') + txt(8, 296, bot.slice(cut + 1), 'pl-s');
+    if (mode === 'fill' || mode === 'run') s += txt(W - 6, 31, fill(words.copied, { k, n: N }), 'pl-s pl-num', 'end');
+    // While it runs, the speed; whenever the machine is drawn, that it is drawn smaller than scale (both at once in the run).
+    if (mode === 'run') s += txt(W - 6, 310, words.realSpeed, 'pl-s', 'end');
+    if (bubble) s += txt(W - 6, 324, words.drawnSmaller, 'pl-s', 'end');
     if (mode !== 'run') s += sbar(W - 94, 270, PAIR / 0.34, '1 nm');
     return s + '</svg>';
   }
@@ -280,7 +286,7 @@
         let k = 0;
         for (let b = made - 1; b >= 8; b--) { small.push(chainPoint(k, exitX, exitY)); k += 8; }
         const named = [], labels = [];
-        for (let b = 0; b < 8; b++) { named.push([24 + b * 25, 30]); labels.push(SEQ.AA[PROTEIN[b]].three); }
+        for (let b = 0; b < 8; b++) { named.push([24 + b * 25, 36]); labels.push(SEQ.AA[PROTEIN[b]].three); }
         const end = small[small.length - 1];
         s += '<path class="pl-chainlink" d="M' + r1(end[0]) + ' ' + r1(end[1]) + 'L' + named[7][0] + ' ' + named[7][1] + '"/>';
         s += beads(small, 3.4, 'pl-bead pl-bead-s') + beads(named, 11, 'pl-bead', labels);
@@ -288,7 +294,8 @@
     }
     s += txt(W - 6, 16, fill(words.aminoAcids, { c: made, n: PROTEIN.length }), 'pl-s pl-num', 'end');
     s += txt(6, y + 34, words.mRNA, 'pl-t') + txt(siteX + 84, y - 56, words.ribosome, 'pl-t');
-    if (mode === 'run' && made <= 8) s += txt(6, 16, words.realSpeed, 'pl-s');
+    // The speed stays said for the whole run (the chain's named start sits below it once it is long).
+    if (mode === 'run') s += txt(6, 14, words.realSpeed, 'pl-s');
     s += txt(6, 292, words.lettersLarger, 'pl-s');
     s += sbar(W - 56, 292, 46, words.scaleRibosome || '10 nm');
     return s + '</svg>';
@@ -312,7 +319,8 @@
   }
 
   // ---------------------------------------------------------------------------------------------
-  // F2: two pieces cut away, insulin's two chains held by links (from INS.parts and the chain itself)
+  // F2: the middle piece cut out, insulin's two chains held by links (from INS.parts and the chain itself); the first
+  // 24 amino acids were cut off already, as the chain was made (F1)
   // ---------------------------------------------------------------------------------------------
   function cut(state, words) {
     const P = INS.parts, W = 340;
@@ -337,12 +345,11 @@
     }
     s += '<path class="pl-link" d="' + links + '"/>' + d;
     s += txt(18, 104, words.bChain, 'pl-t') + txt(60, 222, words.aChain, 'pl-t') + txt(W - 8, 150, words.links, 'pl-s', 'end');
-    // The pieces cut away: the first 24 and the middle piece, faded, with how long each is.
-    const sig = P.signal[1] - P.signal[0] + 1, mid = P.cutKR[1] - P.cutRR[0] + 1;
+    // The middle piece cut out (with the pairs at its ends), faded, with how long it is.
+    const mid = P.cutKR[1] - P.cutRR[0] + 1;
     let gone = '';
-    for (let i = 0; i < sig; i++) gone += '<circle cx="' + r1(20 + i * 6.2) + '" cy="262" r="2.6"/>';
-    for (let i = 0; i < mid; i++) gone += '<circle cx="' + r1(186 + i * 4.3) + '" cy="262" r="2.1"/>';
-    s += '<g class="pl-gone">' + gone + '</g>' + txt(20, 250, words.cutAway + ' (' + sig + ')', 'pl-s') + txt(186, 250, words.cutAway + ' (' + mid + ')', 'pl-s');
+    for (let i = 0; i < mid; i++) gone += '<circle cx="' + r1(20 + i * 5.2) + '" cy="262" r="2.3"/>';
+    s += '<g class="pl-gone">' + gone + '</g>' + txt(20, 250, words.cutAway + ' (' + mid + ')', 'pl-s');
     return s + txt(W - 8, 292, words.flat, 'pl-s', 'end') + '</svg>';
   }
   /** F3: insulin in the blood reaching a muscle cell, whose membrane gains glucose transporters. */
@@ -357,6 +364,16 @@
     let tr = '';
     for (let k = 0; k < 7; k++) { const x = 26 + k * 46; tr += 'M' + (x - 5) + ' 164v28M' + (x + 5) + ' 164v28'; }
     s += '<path class="pl-trans" d="' + tr + '"/>' + txt(W - 8, 226, words.transporters, 'pl-s', 'end');
+    // Stored ones inside the cell, in small packets, moving up into the membrane (insulin moves them; it makes none).
+    if (words.stored) {
+      let ves = '', st = '', ar = '';
+      for (const x of [40, 95, 150]) {
+        ves += 'M' + (x + 13) + ' 254a13 13 0 1 0 -26 0a13 13 0 1 0 26 0';
+        st += 'M' + (x - 4) + ' 244v20M' + (x + 4) + ' 244v20';
+        ar += 'M' + x + ' 236V214M' + (x - 4) + ' 220l4-6 4 6';
+      }
+      s += '<path class="pl-m" d="' + ves + '"/><path class="pl-trans" d="' + st + '"/><path class="pl-arrow" d="' + ar + '"/>' + txt(8, 290, words.stored, 'pl-s');
+    }
     return s + txt(W - 8, 292, words.dotsEnlarged, 'pl-s', 'end') + '</svg>';
   }
 
@@ -374,23 +391,32 @@
     s += capsule(272, 142, 36, 16) + txt(120, 28, words.betaCell, 'pl-t', 'middle') + txt(334, 180, words.bacterium, 'pl-t', 'end');
     return s + sbar(18, 292, 90, words.scale5um) + '</svg>';
   }
-  /** Q2: the bacterium enlarged, its ribosomes and one mRNA with ribosomes on it. */
+  /**
+   * Q2: the bacterium (about 2 × 1 µm: 150 units per µm, the 1 µm bar 150 units), a few of its ribosomes and one mRNA
+   * with ribosomes on it (ribosomes drawn larger than scale, and said so).
+   */
   function bactRibosomes(state, words) {
     let s = open(340, 300) + capsule(20, 70, 300, 150);
     let rib = '';
     for (let k = 0; k < 34; k++) { const x = 50 + ((k * 73) % 240), y = 95 + ((k * 41) % 100); rib += 'M' + (x + 4) + ' ' + y + 'a4 3.4 0 1 1-8 0a4 3.4 0 1 1 8 0'; }
     s += '<path class="pl-rib" d="' + rib + '"/>' + wavy(90, 250, 150, 3);
     for (let k = 0; k < 4; k++) s += ribosome(110 + k * 36, 148, 7);
-    s += txt(20, 56, words.bacterium, 'pl-t') + txt(250, 175, words.mRNA, 'pl-t') + txt(320, 240, words.ribosome, 'pl-s', 'end');
-    return s + txt(320, 292, words.dotsEnlarged, 'pl-s', 'end') + sbar(20, 292, 75, words.scale1um) + '</svg>';
+    s += txt(20, 56, words.bacterium, 'pl-t') + txt(250, 175, words.mRNA, 'pl-t') + txt(320, 240, words.fewRibosomes || words.ribosome, 'pl-s', 'end');
+    return s + txt(320, 292, words.dotsEnlarged, 'pl-s', 'end') + sbar(20, 292, 150, words.scale1um) + '</svg>';
   }
-  /** Q3: its DNA, one loop, loose in the cell; no nucleus. */
+  /** Q3: its DNA, one loop lying free in the cell (no nucleus), drawn far shorter than it is (about 1.6 mm stretched out). */
   function bactDNA(state, words) {
     let s = open(340, 300) + capsule(20, 70, 300, 150);
-    let d = 'M120 145';
-    for (let k = 1; k <= 60; k++) { const a = (k / 60) * 2 * Math.PI; const rr = 58 + 14 * Math.sin(k * 1.7) + 8 * Math.cos(k * 3.1); d += 'L' + r1(170 + rr * Math.cos(a) * 1.3) + ' ' + r1(145 + rr * Math.sin(a) * 0.9); }
-    s += '<path class="pl-dna" d="' + d + 'z"/>' + txt(170, 60, words.dna, 'pl-t', 'middle') + txt(320, 240, words.noNucleus, 'pl-s', 'end');
-    return s + sbar(20, 292, 75, words.scale1um) + '</svg>';
+    // One closed loop, wound loosely (a wobbly ring, not a star: the old path also started off the ring).
+    let d = '';
+    for (let k = 0; k < 96; k++) {
+      const a = (k / 96) * 2 * Math.PI, rr = 56 + 9 * Math.sin(5 * a + 0.6) + 6 * Math.cos(9 * a);
+      d += (k ? 'L' : 'M') + r1(170 + rr * Math.cos(a) * 1.3) + ' ' + r1(145 + rr * Math.sin(a) * 0.9);
+    }
+    s += '<path class="pl-dna" d="' + d + 'z"/>' + txt(170, 60, words.dna, 'pl-t', 'middle') + txt(320, 236, words.noNucleus, 'pl-s', 'end');
+    const dl = String(words.dnaLength || ''), c2 = dl.indexOf(': ');
+    if (dl) s += c2 < 0 ? txt(320, 252, dl, 'pl-s', 'end') : txt(320, 252, dl.slice(0, c2 + 1), 'pl-s', 'end') + txt(320, 266, dl.slice(c2 + 2), 'pl-s', 'end');
+    return s + sbar(20, 292, 150, words.scale1um) + '</svg>';
   }
   /**
    * Q4: RNA polymerase making an mRNA from the insulin sequence while ribosomes read its front end:

@@ -48,9 +48,10 @@
       if (k === 0) c.moveTo(px, py); else c.lineTo(px, py);
     }
   }
+  /** A ribosome: the small subunit on the mRNA, the large one above it (the chain leaves from the large one's top). */
   function ribo(c, x, y, s) {
-    c.moveTo(x + s * 0.5, y + s * 0.12); c.arc(x, y + s * 0.12, s * 0.5, 0, TAU);
-    c.moveTo(x + s * 0.32, y - s * 0.34); c.arc(x, y - s * 0.34, s * 0.32, 0, TAU);
+    c.moveTo(x + s * 0.32, y + s * 0.12); c.arc(x, y + s * 0.12, s * 0.32, 0, TAU);
+    c.moveTo(x + s * 0.5, y - s * 0.34); c.arc(x, y - s * 0.34, s * 0.5, 0, TAU);
   }
   function circ(c, x, y, r) { c.moveTo(x + r, y); c.arc(x, y, r, 0, TAU); }
 
@@ -148,7 +149,9 @@
       }
       const dnaLabelY = plan.dnaY + (plan.dosage === 2 ? 26 : 14);
       this.text(c, P, o.geneLabel, Math.max(8, plan.dnaX0), Math.min(h - 6, dnaLabelY), 'left');
-      if (o.showPromoterLabel) this.text(c, P, L.promoter, Math.max(8, plan.dnaX0 - 4), plan.dnaY - 20, 'left');
+      // The promoter is named in the in-picture legend ("copying starts here (promoter)") when there is room for its
+      // row; otherwise beside its arrow (where copies being made would cover a long label).
+      const promoterInLegend = !!(o.inline && o.inline.promoter && plan.legendW) && plan.laneTop + 10 + 4 * 26 + 26 < plan.nascentTop;
 
       // The lac operator on each DNA copy, the repressor clamped on it while bound.
       this.batch(c, plan, OPER, P.ink, 'strokeBox');
@@ -221,6 +224,8 @@
       c.beginPath();
       for (let i = 0; i < plan.N; i++) if (plan.kind[i] === RNAP) circ(c, plan.x[i], plan.y[i], plan.rnapPx * 0.5);
       c.fillStyle = P.inside; c.fill(); c.strokeStyle = P.rnap; c.lineWidth = 1.8; c.stroke();
+      // No room in the legend: the promoter's label beside its arrow, over the copies being made so that it reads.
+      if (o.showPromoterLabel && !promoterInLegend) this.text(c, P, L.promoter, Math.max(8, plan.dnaX0 - 4), plan.dnaY - 20, 'left');
 
       // Finished proteins in their place, up to 8, then "+n more".
       let lastX = 0, py = 0;
@@ -242,7 +247,7 @@
         if (plan.membraneGene) this.text(c, P, o.moreText, w - 8, (plan.outY0 + plan.memY0) / 2, 'right');
         else this.text(c, P, o.moreText, Math.min(w - 8, lastX + 12), py, lastX + 12 > w - 110 ? 'right' : 'left');
       }
-      this.legend(c, P, plan, col, o.inline);
+      this.legend(c, P, plan, col, o.inline, o.showPromoterLabel && promoterInLegend);
 
       // The watched copy's label.
       if (o.watched && o.watched.lane >= 0 && o.watched.text) {
@@ -252,8 +257,8 @@
       this.drawMarkers(c, P, col, o.reduced);
     }
 
-    /** The in-picture legend in the right margin: a strand, a ribosome, a chain and a polymerase, each named. */
-    legend(c, P, plan, col, words) {
+    /** The in-picture legend in the right margin: a strand, a ribosome, a chain, a polymerase and the promoter, each named. */
+    legend(c, P, plan, col, words, promoter) {
       if (!words || !plan.legendW) return;
       const x = plan.w - plan.legendW + 6, y0 = plan.laneTop + 10, step = 26;
       c.beginPath(); wavyH(c, x, y0, 16, 0, 1); c.strokeStyle = col; c.lineWidth = 2; c.stroke();
@@ -268,6 +273,20 @@
       c.fillText(words.chain, x + 22, y0 + 2 * step);
       const r = words.rnap.split(' ');
       c.fillText(r[0], x + 22, y0 + 3 * step - 7); if (r[1]) c.fillText(r.slice(1).join(' '), x + 22, y0 + 3 * step + 7);
+      if (!promoter) return;
+      // The promoter: its bent arrow, and what it is for in plain words, wrapped to the margin.
+      const room = plan.w - (x + 22) - 3, lines = [];
+      let line = '';
+      for (const wd of String(words.promoter).split(' ')) {
+        const t = line ? line + ' ' + wd : wd;
+        if (line && c.measureText(t).width > room) { lines.push(line); line = wd; } else line = t;
+      }
+      lines.push(line);
+      const yp = y0 + 4 * step + 6, top = yp - ((lines.length - 1) * 13) / 2;
+      lines.forEach((t, i) => c.fillText(t, x + 22, top + i * 13));
+      c.beginPath(); c.moveTo(x + 3, yp + 6); c.lineTo(x + 3, yp - 3); c.lineTo(x + 12, yp - 3);
+      c.moveTo(x + 9, yp - 6); c.lineTo(x + 12.5, yp - 3); c.lineTo(x + 9, yp);
+      c.strokeStyle = P.ink; c.lineWidth = 1.6; c.lineJoin = 'round'; c.stroke();
     }
 
     batch(c, plan, kind, color, how) {

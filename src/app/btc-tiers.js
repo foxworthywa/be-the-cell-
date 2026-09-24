@@ -296,7 +296,7 @@
       set('made', F.count(gv.mRNAMade), T.made);
       // Three counters side by side on a phone: the protein's noun in one word ("Transporters"), the full one read aloud.
       const short = this.ui.focusBar.counters.length >= 3 && app.layout === 'compact';
-      // Counted in working machines: a four-chain lactose splitter is one (F.machines).
+      // Counted in working machines: a four-chain lactose-splitting enzyme is one (F.machines).
       set('protein', F.count(F.machines(gv)), proteinsWord(model, id, true, short));
       if (this.counters.protein) {
         const full = proteinsWord(model, id) + ' ' + F.count(F.machines(gv));

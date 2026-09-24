@@ -142,7 +142,7 @@ function calibrate12(base) {
   const round100 = (x) => Math.round(x / 100) * 100, ceil100 = (x) => Math.ceil(x / 100) * 100;
   const LREF = PV.lambda_ref;
   const n = Math.max(8, SEEDS);
-  // (a) The lactose splitter "already made": the lab strain's LacZ at ×1, as a newborn cell has it at steady state.
+  // (a) The lactose-splitting enzyme "already made": the lab strain's LacZ at ×1, as a newborn cell has it at steady state.
   const births = [];
   for (let seed = 1; seed <= Math.min(n, 16); seed++) {
     const c = new Cell({ seed: 7000 + seed, strain: 'm1-lab', start: 'steady', medium: { glucose_mM: 10 }, genes: { lacZ: { level: 1 } } });

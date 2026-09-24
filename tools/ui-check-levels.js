@@ -147,9 +147,12 @@ async function run(browser, port, OUT, check) {
     while (await R(page, '!!window.__btc.app.test.level.runner().beat')) await tap('.lv-next');
     await intros('run-intro');
     const hud = await page.evaluate(() => ({ h: document.getElementById('hud').getBoundingClientRect().height, stage: document.getElementById('stage').getBoundingClientRect().height,
-      goal: document.querySelector('.hud-goal-text').textContent, counter: document.querySelector('.hud-counter').textContent }));
-    check('LV-4 ' + s.tag + ' run: 44 px HUD with the target and the copies made; canvas ≥ 220 px',
-      hud.h === 44 && (touch ? /^LacY 0 \/ [\d,]+$/ : /^0 \/ [\d,]+ lactose transporters$/).test(hud.goal) && /copies/.test(hud.counter) && (!touch || hud.stage >= 220), JSON.stringify(hud));
+      goal: document.querySelector('.hud-goal-text').textContent, counter: document.querySelector('.hud-counter').hidden ? '' : document.querySelector('.hud-counter').textContent,
+      ellipsis: (() => { const e = document.querySelector('.hud-goal-text'); return e.scrollWidth > e.clientWidth + 0.5; })() }));
+    // On a phone the goal and its target take the room (the copies made are in the focus bar below; the chip gives way).
+    check('LV-4 ' + s.tag + ' run: 44 px HUD with the target (whole, not cut short) and, when wide enough, the copies made; canvas ≥ 220 px',
+      hud.h === 44 && (touch ? /^Transporters 0 \/ [\d,]+$/ : /^0 \/ [\d,]+ lactose transporters$/).test(hud.goal) && !hud.ellipsis
+        && (touch ? hud.counter === '' : /copies/.test(hud.counter)) && (!touch || hud.stage >= 220), JSON.stringify(hud));
     // LacZ is counted in whole four-chain enzymes wherever the student sees a count.
     const lacZ = await page.evaluate(() => {
       const a = window.__btc.app; a.setFocus('lacZ'); a.render(0, true, true, 0);
@@ -158,7 +161,7 @@ async function run(browser, port, OUT, check) {
       a.setFocus('lacY'); a.render(0, true, true, 0);
       return out;
     });
-    check('LV-4 ' + s.tag + ' the lactose splitter is counted in whole four-chain enzymes', lacZ.shown.replace(/,/g, '') === String(Math.round(lacZ.chains / 4)), JSON.stringify(lacZ));
+    check('LV-4 ' + s.tag + ' the lactose-splitting enzyme is counted in whole four-chain enzymes', lacZ.shown.replace(/,/g, '') === String(Math.round(lacZ.chains / 4)), JSON.stringify(lacZ));
     await tap('.tb-ctrl .seg[data-key="on"]');
     await L(page, 'runTicks', 1);
     for (let i = 0; i < 400; i++) {

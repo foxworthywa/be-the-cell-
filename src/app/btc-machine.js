@@ -272,9 +272,13 @@
     }
   }
 
-  /** A cytoplasmic enzyme body: overlapping round chains (lobes) with a groove cut to its substrate at the top. */
+  /**
+   * A cytoplasmic enzyme body: overlapping round chains (lobes) with a groove cut to its substrate at the top.
+   * The lactose-splitting enzyme (LacZ) is drawn to scale with its sugars: four chains about 17.5 × 13.5 nm together
+   * (Jacobson 1994), so the groove is small against its body.
+   */
   const LOBES = {
-    splitter: [[-1.7, 0.1, 2.0], [1.7, 0.1, 2.0], [-1.7, 3.4, 2.0], [1.7, 3.4, 2.0]],     // four chains
+    splitter: [[-3.3, 3.32, 5.4], [3.3, 3.32, 5.4], [-3.3, 6.02, 5.4], [3.3, 6.02, 5.4]],   // four chains, 17.4 × 13.5 nm
     idle: [[0, -0.9, 1.3], [-1.05, 0.9, 1.3], [1.05, 0.9, 1.3]],                           // three chains
     one: [[0, 0.9, 2.2], [-1.6, 0.1, 1.2], [1.6, 0.1, 1.2]],                               // one chain, folded
   };
@@ -457,8 +461,11 @@
   }
 
   /** Size of a machine's picture (nm, width × height) for fitting it to a box. */
-  const SIZES = { transporter: [6.2, 8.8], splitter: [9, 9], enzyme: [7.4, 7.4], builder: [7.4, 7.4], rod: [4, 14], repressor: [9, 10], idle: [6, 6] };
+  const SIZES = { transporter: [6.2, 8.8], splitter: [17.6, 15.6], enzyme: [7.4, 7.4], builder: [7.4, 7.4], rod: [4, 14], repressor: [9, 10], idle: [6, 6] };
   function sizeOf(M) { return SIZES[M.kind] || SIZES.idle; }
+  /** Top and bottom of a machine's picture (nm from its origin, the molecules' paths included), where not about ±5.2. */
+  const EXTENT = { splitter: [-4.2, 11.6] };
+  function extentOf(M) { return EXTENT[M.kind] || [-5.2, 5.2]; }
 
   // ---------------------------------------------------------------------------
   // The Protein zoom renderer
@@ -476,10 +483,10 @@
       // side: the words sit at the left (a wide stage), so the picture takes the right part.
       const availW = strip ? (w - 16) / 4 : side ? w * 0.55 : w - 24, availH = h - top - bottom - (strip ? 40 : 34);
       let s = Math.min(availW / mw, availH / mh);
-      s = Math.max(6, Math.min(strip ? 16 : 44, s));
+      s = Math.max(strip ? 3 : 6, Math.min(strip ? 16 : 44, s));
       const g = this.geom;
       // Centre the picture's full extent (the molecules' paths included) in the free box.
-      const off = M.kind === 'splitter' ? -0.75 : M.kind === 'enzyme' || M.kind === 'builder' ? 0.45 : 0;
+      const off = M.kind === 'splitter' ? -3.7 : M.kind === 'enzyme' || M.kind === 'builder' ? 0.45 : 0;
       g.s = s; g.x = side && !strip ? w * 0.64 : w / 2; g.y = top + (h - top - bottom) / 2 + off * s;
       const bars = [1, 2, 5, 10];
       let best = 2, bd = Infinity;
@@ -532,7 +539,7 @@
       // The pocket, named once (what fits it is the point of the picture).
       if (!o.strip && !o.model.none && o.labels.pocket && (kind === 'transporter' || kind === 'splitter' || kind === 'enzyme' || kind === 'builder')) {
         const py = kind === 'transporter' ? g.y : g.y + (kind === 'splitter' ? -0.85 : -1.0) * s;
-        const px = kind === 'transporter' ? g.x + (TR.hw + 0.4) * s : g.x + (kind === 'splitter' ? 3.9 : 3.3) * s;
+        const px = kind === 'transporter' ? g.x + (TR.hw + 0.4) * s : g.x + (kind === 'splitter' ? 9.3 : 3.3) * s;
         c.beginPath(); c.moveTo(px - 4, py); c.lineTo(g.x + (kind === 'transporter' ? 0.75 : 1.3) * s, py);
         c.strokeStyle = P.muted; c.lineWidth = 1; c.setLineDash(DASH_33); c.stroke(); c.setLineDash(NO_DASH);
         this.label(c, P, o.labels.pocket, px, py, 'left');
@@ -564,7 +571,7 @@
     drawStrip(c, o, g) {
       const P = o.P, M = o.model.machine, w = o.w, s = g.s;
       const phases = M.kind === 'transporter' ? [0.1, 0.4, 0.7, 0.9] : [0.12, 0.36, 0.55, 0.8];
-      const pw = (w - 16) / 4;
+      const pw = (w - 16) / 4, ex = extentOf(M);
       const CU = o.closeup;
       for (let k = 0; k < 4; k++) {
         const cx = 8 + pw * (k + 0.5);
@@ -576,10 +583,10 @@
         drawMachine(c, P, M, st, cx, g.y, s, { color: o.color, bg: P.inside, w, lift: 1, ghost: false, hatch: false });
         if (k === (o.st ? o.st.panel : 0) && o.model.working) {
           c.strokeStyle = P.accent; c.lineWidth = 2;
-          c.strokeRect(cx - pw / 2 + 3, g.y - 5.2 * s, pw - 6, 10.4 * s);
+          c.strokeRect(cx - pw / 2 + 3, g.y + ex[0] * s, pw - 6, (ex[1] - ex[0]) * s);
         }
         const words = M.kind === 'transporter' ? o.labels.strip.transporter : o.labels.strip.enzyme;
-        this.label(c, P, words[k], cx, g.y + 5.6 * s + 8, 'center');
+        this.label(c, P, words[k], cx, g.y + (ex[1] + 0.4) * s + 8, 'center');
       }
     }
   }
@@ -596,7 +603,7 @@
       const sz = sizeOf(M), mw = sz[0], mh = M.kind === 'rod' ? 6 : sz[1];     // a card shows one rod, no stack
       const s = Math.min((size - 8) / mw, (size - 8) / mh) * (M.kind === 'transporter' ? 1.1 : 1);
       // The picture's own centre (the four-chain enzyme's lobes hang below its groove).
-      const cx = x + size / 2, cy = y + size / 2 - (M.kind === 'splitter' ? 1.75 : M.kind === 'enzyme' || M.kind === 'builder' ? 0.8 : 0) * s;
+      const cx = x + size / 2, cy = y + size / 2 - (M.kind === 'splitter' ? 4.7 : M.kind === 'enzyme' || M.kind === 'builder' ? 0.8 : 0) * s;
       c.save();
       c.beginPath(); c.rect(x, y, size, size); c.clip();
       c.fillStyle = M.kind === 'transporter' ? P.outside : P.inside; c.fillRect(x, y, size, size);
@@ -656,7 +663,7 @@
 
   const art = {
     MOL, HALF_H, TR, molPath, drawMol, pocketFor, rowRange, drawMembrane, drawTransporter, drawEnzyme, drawRod, drawRepressor,
-    drawChainFold, drawMachine, drawEnergy, sizeOf, hatch,
+    drawChainFold, drawMachine, drawEnergy, sizeOf, extentOf, hatch,
     /** Draws a model fold (BTC.machineFold) on its lattice: oily beads thicker and hatched, pocket beads ringed. */
     drawFold(c, P, fold, x, y, cell, color) {
       const path = fold.path;

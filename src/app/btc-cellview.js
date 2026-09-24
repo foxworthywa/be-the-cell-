@@ -201,10 +201,10 @@
     c.moveTo(x, y - r); c.lineTo(x + r * 0.75, y); c.lineTo(x, y + r); c.lineTo(x - r * 0.75, y); c.closePath();
   }
   function circle(c, x, y, r) { c.moveTo(x + r, y); c.arc(x, y, r, 0, 6.283185307179586); }
-  // Ribosome: large and small subunit.
+  // Ribosome: the small subunit below (on the mRNA), the large one above, as in the close-ups and the opening.
   function ribo(c, x, y, s) {
-    circle(c, x, y + s * 0.14, s * 0.5);
-    circle(c, x, y - s * 0.34, s * 0.32);
+    circle(c, x, y + s * 0.14, s * 0.32);
+    circle(c, x, y - s * 0.3, s * 0.5);
   }
   // LacZ tetramer: four lobes.
   function tetra(c, x, y, s) {

@@ -64,11 +64,11 @@
       summaryMade: '{r} ribosomes on {n} copies being made',
       summaryFinishing: '{r} ribosomes finishing chains', summaryNone: 'no copies',
       none: 'No copies of this gene right now.',
-      outside: 'outside', membrane: 'membrane', inside: 'inside the cell', promoter: 'promoter', dna: 'DNA',
+      outside: 'outside', membrane: 'membrane', inside: 'inside the cell', promoter: 'copying starts here (promoter)', dna: 'DNA',
       beingMade: 'copies being made',
       more: '+{n} more',
       moreMembrane: '+{n} more in the membrane',
-      inline: Object.freeze({ mRNA: 'mRNA copy', ribosome: 'ribosome', chain: 'new chain', rnap: 'RNA polymerase' }),
+      inline: Object.freeze({ mRNA: 'mRNA copy', ribosome: 'ribosome', chain: 'new chain', rnap: 'RNA polymerase', promoter: 'copying starts here (promoter)' }),
       moreCopies: '+{n} more copies with {r} ribosomes',
       moreCopy: '+1 more copy with {r} ribosomes',
       watched: 'this copy: read into {n}',
@@ -85,6 +85,8 @@
         'A new chain grows from each ribosome: one bead for every 20 amino acids.',
         'Chains of membrane proteins go into the membrane as they are made.',
       ]),
+      // A membrane protein's ribosomes are held at the membrane while they work; the lanes draw them below it (m32).
+      membraneNote: 'Ribosomes making a membrane protein are held at the membrane; here they are drawn in lanes below it, for clarity.',
       ribLarger: 'Ribosomes are drawn larger than scale here.',
       ribGlyph: '1 ribosome glyph = {R}',
       keyTitle: 'Key: gene close-up',
@@ -98,10 +100,10 @@
       noneYet: 'None of these proteins yet.',
       noneYetLine: 'Switch the gene on and wait for the first one to be made.',
       rate: '{verb} about {r} {unit} a second.',
-      slower: 'Shown {k} times slower.',
-      slowerCell: 'Shown {k}× slower; the cell runs at {speed}.',
-      fasterCell: 'Shown {k}× faster; the cell runs at {speed}.',
-      faster: 'Shown {k} times faster.',
+      slower: 'Shown {k} times slower than real life.',
+      slowerCell: 'Shown {k} times slower than real life; the cell itself runs at {speed}.',
+      fasterCell: 'Shown {k} times faster than real life; the cell itself runs at {speed}.',
+      faster: 'Shown {k} times faster than real life.',
       realSpeed: 'Shown at its real speed.',
       cellSpeed: 'The cell itself runs at {speed}.',
       scale: '2 nm',
@@ -126,6 +128,10 @@
         'Molecules are drawn as simple outlines.',
         'A molecule is drawn in the pocket only when it fits and the model says the job is being done.',
       ]),
+      // Where the model's per-copy rate is far from a measured one, the key says so (BIOLOGY.md, open item 8).
+      rateNotes: Object.freeze({
+        lacY: 'Rates are the model’s; a real lactose transporter carries about twenty a second.',
+      }),
       keyTitle: 'Key: protein close-up',
       glyphs: Object.freeze({
         glucose: 'glucose', g6p: 'glucose with a phosphate tag', galactose: 'galactose', lactose: 'lactose (milk sugar)',
@@ -147,7 +153,8 @@
       lacA: 'It does no work that matters here.',
     }),
     units: Object.freeze({
-      glucose: 'glucose', lactose: 'lactose', aa: 'amino acids', arabinose: 'arabinose', hexose: 'sugar pieces', split: 'lactose',
+      glucose: 'glucose molecules', lactose: 'lactose molecules', aa: 'amino acids', arabinose: 'arabinose molecules', hexose: 'sugar molecules',
+      split: 'lactose molecules',
     }),
     verbs: Object.freeze({ carries: 'Carries', splits: 'Splits', breaks: 'Breaks down', builds: 'Builds' }),
     kinds: Object.freeze({ enzymes: 'enzymes', importers: 'importers' }),
@@ -176,7 +183,8 @@
     lacY: Object.freeze({ kind: 'transporter', substrate: 'lactose', product: 'lactose', site: 'proton', nonfit: 'glucose', verb: 'carries', unit: 'lactose' }),
     aaImp: Object.freeze({ kind: 'transporter', substrate: 'aa', product: 'aa', site: null, nonfit: 'glucose', verb: 'carries', unit: 'aa', standsFor: 10, standsKind: 'importers' }),
     araE: Object.freeze({ kind: 'transporter', substrate: 'arabinose', product: 'arabinose', site: 'proton', nonfit: 'glucose', verb: 'carries', unit: 'arabinose' }),
-    lacZ: Object.freeze({ kind: 'splitter', substrate: 'lactose', product: 'glucose', product2: 'galactose', nonfit: 'glucose', verb: 'splits', unit: 'split', chains: 4 }),
+    // No molecule is shown not fitting LacZ: glucose, its own product, binds its pocket too (m28).
+    lacZ: Object.freeze({ kind: 'splitter', substrate: 'lactose', product: 'glucose', product2: 'galactose', nonfit: null, verb: 'splits', unit: 'split', chains: 4 }),
     gly: Object.freeze({ kind: 'enzyme', substrate: 'glucose', product: 'piece', atp: 'make', nonfit: 'lactose', verb: 'breaks', unit: 'hexose', standsFor: 10, standsKind: 'enzymes' }),
     aaSyn: Object.freeze({ kind: 'builder', substrate: 'piece', product: 'aa', atp: 'spend', nonfit: null, verb: 'builds', unit: 'aa', standsFor: 100, standsKind: 'enzymes' }),
     fliC: Object.freeze({ kind: 'rod', substrate: null, nonfit: null }),
@@ -517,7 +525,8 @@
         const rx = o.laneX[l] + o.strandLen * t, ry = o.laneY[l] - o.ribPx * 0.3;
         push(o, G.RIB, rx, ry, 0, x, 0, l);
         const beads = Math.round((x * gv.length_aa) / AA_PER_BEAD);
-        push(o, G.CHAIN, rx, ry - o.ribPx * 0.45, 0, x, beads, l);
+        // The chain leaves from the top of the large subunit (the small one sits on the strand).
+        push(o, G.CHAIN, rx, ry - o.ribPx * 0.8, 0, x, beads, l);
         ribGlyphs++;
         beadsTotal += beads;
         total += 2 + (o.beads ? Math.ceil(beads / BEAD_ROW) : 0);
@@ -548,7 +557,7 @@
         const rx = x + dx * along, ry = y - o.rnapPx * 0.5 + dy * along;
         push(o, G.RIB, rx, ry, 1, x0, 0, -1 - j);
         const beads = Math.round((x0 * gv.length_aa) / AA_PER_BEAD);
-        push(o, G.CHAIN, rx, ry - o.ribPx * 0.45, 1, x0, beads, -1 - j);
+        push(o, G.CHAIN, rx, ry - o.ribPx * 0.8, 1, x0, beads, -1 - j);
         ribGlyphs++;
         beadsTotal += beads;
         total += 2 + (o.beads ? Math.ceil(beads / BEAD_ROW) : 0);

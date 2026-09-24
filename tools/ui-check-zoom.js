@@ -87,7 +87,7 @@ async function run(browser, port, outDir, check) {
     // BZ-3 Protein zoom.
     s = await show(page, { gene: 'ptsG', zoom: 'protein', cmds: [{ type: 'setMedium', lactose_mM: 5 }], ticks: 30 });
     const cap = await text('.zoom-caption');
-    check('BZ-3 ' + tag + ' PtsG at work: the rate, the slow factor, lactose bouncing off', s.protein.working && s.protein.nonfit && /^Carries about [\d.,]+ glucose a second\./.test(cap) && /slower/.test(cap), cap);
+    check('BZ-3 ' + tag + ' PtsG at work: the rate, the slow factor, lactose bouncing off', s.protein.working && s.protein.nonfit && /^Carries about [\d.,]+ glucose molecules a second\./.test(cap) && /slower/.test(cap), cap);
     await snap(page, tag + '-protein-ptsG');
     s = await show(page, { gene: 'lacY', zoom: 'protein', cmds: [{ type: 'setMedium', glucose_mM: 0 }], ticks: 600 });
     check('BZ-3 ' + tag + ' LacY with lactose outside carries it', s.protein.working, JSON.stringify(s.protein));

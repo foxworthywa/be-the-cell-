@@ -401,7 +401,7 @@
       this.kBegin();
       this.kPut(this.app.focusIndex()); this.kPut(model.count); this.kPut(model.rShown); this.kPut(model.k); this.kPut(model.none ? 1 : 0);
       this.kPut(model.working ? 1 : 0); this.kPut(model.nonfitPresent ? 1 : 0); this.kPut(model.speed); this.kPut(st.clamped ? 1 : 0);
-      this.kPut(model.idle.length); this.kPut(wide ? 1 : 0);
+      this.kPut(model.idle.length); this.kPut(wide ? 1 : 0); this.kPut(this.cw);
       if (this.kDiff || !mo.labels) {
         const words = this.words(id);
         this.caption.classList.toggle('is-side', wide);
@@ -430,7 +430,10 @@
         const label = F.fill(T.protein.canvasLabel, { line: summary + '. ' + cap + (sub ? ' ' + sub : '') + nofit });
         if (this.canvas.getAttribute('aria-label') !== label) this.canvas.setAttribute('aria-label', label);
         this.extraFor('protein');
+        // The caption sits over the stage's foot (50 px up); on a phone its lines can wrap, so the picture keeps clear of it.
+        this.capH = this.caption.hidden ? 0 : this.caption.offsetHeight;
       }
+      if (!wide) mo.bottom = Math.max(92, 58 + (this.capH || 0));
       this.ctx.save();
       this.machineView.draw(this.ctx, mo);
       this.ctx.restore();
@@ -662,10 +665,12 @@
         title = T.gene.keyTitle; notes = T.gene.notes.slice();
         if (!this.gplan.ribToScale) notes.push(T.gene.ribLarger);
         if (this.gplan.ribScale > 1) notes.push(F.fill(T.gene.ribGlyph, { R: this.gplan.ribScale }) + '.');
+        if (this.gplan.membraneGene) notes.push(T.gene.membraneNote);
         add((c) => { c.beginPath(); c.moveTo(0, 11); c.lineTo(32, 11); c.moveTo(0, 14); c.lineTo(32, 14); c.strokeStyle = P.dna; c.lineWidth = 1.2; c.stroke(); c.beginPath(); c.moveTo(6, 12.5); c.lineTo(26, 12.5); c.strokeStyle = col; c.lineWidth = 4; c.stroke(); }, G.dna);
         add((c) => { c.beginPath(); c.arc(16, 16, 5, 0, 6.3); c.fillStyle = P.inside; c.fill(); c.strokeStyle = P.rnap; c.lineWidth = 1.8; c.stroke(); c.beginPath(); c.moveTo(14, 11); c.lineTo(8, 2); c.strokeStyle = col; c.lineWidth = 2; c.stroke(); }, G.rnap);
         add((c) => { c.beginPath(); for (let x = 2; x <= 30; x += 2) { const y = 12 + 2.2 * Math.sin(x * 0.7); if (x === 2) c.moveTo(x, y); else c.lineTo(x, y); } c.strokeStyle = col; c.lineWidth = 2; c.stroke(); }, G.mRNA);
-        add((c) => { c.beginPath(); c.arc(16, 15, 6, 0, 6.3); c.moveTo(20, 8); c.arc(16, 8, 4, 0, 6.3); c.fillStyle = P.ribosome; c.fill(); }, G.ribosome);
+        // Two subunits: the small one on the strand, the large one above it (as in the opening's drawings).
+        add((c) => { c.beginPath(); c.arc(16, 10, 6, 0, 6.3); c.moveTo(20, 17); c.arc(16, 17, 4, 0, 6.3); c.fillStyle = P.ribosome; c.fill(); }, G.ribosome);
         add((c) => { c.beginPath(); for (let k = 0; k < 8; k++) { const row = Math.floor(k / 4), cx = 10 + (row % 2 ? 3 - (k % 4) : k % 4) * 4; c.moveTo(cx + 1.6, 18 - row * 4); c.arc(cx, 18 - row * 4, 1.6, 0, 6.3); } c.fillStyle = col; c.fill(); }, G.chain);
         add((c) => { c.fillStyle = col; if (this.gplan.membraneGene) { c.fillRect(11, 4, 4, 16); c.fillRect(17, 4, 4, 16); } else { c.beginPath(); c.arc(16, 12, 5, 0, 6.3); c.fill(); } }, G.protein);
         add((c) => { c.beginPath(); for (let k = 0; k < 4; k++) { c.moveTo(3 + k * 7, 12 + (k % 2 ? 3 : -3)); c.lineTo(7 + k * 7, 12 + (k % 2 ? 1 : -1)); } c.strokeStyle = P.muted; c.lineWidth = 2; c.stroke(); }, G.broken + ' · ' + F.fill(TAP_TEXT.perMarker, { N: 1 }));
@@ -674,6 +679,7 @@
       } else {
         const G = T.protein.glyphs, M = this.pmodel.machine || this.CU.machineOf(id);
         title = T.protein.keyTitle; notes = T.protein.notes.slice();
+        if (T.protein.rateNotes[id]) notes.push(T.protein.rateNotes[id]);
         const mols = [M.substrate, M.product, M.product2, M.nonfit, M.site === 'proton' ? 'proton' : null].filter((x, i, a) => x && a.indexOf(x) === i && art.MOL[x]);
         for (const m of mols) add((c) => art.drawMol(c, P, m, 16, 12, m === 'lactose' || m === 'allolactose' ? 8 : 14, m === 'lactose' || m === 'allolactose' ? Math.PI / 2 : 0, 1), F.capital(G[m] || m));
         if (M.atp) add((c) => { art.drawEnergy(c, P, true, 11, 12, 16); art.drawEnergy(c, P, false, 22, 12, 16); }, F.capital(G.atp));

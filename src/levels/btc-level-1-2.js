@@ -10,8 +10,8 @@
  * while transporters keep arriving from them.
  *
  * Try (the run, tier 3): at minute D the glucose runs out and milk sugar (lactose) arrives. The target
- * T comes from the cell's economy: the number of lactose transporters with which a cell whose lactose
- * splitter is already made grows on milk sugar at least 0.8 of its glucose rate (tools/level-calibrate.js,
+ * T comes from the cell's economy: the number of lactose transporters with which a cell whose
+ * lactose-splitting enzyme is already made grows on milk sugar at least 0.8 of its glucose rate (tools/level-calibrate.js,
  * l12 v2). At D the switch locks, the view goes to the whole cell and the student watches the cell live on
  * milk sugar for 20 game-minutes: it keeps growing, or stalls. Efficiency counts the copies made beyond
  * those the target needed (by this run's own copies-to-transporters ratio): every extra copy costs energy.
@@ -47,7 +47,7 @@
       // The task card of PROLOGUE §1.4: machine cards, the scenario, why it matters, then the goal.
       cards: {
         lacY: { job: 'Carries lactose into the cell.', name: 'Lactose transporter', symbol: 'lacY', state: 'none yet' },
-        lacZ: { job: 'Splits lactose into two smaller sugars.', name: 'Lactose splitter', symbol: 'lacZ', state: 'ready' },
+        lacZ: { job: 'Splits lactose into two sugars: glucose and galactose.', name: 'Lactose-splitting enzyme', symbol: 'lacZ', state: 'ready' },
       },
       context: ['At minute {D} the glucose runs out and milk sugar arrives.',
         'Without enough lactose transporters, the cell will be short of energy and grow slowly on milk sugar.'],
@@ -58,7 +58,7 @@
     story: {
       intro: [
         { who: 'narrator', text: 'Your cell is fed and growing on glucose. At minute {D} the glucose runs out, and milk sugar arrives instead.' },
-        { who: 'narrator', text: 'Milk sugar gets in only through lactose transporters, and this cell has none. Its lactose splitter is already made.' },
+        { who: 'narrator', text: 'Milk sugar gets in only through lactose transporters, and this cell has none. Its lactose-splitting enzyme is already made.' },
         { who: 'commander', text: 'Then build every transporter now, and stop when the milk arrives.' },
         { who: 'narrator', text: 'Each transporter is built from an mRNA copy of its gene. Before you plan, watch one copy at work.' },
       ],
@@ -91,9 +91,9 @@
     steps: {
       w1: [{ who: 'narrator', text: 'This is the lactose transporter gene. It is switched off, so nothing is being copied.' }],
       w1b: [{ who: 'narrator', text: 'The first copy is outlined. Watch how many transporters it is read into.' }],
-      w2: [{ who: 'narrator', text: 'Ribosomes read each copy again and again until it is broken down.' }],
+      w2: [{ who: 'narrator', text: 'Ribosome after ribosome reads each copy until it is broken down.' }],
       w2b: [{ who: 'narrator', text: 'The gene is off. Count the copies still left.' }],
-      w2c: [{ who: 'ribosome', text: 'I read each copy until it falls apart. Nobody tells me the gene is off.' }],
+      w2c: [{ who: 'ribosome', text: 'I read each copy that reaches me until it is broken down. Nobody tells me the gene is off.' }],
       w3: [
         { who: 'narrator', text: 'So one copy gives about {ppmWords} transporters, and they keep arriving for a few minutes after the gene is off.' },
         { who: 'commander', text: 'About {ppmWords} from each copy. Then a handful of copies will do.' },
@@ -102,7 +102,7 @@
     },
     causes: {
       w1b: 'This copy was read into {n} transporters in {t}, then broken down. Meanwhile {k} more copies were made.',
-      w2b: 'Switching the gene off stopped new copies at once. The copies already made were still read, so {a} more transporters arrived.',
+      w2b: 'Switching the gene off stopped new copies from being started. The copies already made were still read, so {a} more transporters arrived.',
     },
     notes: {
       on: 'The gene is on again, so new copies are being made. Switch it off to carry on.',
@@ -111,8 +111,8 @@
     g1: {
       prompt: 'When you switch the gene on, how many transporters will one mRNA copy be read into before it is broken down?',
       options: [
-        { t: 'One.', mc: 'OTHER', fb: 'Ribosomes read the same copy again and again. This one gave {n} before it was broken down.' },
-        { t: 'About {ppmWords}.', cause: true, fb: 'Ribosomes read it again and again until it was broken down. This one gave {n}; the average is about {ppmWords}.' },
+        { t: 'One.', mc: 'OTHER', fb: 'Ribosome after ribosome read the same copy. This one gave {n} before it was broken down.' },
+        { t: 'About {ppmWords}.', cause: true, fb: 'Ribosome after ribosome read it until it was broken down. This one gave {n}; the average is about {ppmWords}.' },
         { t: 'Thousands.', mc: 'OTHER', fb: 'Each copy lasts only minutes, so it gives tens, not thousands. This one gave {n}.' },
         { t: 'It is never broken down, so it keeps going.', mc: 'MOLECULES_LAST', fb: 'Copies are broken down within minutes. This one lasted {t} and gave {n}.' },
       ],
@@ -137,7 +137,7 @@
         { t: 'Transporters make more transporters once there are enough.', mc: 'PROTEIN_SELF_COPY',
           fb: 'Proteins are not copied from proteins. Every transporter was built by a ribosome reading an mRNA copy.' },
         { t: 'The switch-off took minutes to reach the DNA.', mc: 'DELAY_MISATTRIBUTED',
-          fb: 'The switch acted at once. The extra transporters came from copies already made.' },
+          fb: 'The switch acted at once: no new copy was started. The extra transporters came from copies already made.' },
       ],
     },
     d2: {
@@ -152,23 +152,27 @@
       ],
     },
     echo1: 'A beta cell in your pancreas makes insulin the same way: one gene, copied into many mRNAs, each read by many ribosomes.',
-    echo2: 'Nearly every cell in your body has the same two copies of the insulin gene, one from each parent. It is copied into mRNA only in beta cells.',
-    cards: { mRNA: 'mRNA' },
+    echo2: 'Nearly every cell in your body has the same two copies of the insulin gene. It is copied into mRNA almost only in beta cells.',
+    // The card of this level (Part 1 already gave the mRNA card): what the watch showed, true of your cells too.
+    cards: {
+      mRNATemp: 'mRNA copies are temporary',
+      mRNATempNote: 'Your cells’ mRNA copies are also broken down after a while. That is how a cell stops making a protein soon after its gene is switched off.',
+    },
     hud: {
-      goal: '{count} / {T} lactose transporters', goalShort: 'LacY {count} / {T}',
+      goal: '{count} / {T} lactose transporters', goalShort: 'Transporters {count} / {T}', goalOverShort: 'Transporters {count}',
       milk: 'Milk sugar here · {count} transporters', milkShort: 'Milk here · {count}',
       timer: 'milk in {time}', timerShort: 'milk in {time}', watchTimer: 'watching {time} more', watchTimerShort: '{time} more',
-      counter: '{m} copies', counterShort: '{m} copies', counterOver: '{m} copies · over par', counterOverShort: '{m} · over par',
+      counter: '{m} copies', counterShort: '{m} copies', counterOver: '{m} copies · over par', counterOverShort: '{m} · over par', counterOverTiny: 'over par',
       copy: 'This copy: read into {n}', copyGone: 'Read into {n}, then broken down', copyShort: 'Read into {n}',
       sinceOff: '+{a} transporters since the switch-off', sinceOffShort: '+{a} since off',
-      watchGoal: 'Watching the lactose transporter gene', watchGoalShort: 'Watching lacY',
+      watchGoal: 'Watching the lactose transporter gene', watchGoalShort: 'Watching the gene',
       watchCounter: '{m} copies made', watchCounterShort: '{m} made', clock: 'minute {t}',
     },
     graph: { target: 'target {T}', milk: 'milk arrives' },
     narr: {
       read: 'Ribosomes are reading every copy; each copy gives about {ppmWords} transporters before it is broken down.',
       leftover: 'The gene is off, but the copies already made are still being read.',
-      milk: 'The glucose is gone; lactose gets in only through the transporters already in the membrane.',
+      milk: 'The glucose is gone; lactose gets in only through the lactose transporters in the membrane.',
       short: 'Too few transporters let too little lactose in, so energy is low and growth is slow.',
       fed: 'Enough lactose gets in through the transporters, so the cell keeps growing.',
     },
@@ -176,7 +180,7 @@
       growth: 'On milk sugar the cell grew at {pct}% of its glucose speed.',
       copies: 'You made {m} copies; about {need} would have given {T} transporters.',
       cost: 'Extra copies and the transporters they made cost about {atp} ATP: the energy from about {glc} glucose.',
-      hint: 'Each copy still on the way gives about {ppmWords} more transporters, so switch off before the count reaches the target.',
+      hint: 'Each copy already made gives about {ppmWords} more transporters, so switch off before the count reaches the target.',
     },
   };
 
@@ -333,13 +337,19 @@
       const shortTime = left < 60 ? K.clock(left, true) : Math.ceil(left / 60) + ' min';
       // Over par once the transporters already made are beyond what par allows (the extra copies are already made).
       const over = s.made > (1 + L.parX) * v.T;
+      // On a phone (under 400 px) the goal and its target take the room before the milk: the copies made are in the
+      // focus bar just below, so the counter chip gives way ('' hides it) and comes back as "over par"; by then the
+      // count is past the target, so the goal drops "/ T" to make room for it.
+      const counter = over ? { text: K.fill(H.counterOver, { m: comma(s.m) }), short: K.fill(H.counterOverShort, { m: comma(s.m) }), over: true }
+        : { text: K.fill(H.counter, { m: comma(s.m) }), short: K.fill(H.counterShort, { m: comma(s.m) }) };
+      if (!milk) counter.tiny = over ? H.counterOverTiny : '';
       return {
         goal: milk
           ? { text: K.fill(H.milk, { count: cf }), short: K.fill(H.milkShort, { count: cf }), progress: null, done: !!s.reached }
-          : { text: K.fill(H.goal, { count: cf, T: Tf }), short: K.fill(H.goalShort, { count: cf, T: Tf }), progress: Math.min(1, s.count / v.T), done: !!s.reached },
+          : { text: K.fill(H.goal, { count: cf, T: Tf }), short: K.fill(over ? H.goalOverShort : H.goalShort, { count: cf, T: Tf }),
+            progress: Math.min(1, s.count / v.T), done: !!s.reached },
         timer: { text: K.fill(milk ? H.watchTimer : H.timer, { time: K.clock(left, true) }), short: K.fill(milk ? H.watchTimerShort : H.timerShort, { time: shortTime }) },
-        counter: over ? { text: K.fill(H.counterOver, { m: comma(s.m) }), short: K.fill(H.counterOverShort, { m: comma(s.m) }), over: true }
-          : { text: K.fill(H.counter, { m: comma(s.m) }), short: K.fill(H.counterShort, { m: comma(s.m) }) },
+        counter,
       };
     },
 
@@ -421,7 +431,7 @@
       { id: 'l12.d1', kind: 'choice', prompt: TEXT.d1.prompt, options: TEXT.d1.options },
       { id: 'l12.d2', kind: 'choice', prompt: TEXT.d2.prompt, options: TEXT.d2.options },
     ],
-    echo: { screens: ['echo1', 'echo2'], cards: [{ id: 'mrna', title: 'cards.mRNA', stamp: 'universal' }] },
+    echo: { screens: ['echo1', 'echo2'], cards: [{ id: 'mrna-temporary', title: 'cards.mRNATemp', note: 'cards.mRNATempNote', stamp: 'universal' }] },
     story: {
       intro: TEXT.story.intro, outro: TEXT.story.fed.concat(TEXT.story.all), onRun: TEXT.story.onRun,
       extra: { milk: TEXT.story.milk, fed: TEXT.story.fed.concat(TEXT.story.all), keptOn: TEXT.story.keptOn.concat(TEXT.story.all),

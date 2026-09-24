@@ -2,8 +2,8 @@
 /*
  * Be the Cell: Prologue 2, "A cell's economy" (docs/PROLOGUE.md §2.4, §2.8.2). Not scored.
  *
- * Drawings first: the bacterium beside one of your cells (the same code and the same kind of
- * ribosome; no nucleus, one loop of DNA, so ribosomes start on an mRNA while it is still being made),
+ * Drawings first: the bacterium beside one of your cells (the same code, read by ribosomes that do the
+ * same job; no nucleus, one loop of DNA, so ribosomes start on an mRNA while it is still being made),
  * the two sugars (glucose, the everyday sugar; lactose, the sugar in milk), and the cell's economy
  * built up one piece per tap (sugar in → enzymes make ATP → ATP pays for building proteins → machines
  * wear out → the cell grows and divides). Its numbers come from the calibrated constants (LC.economy),
@@ -39,28 +39,29 @@
       bacterium: 'a bacterium', betaCell: 'one of your cells (a beta cell)', nucleus: 'nucleus', ribosome: 'ribosome', mRNA: 'mRNA',
       dna: 'its DNA: one loop', noNucleus: 'no nucleus', rnap: 'RNA polymerase', copyInProgress: 'a copy still being made',
       readFront: 'ribosomes already reading its front', glucose: 'glucose', lactose: 'lactose', blood: 'your blood', milk: 'milk',
-      glucoseTr: 'glucose transporter', lactoseTr: 'lactose transporter', enzymes: 'sugar-splitting enzymes', splitter: 'lactose splitter',
+      glucoseTr: 'glucose transporter', lactoseTr: 'lactose transporter', enzymes: 'glucose-processing enzymes', splitter: 'lactose-splitting enzyme',
       sugar: 'sugar', transporter: 'transporter', enzyme: 'enzymes', atp: 'ATP', spent: 'spent', building: 'building proteins',
       other: 'other building', upkeep: 'upkeep', price: 'about {atp} ATP', gene: 'gene', copy: 'mRNA copy', worn: 'worn out, cut up',
       divides: 'grows and divides', outside: 'outside', inside: 'inside', membrane: 'membrane', dotsEnlarged: 'drawn larger than scale',
       scale5um: '5 µm', scale1um: '1 µm', scale50nm: '50 nm', letters: 'letters drawn larger than scale',
+      fewRibosomes: 'a few of its many thousands of ribosomes', dnaLength: 'drawn far shorter: stretched out, this DNA is about 1.6 mm long',
     },
     alt: {
       sizes: 'A bacterium beside one of your cells, both to the same scale bar.',
-      bactRibosomes: 'The bacterium with its ribosomes and an mRNA.',
-      bactDNA: 'The bacterium’s DNA: one loop, loose in the cell, with no nucleus.',
+      bactRibosomes: 'The bacterium with a few of its ribosomes and an mRNA.',
+      bactDNA: 'The bacterium’s DNA: one loop, lying free in the cell, with no nucleus; drawn far shorter than it is.',
       cotx: 'RNA polymerase making an mRNA while ribosomes already read its front end.',
       glucose: 'Glucose, with a drop of blood and a bacterium.',
       lactose: 'Lactose, two joined sugar rings, with a glass of milk.',
-      pairs: 'Two pairs of machines: glucose transporter and sugar-splitting enzymes; lactose transporter and lactose splitter.',
+      pairs: 'Two pairs of machines: glucose transporter and glucose-processing enzymes; lactose transporter and lactose-splitting enzyme.',
       economy: 'The cell’s economy, built up one piece at a time.',
     },
     about: {
-      q4: { row: 'About: insulin made by bacteria', text: 'Bacteria given an insulin gene without its introns make the insulin chain. Most insulin for people with diabetes is made this way.' },
+      q4: { row: 'About: insulin made by bacteria', text: 'Bacteria given an insulin gene with no cut-out stretches make its chain; enzymes then cut it into insulin. Much insulin is made this way.' },
     },
     ui: { simplified: 'What is simplified', simplifiedTitle: 'What is simplified', next: 'Next: level 1.1' },
     simplified: [
-      'The drawings of your body, pancreas and cells are to their scale bars, but simplified.',
+      'The drawings of cells are to their scale bars, but simplified; what is not says so.',
       'Protein shapes are drawn flat. Real proteins are three-dimensional; the fit between pocket and molecule is real.',
       'The bacterium you run is a lab strain: each of its genes has its own switch.',
       'Each dot on the cell stands for many molecules; the line under the cell says how many.',
@@ -68,25 +69,25 @@
     scenes: {
       q1: [{ who: 'narrator', text: 'This is a bacterium, much smaller than one of your cells. Bacteria of this kind live in your gut.' }],
       q2: [
-        { who: 'narrator', text: 'It reads the same genetic code, with the same kind of ribosome.' },
+        { who: 'narrator', text: 'It reads the same genetic code, with ribosomes that do the same job as yours.' },
         { who: 'ribosome', text: 'Different cell, same code, same job. I read what reaches me.' },
       ],
-      q3: [{ who: 'narrator', text: 'It has no nucleus. Its DNA is one loop of about 4.6 million letters, with about 4,300 genes, loose in the cell.' }],
+      q3: [{ who: 'narrator', text: 'It has no nucleus. Its DNA is one loop of about 4.6 million letters, with about 4,300 genes, lying free in the cell.' }],
       q4: [{ who: 'narrator', text: 'With no nucleus in the way, ribosomes start reading an mRNA while it is still being made.' }],
-      q5: [{ who: 'narrator', text: 'Glucose is the everyday sugar. It is in your blood, and it is this bacterium’s usual food.' }],
+      q5: [{ who: 'narrator', text: 'Glucose is the everyday sugar. It is in your blood, and it is the sugar this bacterium uses first when it can.' }],
       q6: [{ who: 'narrator', text: 'Lactose is the sugar in milk. Some of it reaches the bacteria in your gut.' }],
-      q7: [{ who: 'narrator', text: 'Each sugar has its own transporter to get in and its own enzyme to split it. Lactose is useful to a cell only once it has both.' }],
+      q7: [{ who: 'narrator', text: 'Each sugar gets in through its own transporter. Lactose must also be split in two by its own enzyme before the cell can use it.' }],
       s0: [{ who: 'commander', text: 'A cell of my own. What does it do all day?' }],
       s1: [{ who: 'narrator', text: 'A cell runs as a small economy.' }],
       s2: [{ who: 'narrator', text: 'Food first: sugar gets in only through transporter machines in the membrane.' }],
-      s3: [{ who: 'narrator', text: 'Enzyme machines inside break the sugar down and make ATP, the cell’s energy currency. Here, each glucose gives {atpPerGlucose} ATP.' }],
-      s4: [{ who: 'narrator', text: 'ATP is spent on everything the cell does. The biggest single cost is building proteins: about {atpPerAa} ATP for every amino acid.' }],
-      s5: [
-        { who: 'narrator', text: 'So one transporter, about {trAa} amino acids long, costs about {trAtp} ATP: the energy from about {trGlucose} glucose.' },
-        { who: 'commander', text: 'Expensive. I will only build what the cell uses.' },
+      s3: [
+        { who: 'narrator', text: 'Enzyme machines inside break the sugar down and make ATP, the cell’s energy currency.' },
+        { who: 'narrator', text: 'Here, with no oxygen, each glucose gives {atpPerGlucose} ATP.' },
       ],
+      s4: [{ who: 'narrator', text: 'ATP is spent on everything the cell does. The biggest single cost is building proteins: about {atpPerAa} ATP to join each amino acid on.' }],
+      s5: [{ who: 'narrator', text: 'So one transporter, about {trAa} amino acids long, costs about {trAtp} ATP: the energy from about {trGlucose} glucose.' }],
       s6: [{ who: 'narrator', text: 'Genes hold the instructions for every machine. mRNA copies carry them to the ribosomes.' }],
-      s7: [{ who: 'narrator', text: 'Machines wear out and are cut up, so new ones are always being made.' }],
+      s7: [{ who: 'narrator', text: 'Machines wear out and are cut up, and new ones are made all the time.' }],
       s8: [{ who: 'narrator', text: 'When the economy runs well, the cell grows, copies its DNA and divides in two.' }],
     },
     // The guided experiment (§2.4.3, §2.8.2), in play order.
@@ -112,7 +113,6 @@
       h13: [
         { who: 'commander', text: 'It did exactly what I told it.' },
         { who: 'narrator', text: 'You switched one gene on. RNA polymerase copied it, ribosomes read the copies, and the transporters let glucose in.' },
-        { who: 'ribosome', text: 'I read those copies because they reached me. I would have read any others.' },
       ],
       h14: [
         { who: 'narrator', text: 'Next time this cell starts over with six unlabelled genes. One of them holds the instructions for the transporter.' },
@@ -127,10 +127,17 @@
     },
     offNote: 'The gene is off, so no new copies are started. Switch it on to carry on.',
     look: { gene: 'Look closer', protein: 'Look at one transporter' },
+    // Q7's machine cards (§4.3): what each does first, then its name. ATP is not named before S3, so these are not the lab's job lines.
+    cardsQ7: {
+      ptsG: { job: 'Carries glucose across the membrane.', name: 'Glucose transporter', where: 'Works in the membrane' },
+      gly: { job: 'Break glucose down inside the cell.', name: 'Glucose-processing enzymes', where: 'Work inside the cell' },
+      lacY: { job: 'Carries lactose across the membrane.', name: 'Lactose transporter', where: 'Works in the membrane' },
+      lacZ: { job: 'Splits lactose into two sugars: glucose and galactose.', name: 'Lactose-splitting enzyme', where: 'Works inside the cell' },
+    },
     e9g: {
       prompt: 'What will happen to its ATP?',
       options: [
-        { t: 'It runs low, because no sugar gets in.', cause: true, fb: 'Its ATP ran low: without transporters, only a trickle of sugar got in to be broken down.' },
+        { t: 'It runs low, because little sugar gets in.', cause: true, fb: 'Its ATP ran low: without glucose transporters, only a trickle of sugar got in to be broken down.' },
         { t: 'It stays high: sugar outside is enough.', mc: 'ENERGY_FIRST', fb: 'Sugar outside makes no ATP. Only sugar that gets in and is broken down by enzymes does.' },
         { t: 'It rises, because the cell saves energy.', mc: 'CELL_DECIDES', fb: 'Nothing saves anything on purpose. ATP fell, because too little sugar got in.' },
       ],
@@ -146,7 +153,7 @@
     },
     // The lab's "none of it gets in" is not true of this cell: the side route lets a trickle in.
     narr: { trickle: 'Glucose is outside, but only a trickle of it can get in, through a slow side route.' },
-    cards: { noNucleus: 'No nucleus', loop: 'One loop of DNA', together: 'Reading mRNA while it is made', atp: 'ATP, the energy currency' },
+    cards: { noNucleus: 'No nucleus', loop: 'All its genes on one loop of DNA', together: 'Reading mRNA while it is made', atp: 'ATP, the energy currency' },
   };
 
   const offNotes = [{ test: 'geneOff', text: TEXT.offNote }];

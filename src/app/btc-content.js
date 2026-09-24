@@ -26,7 +26,7 @@
     ptsG: {
       slot: 0, name: 'Glucose transporter', symbol: 'ptsG', plural: false,
       job: 'Carries glucose across the membrane.',
-      about: 'Each one carries about 80 glucose molecules a second across the membrane.',
+      about: 'Each one can carry up to about 80 glucose molecules a second across the membrane.',
       genePhrase: 'the glucose transporter gene', noun: 'the glucose transporter', protein: 'glucose transporter',
     },
     gly: {
@@ -55,7 +55,7 @@
     },
     lacZ: {
       slot: 5, name: 'Lactose-splitting enzyme', symbol: 'lacZ', plural: false, short: 'LacZ',
-      job: 'Splits lactose into glucose and galactose.',
+      job: 'Splits lactose into two sugars: glucose and galactose.',
       about: 'LacZ, also called β-galactosidase. Four chains make one enzyme, drawn as four lobes. It also turns a little lactose into allolactose.',
       genePhrase: 'the lactose-splitting enzyme gene', noun: 'the lactose-splitting enzyme', protein: 'lactose-splitting enzyme',
     },
