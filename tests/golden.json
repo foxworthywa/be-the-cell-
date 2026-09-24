@@ -1,0 +1,122 @@
+{
+  "engineVersion": "1.0.0",
+  "about": "Golden hash (engine spec d-4): steady preset, seed 1, these commands submitted at these ticks, then stepped to `ticks`.",
+  "config": {
+    "seed": 1,
+    "start": "steady"
+  },
+  "commands": [
+    {
+      "tick": 100,
+      "cmd": {
+        "type": "setPromoter",
+        "gene": "fliC",
+        "level": 4
+      }
+    },
+    {
+      "tick": 600,
+      "cmd": {
+        "type": "setPromoter",
+        "gene": "lacY",
+        "level": 1
+      }
+    },
+    {
+      "tick": 1200,
+      "cmd": {
+        "type": "setMedium",
+        "lactose_mM": 5
+      }
+    },
+    {
+      "tick": 2400,
+      "cmd": {
+        "type": "setMedium",
+        "glucose_mM": 0.005
+      }
+    },
+    {
+      "tick": 4000,
+      "cmd": {
+        "type": "setDrug",
+        "drug": "chloramphenicol",
+        "dose": 0.3
+      }
+    },
+    {
+      "tick": 4600,
+      "cmd": {
+        "type": "setDrug",
+        "drug": "chloramphenicol",
+        "dose": 0
+      }
+    },
+    {
+      "tick": 5000,
+      "cmd": {
+        "type": "setDegradation",
+        "gene": "fliC",
+        "perS": 0.001
+      }
+    },
+    {
+      "tick": 5500,
+      "cmd": {
+        "type": "setMRNAHalfLife",
+        "gene": "ptsG",
+        "s": 90
+      }
+    },
+    {
+      "tick": 6000,
+      "cmd": {
+        "type": "setPromoter",
+        "gene": "lacZ",
+        "level": "nope"
+      }
+    },
+    {
+      "tick": 7000,
+      "cmd": {
+        "type": "setDrug",
+        "drug": "rifampicin",
+        "dose": 1
+      }
+    },
+    {
+      "tick": 7300,
+      "cmd": {
+        "type": "setDrug",
+        "drug": "rifampicin",
+        "dose": 0
+      }
+    },
+    {
+      "tick": 8000,
+      "cmd": {
+        "type": "setMedium",
+        "glucose_mM": 10
+      }
+    },
+    {
+      "tick": 8500,
+      "cmd": {
+        "type": "setRBS",
+        "gene": "lacZ",
+        "rbs": 2
+      }
+    },
+    {
+      "tick": 9000,
+      "cmd": {
+        "type": "setKnockout",
+        "gene": "aaImp",
+        "knockout": true
+      }
+    }
+  ],
+  "ticks": 10000,
+  "presetHash": "7a6e5e1d51cc212b",
+  "hash": "76a483440856cb9e"
+}

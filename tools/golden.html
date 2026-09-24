@@ -1,0 +1,244 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Golden Hash Check</title>
+<!--
+  Be the Cell: cross-device determinism check (engine spec d-4, §15 item 4).
+  Runs the golden scenario (steady preset, seed 1, a fixed command log, 10,000
+  ticks) with this browser's JavaScript engine and prints the state hash. Every
+  browser must print the same hash as tests/golden.json. Open it from a checkout
+  (file://) or from any static server that serves the repository root, e.g.
+  `python3 -m http.server` in the repo, then /tools/golden.html.
+  The JSON block below is written by tools/make-golden.js; do not edit it by hand.
+-->
+<style>
+  :root { --bg: #fafaf7; --ink: #1d1d1b; --muted: #6b6b66; --line: #d9d9d2; --good: #2e7d4f; --bad: #b3261e; }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) { --bg: #161615; --ink: #ecece6; --muted: #a3a39c; --line: #3a3a36; --good: #6fcf97; --bad: #f28b82; }
+  }
+  :root[data-theme="dark"] { --bg: #161615; --ink: #ecece6; --muted: #a3a39c; --line: #3a3a36; --good: #6fcf97; --bad: #f28b82; }
+  html { -webkit-text-size-adjust: 100%; }
+  body { margin: 0; padding: 24px 16px; background: var(--bg); color: var(--ink);
+         font: 16px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+  main { max-width: 36rem; margin: 0 auto; }
+  h1 { font-size: 1.25rem; margin: 0 0 4px; }
+  p { margin: 0 0 16px; color: var(--muted); }
+  dl { display: grid; grid-template-columns: max-content 1fr; gap: 8px 16px; margin: 0 0 20px;
+       padding: 16px 0; border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); }
+  dt { color: var(--muted); }
+  dd { margin: 0; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; overflow-wrap: anywhere; }
+  #verdict { font-size: 1.1rem; font-weight: 600; }
+  .good { color: var(--good); } .bad { color: var(--bad); }
+  button { min-height: 48px; padding: 0 20px; font: inherit; color: var(--ink); background: transparent;
+           border: 1px solid var(--line); border-radius: 12px; touch-action: manipulation; }
+</style>
+</head>
+<body>
+<main>
+  <h1>Golden hash check</h1>
+  <p>Runs 10,000 ticks of the golden scenario in this browser and compares the state hash with the one pinned in the repository. Record the result for each device.</p>
+  <dl>
+    <dt>Result</dt><dd id="verdict">running…</dd>
+    <dt>This browser</dt><dd id="got">–</dd>
+    <dt>Expected</dt><dd id="expected">–</dd>
+    <dt>Engine</dt><dd id="version">–</dd>
+    <dt>Preset</dt><dd id="preset">–</dd>
+    <dt>Time</dt><dd id="time">–</dd>
+    <dt>Browser</dt><dd id="agent">–</dd>
+  </dl>
+  <button id="again" type="button">Run again</button>
+</main>
+
+<script type="application/json" id="golden">
+{
+  "engineVersion": "1.0.0",
+  "about": "Golden hash (engine spec d-4): steady preset, seed 1, these commands submitted at these ticks, then stepped to `ticks`.",
+  "config": {
+    "seed": 1,
+    "start": "steady"
+  },
+  "commands": [
+    {
+      "tick": 100,
+      "cmd": {
+        "type": "setPromoter",
+        "gene": "fliC",
+        "level": 4
+      }
+    },
+    {
+      "tick": 600,
+      "cmd": {
+        "type": "setPromoter",
+        "gene": "lacY",
+        "level": 1
+      }
+    },
+    {
+      "tick": 1200,
+      "cmd": {
+        "type": "setMedium",
+        "lactose_mM": 5
+      }
+    },
+    {
+      "tick": 2400,
+      "cmd": {
+        "type": "setMedium",
+        "glucose_mM": 0.005
+      }
+    },
+    {
+      "tick": 4000,
+      "cmd": {
+        "type": "setDrug",
+        "drug": "chloramphenicol",
+        "dose": 0.3
+      }
+    },
+    {
+      "tick": 4600,
+      "cmd": {
+        "type": "setDrug",
+        "drug": "chloramphenicol",
+        "dose": 0
+      }
+    },
+    {
+      "tick": 5000,
+      "cmd": {
+        "type": "setDegradation",
+        "gene": "fliC",
+        "perS": 0.001
+      }
+    },
+    {
+      "tick": 5500,
+      "cmd": {
+        "type": "setMRNAHalfLife",
+        "gene": "ptsG",
+        "s": 90
+      }
+    },
+    {
+      "tick": 6000,
+      "cmd": {
+        "type": "setPromoter",
+        "gene": "lacZ",
+        "level": "nope"
+      }
+    },
+    {
+      "tick": 7000,
+      "cmd": {
+        "type": "setDrug",
+        "drug": "rifampicin",
+        "dose": 1
+      }
+    },
+    {
+      "tick": 7300,
+      "cmd": {
+        "type": "setDrug",
+        "drug": "rifampicin",
+        "dose": 0
+      }
+    },
+    {
+      "tick": 8000,
+      "cmd": {
+        "type": "setMedium",
+        "glucose_mM": 10
+      }
+    },
+    {
+      "tick": 8500,
+      "cmd": {
+        "type": "setRBS",
+        "gene": "lacZ",
+        "rbs": 2
+      }
+    },
+    {
+      "tick": 9000,
+      "cmd": {
+        "type": "setKnockout",
+        "gene": "aaImp",
+        "knockout": true
+      }
+    }
+  ],
+  "ticks": 10000,
+  "presetHash": "7a6e5e1d51cc212b",
+  "hash": "76a483440856cb9e"
+}
+</script>
+
+<!-- engine files, in build-files.json order -->
+<script src="../src/engine/btc-math.js"></script>
+<script src="../src/engine/btc-prng.js"></script>
+<script src="../src/engine/btc-params.js"></script>
+<script src="../src/engine/btc-catalog.js"></script>
+<script src="../src/engine/btc-presets.js"></script>
+<script src="../src/engine/btc-genome.js"></script>
+<script src="../src/engine/btc-queue.js"></script>
+<script src="../src/engine/btc-expression.js"></script>
+<script src="../src/engine/btc-metabolism.js"></script>
+<script src="../src/engine/btc-growth.js"></script>
+<script src="../src/engine/btc-commands.js"></script>
+<script src="../src/engine/btc-events.js"></script>
+<script src="../src/engine/btc-observe.js"></script>
+<script src="../src/engine/btc-cell.js"></script>
+<script src="../src/engine/btc-replay.js"></script>
+
+<script>
+(function () {
+  'use strict';
+  var golden = JSON.parse(document.getElementById('golden').textContent);
+  var $ = function (id) { return document.getElementById(id); };
+
+  // The same loop as tools/make-golden.js: commands are submitted at their tick, then the cell steps.
+  function runGolden(BTC, scenario) {
+    var cell = new BTC.Cell(scenario.config);
+    var next = 0;
+    for (var t = 0; t < scenario.ticks; t++) {
+      while (next < scenario.commands.length && scenario.commands[next].tick === t) cell.command(scenario.commands[next++].cmd);
+      cell.step();
+    }
+    return { hash: cell.hash(), presetHash: cell.presetHash, engineVersion: BTC.ENGINE_VERSION };
+  }
+
+  function run() {
+    $('verdict').textContent = 'running…';
+    $('verdict').className = '';
+    $('agent').textContent = navigator.userAgent;
+    $('expected').textContent = golden.hash;
+    // Let the page paint before the run blocks the thread for a moment.
+    setTimeout(function () {
+      var r, t0 = Date.now();
+      try {
+        r = runGolden(self.BTC, golden);
+      } catch (err) {
+        $('verdict').textContent = 'error: ' + err.message;
+        $('verdict').className = 'bad';
+        return;
+      }
+      $('time').textContent = (Date.now() - t0) + ' ms';
+      $('got').textContent = r.hash;
+      $('version').textContent = r.engineVersion + (r.engineVersion === golden.engineVersion ? '' : ' (golden is for ' + golden.engineVersion + ')');
+      $('preset').textContent = r.presetHash + (r.presetHash === golden.presetHash ? '' : ' (golden used ' + golden.presetHash + ')');
+      var ok = r.hash === golden.hash;
+      $('verdict').textContent = ok ? 'match' : 'MISMATCH';
+      $('verdict').className = ok ? 'good' : 'bad';
+      document.title = (ok ? 'match ' : 'MISMATCH ') + r.hash;
+    }, 50);
+  }
+
+  $('again').addEventListener('click', run);
+  run();
+})();
+</script>
+</body>
+</html>

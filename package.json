@@ -1,0 +1,13 @@
+{
+  "name": "be-the-cell",
+  "version": "0.1.0",
+  "description": "A phone-first lab where students run one bacterial cell and see DNA -> RNA -> protein play out molecule by molecule.",
+  "private": true,
+  "license": "MIT",
+  "scripts": {
+    "test": "node --test tests/*.test.js",
+    "build": "node build.js",
+    "start": "node serve.js",
+    "ui-check": "node build.js && node tools/ui-check.js"
+  }
+}

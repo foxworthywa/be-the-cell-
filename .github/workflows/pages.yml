@@ -1,5 +1,5 @@
 # Run the biology tests, build the single-file bundle and publish it to GitHub Pages.
-# Site URL (once Pages is enabled with source "GitHub Actions"): https://foxworthywa.github.io/be-the-cell/
+# Site URL (once Pages is enabled with source "GitHub Actions"): https://foxworthywa.github.io/be-the-cell-/
 name: Deploy to GitHub Pages
 
 on:
