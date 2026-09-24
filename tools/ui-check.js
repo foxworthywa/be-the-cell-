@@ -358,6 +358,10 @@ async function main() {
     // BZ-6 and TI (docs/PROLOGUE.md §10.2): the tiered screens, the lab's Simple and All controls modes, the watch flow.
     const tierShots = await require('./ui-check-tiers.js').run(browser, port, TI_OUT, check);
     console.log('  tier screenshots: ' + tierShots.length + ' in ' + TI_OUT);
+    // BO-1 … BO-4 (docs/PROLOGUE.md §10.2): the opening, both parts, by taps.
+    const openingOut = path.join(ROOT, 'test-artifacts', 'opening');
+    const openingShots = await require('./ui-check-opening.js').run(browser, port, openingOut, check);
+    console.log('  opening screenshots: ' + openingShots.length + ' in ' + openingOut);
     // BZ-1 … BZ-5 (docs/PROLOGUE.md §10.2): the Gene and Protein close-ups and the zoom control.
     const zoomOut = path.join(ROOT, 'test-artifacts', 'zoom');
     const zoomShots = await require('./ui-check-zoom.js').run(browser, port, zoomOut, check);

@@ -44,7 +44,8 @@ test('L-7: every scored level\'s reference play verifies (score, flags, code); a
       const ans = copy(file);
       const choice = def.predictions.find((it) => it.kind === 'choice');
       if (choice) ans.level.answers[choice.id] = choice.options.findIndex((o) => !o.ok);
-      else ans.level.answers.sketch = [[0, 0], [20, 0]];
+      else if (def.predictions.some((it) => it.id === 'sketch')) ans.level.answers.sketch = [[0, 0], [20, 0]];
+      else { const tap = ans.level.debrief[0]; tap.option = tap.option === 0 ? 1 : 0; }   // no predictions (1.2): an Explain tap
       assert.equal(RUN.game.verifyRunFile(ans, { levels: byId }).ok, false, def.id + ': an edited answer still verified');
     }
   }
@@ -87,13 +88,14 @@ test('L-7: tools/verify-run.js prints "match" for a good file and exits 1 for a 
 test('L-8: the decoded table names the Expert objectives and flags met, and the variant\'s values', () => {
   const def = byId['1.2'];
   const flagIds = def.flags.map((f) => (typeof f === 'string' ? f : f.id));
-  const code = CODE.encode({ level: def.code, variantSeed: 777, G: 1, E: 90, P: 75, D: [1, 2], X: 2, flags: 0b101, attempt: 2, runs: 1,
+  // 1.2 has one Expert objective (PROLOGUE §6.2): its bit is 1.
+  const code = CODE.encode({ level: def.code, variantSeed: 777, G: 1, E: 90, P: 75, D: [1, 2], X: 1, flags: 0b101, attempt: 2, runs: 1,
     engine: '1.1.0', content: def.version, digest: 'abc123' });
   const [row] = CODE.table([{ student: 'Ada', code }], levels(), { engine: '1.1.0' });
   assert.equal(row.valid, true);
   assert.equal(row.level, '1.2');
   assert.equal(row.variantValues, def.variantLabel(def.variant(777)));
-  assert.equal(row.expert, '2 of 2');
+  assert.equal(row.expert, '1 of 1');
   assert.equal(row.flags, [flagIds[0], flagIds[2]].join(', '));
   assert.equal(row.total, String(CODE.decode(code).total));
   const [unknown] = CODE.table([{ student: 'X', code: CODE.encode({ level: '99', variantSeed: 1, G: 1, E: 1, P: 1, D: [0, 1], X: 0, flags: 0, attempt: 1, runs: 1, engine: '1.1.0', content: 1, digest: '000000' }) }], levels(), {});

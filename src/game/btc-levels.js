@@ -100,6 +100,23 @@
     if (it.expert !== undefined && typeof it.expert !== 'boolean') fail(path + '.expert', 'true or false');
   }
 
+  /** A scene activity of the opening (PROLOGUE §2.3): copy, copies, read, show or explore, with what it needs. */
+  function validateActivity(fail, path, a) {
+    const KINDS_A = ['copy', 'copies', 'read', 'show', 'explore'];
+    if (!isObj(a) || KINDS_A.indexOf(a.kind) < 0) fail(path + '.kind', 'copy, copies, read, show or explore');
+    if (a.kind !== 'explore' && !(typeof a.total === 'number' && a.total > 0)) fail(path + '.total', 'a positive number');
+    if (a.kind === 'copy') {
+      if (!isStr(a.template) || !isStr(a.expect) || a.template.length !== a.expect.length) fail(path + '.expect', 'template and expect of equal length');
+      if (!isObj(a.words) || !isStr(a.words.noT) || !isStr(a.words.other)) fail(path + '.words', '{noT, other}');
+    }
+    if (a.kind === 'copies' && !(isInt(a.n) && a.n > 0)) fail(path + '.n', 'how many copies');
+    if (a.kind === 'read') {
+      if (!Array.isArray(a.codons) || !a.codons.length || !Array.isArray(a.rows)) fail(path + '.codons', 'codons and rows');
+      for (const c of a.codons) if (!a.rows.some((r) => r.codon === c)) fail(path + '.rows', 'no row for ' + c);
+      if (!isObj(a.words) || !isStr(a.words.wrong)) fail(path + '.words', '{wrong}');
+    }
+  }
+
   /** A string in a level's TEXT by key; dotted keys walk into nested objects ('cards.ribosome'). */
   function textAt(def, key) {
     let x = def && def.text;
@@ -171,7 +188,8 @@
     for (const ph of ['predict', 'predict2']) {
       if (has(ph) && !def.predictions.some((it) => (it.phase || 'predict') === ph && !it.expert)) fail('predictions', ph + ' has no Core item');
     }
-    if (!Array.isArray(def.debrief) || def.debrief.length < 1 || def.debrief.length > 2) fail('debrief', '1 or 2 questions');
+    // The unscored opening explains through its guesses and may have no question of its own (PROLOGUE §2.1).
+    if (!Array.isArray(def.debrief) || def.debrief.length > 2 || (def.debrief.length < 1 && def.scored)) fail('debrief', '1 or 2 questions');
     def.debrief.forEach((q, i) => {
       if (!isObj(q) || q.kind !== 'choice') fail('debrief[' + i + ']', 'a choice question');
       validateChoice(fail, 'debrief[' + i + ']', q);
@@ -243,8 +261,15 @@
         if (!Array.isArray(s.lines) || !s.lines.length) fail(p + '.lines', 'at least one line');
         s.lines.forEach((l, j) => validateLine(fail, p + '.lines[' + j + ']', l));
         if (s.question !== undefined && !def.debrief.some((q) => q.id === s.question)) fail(p + '.question', 'must name a debrief question');
+        if (s.activity !== undefined) validateActivity(fail, p + '.activity', s.activity);
+        if (s.rung !== undefined && !isStr(s.rung)) fail(p + '.rung', 'the rung\'s drawing, a name');
       });
     }
+    if (def.runBeats !== undefined) {
+      if (!Array.isArray(def.runBeats) || def.runBeats.some((b) => !isObj(b) || !isStr(b.name) || typeof b.when !== 'function')) fail('runBeats', '[{name, when(monitorSave)}]');
+      for (const b of def.runBeats) if (!def.story.extra || !def.story.extra[b.name]) fail('runBeats.' + b.name, 'story.extra has no beat ' + b.name);
+    }
+    if (def.uiKey !== undefined && typeof def.uiKey !== 'function') fail('uiKey', 'uiKey(monitorSave, phase) → a string');
     if (!Array.isArray(def.narratorRules)) fail('narratorRules', 'a list (may be empty)');
     def.narratorRules.forEach((r, i) => {
       if (!isObj(r) || typeof r.key !== 'string' || r.key.indexOf(prefixOf(def.id)) !== 0) fail('narratorRules[' + i + '].key', 'starts with ' + prefixOf(def.id));

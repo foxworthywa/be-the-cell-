@@ -220,39 +220,39 @@ test('W-10: a switch-on before the act prompt does the act (the student need not
 });
 
 test('W-11: a guess in a scene of the opening ("Guess, then see"): the scene waits for it, it is never marked, feedback shows where it is due, flags follow', () => {
-  const P = require('../src/levels/btc-level-p.js');
-  const guess = {
-    id: 'd1', showAt: P.scenes[4].id, prompt: 'The copy is finished. What happens to the gene now?',
-    options: [
-      { t: 'It stays in the nucleus, and can be copied again.', cause: true, fb: 'The gene stayed put. Only the mRNA copy left, and the same gene can be copied again and again.' },
-      { t: 'It leaves the nucleus with the copy.', mc: 'DNA_DIRECT', fb: 'The gene stayed put. Only the mRNA copy left, through a pore in the nucleus.' },
-      { t: 'It is used up by the copying.', mc: 'DNA_DIRECT', fb: 'Copying left the gene as it was. The same gene can be copied again and again.' },
-    ],
-  };
-  const def = LV.validate(Object.assign({}, P, {
-    id: 'PX', code: 'PX', order: 91,
-    scenes: P.scenes.map((sc, i) => (i === 2 ? Object.assign({}, sc, { guess }) : sc)),
-    flags: P.flags.concat([{ id: 'G_DNA_DIRECT', mc: 'DNA_DIRECT', guess: 'd1' }]),
-  }));
+  const def = LV.validate(require('../src/levels/btc-level-p.js'));
+  const at = def.scenes.findIndex((sc) => sc.guess && sc.guess.id === 'd1');
+  const g = def.scenes[at].guess;
+  assert.ok(g.showAt && g.showAt !== def.scenes[at].id, 'D1\'s feedback is due on a later scene');
   const r = new LevelRunner({ def, variantSeed: 0 }).start();
-  while (r.sceneInfo().index < 2 || !r.sceneInfo().lastLine) r.sceneNext();
+  // On to D1's last line, doing the activities on the way.
+  while (r.sceneInfo().index < at || !r.sceneInfo().lastLine) {
+    const i = r.sceneInfo();
+    if (i.activity && i.lastLine && !i.activity.done) RUN.game.playActivity(r, i, null);
+    assert.ok(r.sceneNext().ok, 'Next at ' + i.scene.id);
+  }
   let info = r.sceneInfo();
   assert.ok(info.guess && !info.guess.seen);
   assert.equal(r.sceneNext().reason, 'guess', 'the scene waits for the guess');
-  assert.equal(r.sceneSkip() && r.sceneInfo().index, 2, 'Skip never passes an unseen guess');
+  assert.equal(r.sceneSkip() && r.sceneInfo().index, at, 'Skip never passes an unseen guess');
   assert.equal(r.sceneSee().ok, false, 'See needs a pick');
-  assert.ok(r.scenePick('d1', 1));
+  const wrong = g.options.findIndex((o) => o.mc === 'DNA_DIRECT');
+  assert.ok(r.scenePick('d1', wrong));
   assert.ok(r.sceneSee().ok);
   info = r.sceneInfo();
   assert.equal(info.guess.seen, true);
+  assert.equal(info.solved, true, 'a guess is seen, never marked');
   assert.deepEqual(info.feedback, [], 'its feedback is due on a later scene');
   assert.ok(r.sceneNext().ok);
-  while (r.sceneInfo().index < 4 || !r.sceneInfo().lastLine) { const i = r.sceneInfo(); if (i.question && !i.solved) r.tap(i.scene.question, 'ok'); assert.ok(r.sceneNext().ok); }
-  assert.match(r.sceneInfo().feedback[0].fb, /through a pore/);
+  while (r.sceneInfo().scene.id !== g.showAt || !r.sceneInfo().lastLine) assert.ok(r.sceneNext().ok);
+  const fb = r.sceneInfo().feedback;
+  assert.equal(fb.length, 1);
+  assert.equal(fb[0].fb, g.options[wrong].fb);
+  assert.equal(fb[0].cause, false);
   const out = playHeadless(def, { solution: 'reference' });
   assert.deepEqual(out.result.flags, []);
-  const bad = playHeadless(def, { solution: 'reference', onPhase: (x) => { if (x.phase === 'scenes') { const i = x.sceneInfo(); if (i.guess && !i.guess.seen) { x.scenePick('d1', 2); x.sceneSee(); } } } });
-  assert.deepEqual(bad.result.flags, ['G_DNA_DIRECT']);
+  const bad = playHeadless(def, { solution: 'reference', onPhase: (x) => { if (x.phase === 'scenes') { const i = x.sceneInfo(); if (i.guess && i.guess.id === 'd1' && !i.guess.seen) { x.scenePick('d1', wrong); x.sceneSee(); } } } });
+  assert.deepEqual(bad.result.flags, ['PRED_DNA_DIRECT']);
   assert.equal(bad.result.total, null, 'the opening is not scored');
 });
 

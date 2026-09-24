@@ -134,7 +134,7 @@
         if (e.state.__s !== st) { e.state.__s = st; e.state.className = 'state-chip st-' + st; }
         LY.setText(e.state, C.geneState[st]);
         LY.setText(e.mrna, F.fill(C.card.counts, { m: F.count(gv.mRNA), n: F.count(gv.nascent) }));
-        LY.setText(e.protein, F.fill(C.card.protein, { p: F.count(gv.proteinRounded) }));
+        LY.setText(e.protein, F.fill(C.card.protein, { p: F.count(F.machines(gv)) }));
         if (this.simple) continue;
         const share = elong > 0 ? gv.ribosomes / elong : 0;
         const w = Math.min(100, (share / SHARE_FULL) * 100).toFixed(1) + '%';

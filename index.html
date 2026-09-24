@@ -536,33 +536,146 @@ body:not([data-layout="compact"]) .home-actions { max-width: 560px; }
 .card-stamp { font-size: 12px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); }
 .stamp-universal .card-stamp { color: var(--accent); }
 
-/* ---- Prologue drawings (LEVELS §7.P) ---- */
-.prologue { position: fixed; inset: 0; background: var(--bg); display: flex; flex-direction: column; padding-top: var(--safe-t); }
+/* ---- the opening (docs/PROLOGUE.md §2.5): drawings above the sheet on a phone, beside it on wider screens ---- */
+.prologue { position: fixed; inset: 0; background: var(--bg); display: flex; flex-direction: column; padding-top: var(--safe-t); --gene: var(--g-aaImp); }
 .pl-bar { display: flex; align-items: center; gap: 10px; min-height: 52px; padding: 4px 12px; background: var(--panel); border-bottom: 1px solid var(--line); }
 .pl-title { font-weight: 650; font-size: 16px; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-/* The story sheet covers the lower part: the drawing sits above it. */
-.pl-stage { flex: 1; min-height: 0; display: flex; justify-content: center; padding: 10px 16px min(48dvh, 360px); }
-/* Wider screens: the drawing on the left, the story beside it, so a question never hides the picture. */
+/* The sheet covers the lower part: the drawing sits above it (its padding follows the sheet's height, set by the view). */
+.pl-stage { position: relative; flex: 1; min-height: 0; display: flex; justify-content: center; padding: 6px 12px 45dvh; }
 body:not([data-layout="compact"]) .pl-stage { padding: 24px calc(48px + min(520px, 44vw)) 24px 24px; align-items: center; }
+body[data-rail] .pl-stage { padding-right: 46px; }
+body[data-rail]:not([data-layout="compact"]) .pl-stage { padding-right: calc(80px + min(520px, 44vw)); }
 body[data-surface="prologue"]:not([data-layout="compact"]) .sheet-backdrop.lv-dim { align-items: center; justify-content: flex-end; padding: 24px 24px 24px 0; }
-body[data-surface="prologue"]:not([data-layout="compact"]) .lv-story { width: min(520px, 44vw); }
-.pl-figure { margin: 0; width: 100%; max-width: 560px; height: 100%; display: flex; flex-direction: column; gap: 6px; }
-.pl-note { align-self: flex-start; font-size: 12px; color: var(--muted); border: 1px solid var(--line); border-radius: 6px; padding: 1px 8px; background: var(--panel); }
-.pl-art { flex: 1; min-height: 0; display: flex; justify-content: center; transition: opacity 300ms; }
+body[data-surface="prologue"]:not([data-layout="compact"]) .lv-story { width: min(520px, 44vw); max-height: calc(100dvh - 48px); }
+.pl-figure { margin: 0; width: 100%; max-width: 760px; height: 100%; max-height: 600px; display: flex; flex-direction: column; gap: 4px; min-height: 0; }
+.pl-note { font-size: 13px; line-height: 1.35; color: var(--muted); border-left: 3px solid var(--line); padding: 2px 0 2px 8px; flex: none; }
+.pl-art { position: relative; flex: 1; min-height: 0; display: flex; justify-content: center; touch-action: none; }
 .pl-svg { width: 100%; height: 100%; }
-.pl-fade .pl-art { opacity: .22; }
-.pl-zoom .pl-art { animation: pl-zoom 300ms ease-out; }
-@keyframes pl-zoom { from { transform: scale(.8); opacity: 0; } to { transform: none; opacity: 1; } }
+.pl-canvas { position: absolute; inset: 0; display: block; }
+.pl-zoom-in { animation: pl-zoom-in 300ms ease-out; }
+.pl-zoom-out { animation: pl-zoom-out 300ms ease-out; }
+.pl-fade-in { animation: pl-fade 100ms linear; }
+@keyframes pl-zoom-in { from { transform: scale(.35); opacity: 0; } to { transform: none; opacity: 1; } }
+@keyframes pl-zoom-out { from { transform: scale(2.2); opacity: 0; } to { transform: none; opacity: 1; } }
+@keyframes pl-fade { from { opacity: 0; } to { opacity: 1; } }
+/* The ring on what to zoom into (44 px; tapping it is Closer), and the ladder rail at the right edge (one 44 px button). */
+.pl-ring { position: absolute; z-index: 2; width: 44px; height: 44px; border-radius: 50%; border: 3px solid var(--accent); background: transparent; padding: 0;
+  box-shadow: 0 0 0 3px var(--panel); animation: pl-pulse 1.6s ease-in-out infinite; }
+@keyframes pl-pulse { 0%, 100% { transform: scale(1); opacity: 1; } 50% { transform: scale(1.12); opacity: .7; } }
+body[data-reduced-motion] .pl-ring { animation: none; }
+.pl-rail { position: absolute; z-index: 3; right: 0; top: 6px; bottom: 45dvh; width: 44px; padding: 6px 0; border: 0; background: none;
+  display: flex; flex-direction: column; align-items: center; gap: 6px; color: var(--ink); }
+body:not([data-layout="compact"]) .pl-rail { right: calc(48px + min(520px, 44vw)); bottom: 24px; top: 24px; }
+.pl-ticks { display: flex; flex-direction: column; gap: 6px; align-items: center; padding: 6px 0; border-left: 2px solid var(--line); }
+.pl-tick { width: 10px; height: 10px; border-radius: 50%; border: 2px solid var(--muted); background: var(--bg); margin-left: -6px; }
+.pl-tick.is-visited { background: var(--muted); }
+.pl-tick.is-now { background: var(--accent); border-color: var(--accent); width: 14px; height: 14px; }
+.pl-rail-name { writing-mode: vertical-rl; transform: rotate(180deg); font-size: 13px; font-weight: 650; }
+.pl-rail-list { display: flex; flex-direction: column; gap: 6px; }
+.btn.pl-rail-row { min-height: 48px; display: flex; justify-content: space-between; align-items: center; text-align: left; }
+.btn.pl-rail-row.is-now { border-color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent); }
+/* Drawings: palette tokens only (light and dark follow the page). */
 .pl-l { fill: none; stroke: var(--ink); stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
 .pl-f { fill: var(--inside); }
-.pl-m { stroke: var(--muted); stroke-width: 1.5; }
+.pl-m { stroke: var(--muted); stroke-width: 1.5; fill: none; }
 .pl-a { stroke: var(--accent); stroke-width: 2.2; }
-.pl-w { stroke-width: 4.5; }
-.pl-n { fill: var(--nucleoid); }
+.pl-nuc { fill: var(--nucleoid); }
 .pl-k { fill: none; stroke: var(--muted); stroke-width: 1; }
 .pl-sb { fill: none; stroke: var(--ink); stroke-width: 2.5; stroke-linecap: square; }
 .pl-t { fill: var(--ink); font: 600 13px var(--font); }
-.pl-s { fill: var(--ink); font: 12px var(--font); }
+.pl-s { fill: var(--muted); font: 12px var(--font); }
+.pl-num { font-variant-numeric: tabular-nums; }
+.pl-cell { fill: var(--inside); stroke: var(--muted); stroke-width: 1; }
+.pl-cell.pl-beta { fill: var(--accent-pale); stroke: var(--accent); }
+.pl-pk { fill: var(--accent); }
+.pl-pore { stroke: var(--panel); stroke-width: 4; }
+.pl-terr ellipse { fill: none; stroke: var(--muted); stroke-width: 1.2; stroke-dasharray: 3 3; }
+.pl-chr { fill: none; stroke: var(--gene); stroke-width: 3; stroke-linecap: round; }
+.pl-chr11 { fill: var(--gene); fill-opacity: .25; stroke: var(--gene); stroke-width: 2; }
+.pl-thread { fill: none; stroke: var(--gene); stroke-opacity: .7; stroke-width: 2.2; stroke-linejoin: round; }
+.pl-gmark { fill: var(--gene); stroke: var(--panel); stroke-width: 2; }
+.pl-other { fill: var(--muted-fill); stroke: var(--muted); }
+.pl-gband { fill: var(--gene); fill-opacity: .8; }
+.pl-bb { fill: none; stroke: var(--dna); stroke-width: 2; }
+.pl-bb-o { stroke: var(--muted); }
+.pl-rung { fill: none; stroke: var(--muted); stroke-width: 1.4; }
+.pl-strand { fill: none; stroke: var(--dna); stroke-width: 3; }
+.pl-strand2 { stroke: var(--gene); }
+.pl-lt { fill: var(--ink); font: 700 22px ui-monospace, "SF Mono", Menlo, Consolas, monospace; }
+.pl-lt-o { fill: var(--muted); }
+.pl-lt-s { font-size: 13px; }
+.pl-lt-c { fill: var(--ink); }
+.pl-u { fill: var(--accent); }
+.pl-q { fill: var(--accent); }
+.pl-lt.is-hot { fill: var(--accent); }
+.pl-hot { fill: var(--accent-pale); stroke: var(--accent); stroke-width: 2; fill-opacity: .5; }
+.pl-hotbox { fill: none; stroke: var(--accent); stroke-width: 2; }
+.pl-slot { fill: var(--accent-pale); stroke: var(--accent); stroke-width: 2; }
+.pl-tap { fill: transparent; cursor: pointer; }
+.pl-gbox { fill: none; stroke: var(--gene); stroke-width: 3; }
+.pl-gline { fill: none; stroke: var(--gene); stroke-width: 4; stroke-linecap: round; }
+.pl-gt { fill: var(--gene); }
+.pl-rnap { fill: var(--muted-fill); fill-opacity: .8; stroke: var(--muted); stroke-width: 1.5; }
+.pl-rnapc { fill: var(--panel); stroke: var(--rnap); stroke-width: 2.5; }
+.pl-copy { fill: none; stroke: var(--accent); stroke-width: 2.4; stroke-linecap: round; stroke-linejoin: round; }
+.pl-copyline { stroke: var(--accent); stroke-width: 1.5; stroke-opacity: .5; }
+.pl-frame { fill: none; stroke: var(--muted); stroke-width: 1; }
+.pl-frame.is-hot { stroke: var(--accent); stroke-width: 2.5; fill: var(--accent-pale); fill-opacity: .6; }
+.pl-rib { fill: var(--ribosome); fill-opacity: .35; stroke: var(--ribosome); stroke-width: 1.5; }
+.pl-rib2 { fill-opacity: .5; }
+.pl-bead { fill: var(--gene); fill-opacity: .25; stroke: var(--gene); stroke-width: 1.5; }
+.pl-chainlink { fill: none; stroke: var(--gene); stroke-width: 1.5; stroke-dasharray: 3 3; }
+.pl-bead-s { fill-opacity: .6; stroke-width: 1; }
+.pl-cys { fill: var(--warn); fill-opacity: .6; }
+.pl-bl { fill: var(--ink); font: 600 9px var(--font); }
+.pl-link { fill: none; stroke: var(--warn-ink); stroke-width: 2; }
+.pl-gone { fill: var(--muted); opacity: .45; }
+.pl-mol { fill: var(--panel); stroke: var(--sugar); stroke-width: 2; stroke-linejoin: round; }
+.pl-blood { fill: var(--bad); fill-opacity: .08; stroke: var(--bad); stroke-opacity: .4; }
+.pl-ins { fill: none; stroke: var(--gene); stroke-width: 2.5; }
+.pl-memb { fill: none; stroke: var(--membrane); stroke-width: 3; }
+.pl-trans { fill: none; stroke: var(--g-ptsG); stroke-width: 4; }
+.pl-dna { fill: none; stroke: var(--dna); stroke-width: 1.6; stroke-linejoin: round; }
+.pl-drop { fill: var(--bad); fill-opacity: .3; stroke: var(--bad); stroke-width: 1.5; }
+.pl-milk { fill: var(--panel); stroke: var(--muted); }
+.pl-enz { fill: var(--g-gly); fill-opacity: .3; stroke: var(--g-gly); stroke-width: 2; }
+.pl-arrow { fill: none; stroke: var(--muted); stroke-width: 1.5; marker-end: none; }
+.pl-atp { fill: var(--atp); stroke: var(--atp); }
+.pl-atp-h { fill: none; stroke: var(--atp); stroke-width: 1.5; }
+.pl-tag { fill: var(--warn-pale); stroke: var(--warn); }
+.pl-worn { fill: none; stroke: var(--muted); stroke-width: 2.5; stroke-linecap: round; }
+.pl-fade { opacity: .5; }
+.pl-chainline { stroke: var(--gene); stroke-width: 6; stroke-linecap: round; }
+.pl-cardbg { fill: var(--inside); }
+.mc-svg svg { width: 100%; height: 100%; display: block; }
+.pl-cards { align-self: center; width: 100%; max-width: 520px; display: flex; flex-direction: column; gap: 8px; padding: 4px 4px 0; overflow-y: auto; }
+.pl-cards.is-pairs { display: grid; grid-template-columns: minmax(0, 1fr); }
+body:not([data-layout="compact"]) .pl-cards.is-pairs { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+/* The activities: the letter keys (five 56 × 48), the codon rows (48 px; 44 px on a short screen), "Let it run". */
+.pl-keys { display: flex; gap: 8px; justify-content: center; }
+.btn.pl-key { width: 56px; min-height: 48px; font: 700 20px ui-monospace, "SF Mono", Menlo, Consolas, monospace; padding: 0; }
+.pl-codon { font-weight: 650; font-size: 16px !important; }
+.pl-rows { display: flex; flex-direction: column; gap: 4px; }
+.btn.pl-row { min-height: 48px; display: flex; gap: 16px; align-items: center; text-align: left; }
+body[data-short] .btn.pl-row { min-height: 44px; }
+.pl-row-codon { font: 700 18px ui-monospace, "SF Mono", Menlo, Consolas, monospace; min-width: 48px; }
+.btn.pl-row.is-hint { border-color: var(--accent); box-shadow: inset 0 0 0 2px var(--accent); }
+.btn.pl-row.is-tried { border-color: var(--muted); color: var(--muted); }
+.btn.lv-run { min-height: 48px; min-width: 140px; }
+.btn.lv-back { min-width: 96px; }
+.btn.lv-about { min-height: 44px; display: flex; justify-content: space-between; align-items: center; font-size: 15px; }
+.lv-about-text { font-size: 15px !important; }
+.pl-table { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 2px 8px; font-size: 13px; }
+.pl-table .is-stop { color: var(--bad); }
+.pl-table .is-start { color: var(--accent); }
+.lv-simplified { margin: 0; padding-left: 18px; display: flex; flex-direction: column; gap: 6px; }
+.lv-cards { display: flex; flex-direction: column; gap: 8px; }
+body:not([data-layout="compact"]) .lv-cards { flex-direction: row; }
+.lv-cards .machine-card { flex: 1 1 0; }
+.lv-lead { font-weight: 600; }
+/* The opening's sheet leaves the drawing live (its ring, the rail, pinch, the letters). */
+.sheet-backdrop.pl-through { pointer-events: none; }
+.sheet-backdrop.pl-through .sheet { pointer-events: auto; }
 
 /* ---- level sheets (LEVELS §5.2–5.9) ---- */
 .sheet-backdrop.lv-dim { background: rgba(15, 18, 24, .16); }
@@ -869,6 +982,7 @@ body[data-reduced-motion] * { transition-duration: 0s !important; animation: non
 <script src="src/levels/btc-level-1-4.js"></script>
 <script src="src/levels/btc-level-1-7.js"></script>
 <script src="src/levels/btc-level-p.js"></script>
+<script src="src/levels/btc-level-p2.js"></script>
 <script src="src/game/btc-levels.js"></script>
 <script src="src/game/btc-score.js"></script>
 <script src="src/game/btc-code.js"></script>
@@ -900,6 +1014,7 @@ body[data-reduced-motion] * { transition-duration: 0s !important; animation: non
 <script src="src/app/btc-geneview.js"></script>
 <script src="src/app/btc-machine.js"></script>
 <script src="src/app/btc-zoom.js"></script>
+<script src="src/app/btc-seqscene.js"></script>
 <script src="src/app/btc-prologue.js"></script>
 <script src="src/app/btc-guide.js"></script>
 <script src="src/app/btc-level-ui.js"></script>

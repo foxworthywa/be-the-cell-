@@ -444,7 +444,7 @@
       title: 'Be the Cell',
       tagline: 'You are in charge of a cell. In principle.',
       continueRow: 'Continue: {title}',
-      levelName: '{id} · {title}', prologueName: 'Prologue · {title}',
+      levelName: '{id} · {title}', prologueName: 'Prologue {n} · {title}',
       status: { fresh: 'new', open: 'in progress', done: 'done', doneTotal: 'done · {total}', expert: 'Expert ✓' },
       minutes: 'about {n} min',
       listLabel: 'Levels, in the recommended order; any level can be played at any time.',

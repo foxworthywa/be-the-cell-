@@ -303,7 +303,9 @@
           const id = genes[s], gv = view.geneById[id], ser = m.series[s];
           if (!gv) continue;
           ser.data = rec.series(spec.channel + id);
-          ser.live = spec.key === 'mRNA' ? gv.mRNA + gv.nascent : gv.protein;
+          // Proteins in working machines (a four-chain LacZ is one); the recorder keeps the engine's chains.
+          ser.div = spec.key === 'protein' && gv.oligomer > 1 ? gv.oligomer : 1;
+          ser.live = spec.key === 'mRNA' ? gv.mRNA + gv.nascent : spec.key === 'protein' ? F.machinesRaw(gv) : gv.protein;
           ser.color = this.genes().color(id);
           ser.label = this.genes().words(id).tag + ' ' + F.count(ser.live);
         }
@@ -324,7 +326,7 @@
       const pieces = [];
       for (let s = 0; s < m.nSeries; s++) {
         const ser = m.series[s];
-        const v = at >= 0 ? ser.data[at] : ser.live;
+        const v = at >= 0 ? ser.data[at] / (ser.div || 1) : ser.live;
         if (spec.multi) {
           const id = this.app.ui.graphGenes[s];
           pieces.push(this.genes().words(id).tag + ' ' + F.count(v));

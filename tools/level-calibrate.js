@@ -38,8 +38,9 @@ const LN2 = Math.LN2;
 const PROVISIONAL = {
   l11: { lambdaRef: PV.lambda_ref, keepMin: 10 },
   l17: { lambdaLacRef: 9.42e-5, LMIN: 240, rBLMax: 0.5 },
-  l12: { ppm: 21, initSec: 13, lifeMin: 4.33, D: { 400: 14, 500: 14, 600: 14 },
-    demoMean: { 4: new Array(21).fill(0), 5: new Array(21).fill(0), 6: new Array(21).fill(0) } },
+  l12: { v: 2, T: [5400, 6000, 6600], D: { 5400: 34, 6000: 35, 6600: 37 }, tMax: { 5400: 6000, 6000: 6600, 6600: 7300 }, ppm: 21, lacZReady: 7000,
+    Tenough: 5400, refMargin: 1.04, parX: 0.14, parFree: 0.08 },
+  economy: { atpPerGlucose: 2, atpPerAa: 4, atpPerNt: 2, transporterAa: 450, transporterAtp: 1800, transporterGlucose: 900, lacYaa: 417, lacYnt: 1311, lactose_mM: 5 },
   l14: { band: [0.70, 1.35], lifeMin: { 3: 4, 4: 5.5, 5: 7 },
     S: { 3: { 0.25: 70, 0.5: 140, 1: 280, 2: 590, 4: 1100 }, 4: { 0.25: 90, 0.5: 190, 1: 380, 2: 775, 4: 1440 }, 5: { 0.25: 110, 0.5: 230, 1: 460, 2: 940, 4: 1760 } } },
 };
@@ -56,7 +57,8 @@ const r2 = (x) => Math.round(x * 100) / 100;
 function loadLevel(file, constants) {
   const ctx = vm.createContext({});
   vm.runInContext('var self = this;', ctx);
-  ctx.self.BTC = { levelKit: K, misconceptions: MC, levelConstants: JSON.parse(JSON.stringify(constants)) };
+  ctx.self.BTC = { levelKit: K, misconceptions: MC, levelConstants: JSON.parse(JSON.stringify(constants)), MRNAWatch: require('../src/shared/btc-mrnawatch.js'),
+    seq: require('../src/shared/btc-seq.js'), seqdata: require('../src/shared/btc-seqdata.js') };
   vm.runInContext(fs.readFileSync(path.join(ROOT, 'src', 'levels', file), 'utf8'), ctx, { filename: file });
   const defs = ctx.self.BTC.levelDefs;
   return LV.validate(defs[Object.keys(defs)[0]]);
@@ -116,89 +118,134 @@ function judge(def, rates) {
 }
 
 // ---------------------------------------------------------------------------
-// l12: one gene, many copies
+// economy: the numbers the opening's economy scenes say (PROLOGUE §2.4.2), from the engine's parameters
+// ---------------------------------------------------------------------------
+function calibrateEconomy() {
+  console.log('\neconomy (Prologue 2, level 1.2)');
+  const CAT = require('../src/engine/btc-catalog.js');
+  const len = (id) => CAT.STRAINS['m1-lab'].genes.find((g) => g.id === id).length;
+  // "One transporter, about 450 amino acids long": the lab's two transporters, PtsG and LacY, rounded to 50.
+  const trAa = Math.round((len('ptsG') + len('lacY')) / 2 / 50) * 50;
+  const eco = {
+    atpPerGlucose: PV.fermYield, atpPerAa: PV.c_tl, atpPerNt: PV.atpPerNT, transporterAa: trAa, transporterAtp: trAa * PV.c_tl,
+    transporterGlucose: (trAa * PV.c_tl) / PV.fermYield, lacYaa: len('lacY'), lacYnt: 3 * len('lacY') + 60, lactose_mM: PV.lactosePresent,
+  };
+  console.log(`  ${eco.atpPerGlucose} ATP per glucose; ${eco.atpPerAa} ATP per amino acid; a transporter of about ${trAa} amino acids costs about ${eco.transporterAtp} ATP, the energy from ${eco.transporterGlucose} glucose`);
+  return eco;
+}
+
+// ---------------------------------------------------------------------------
+// l12 (v2): milk is on its way (PROLOGUE §6.2.3)
 // ---------------------------------------------------------------------------
 function calibrate12(base) {
   console.log('\nl12 (level 1.2)');
-  let def = loadLevel('btc-level-1-2.js', base);
-  const byTOff = variantSeeds(def, (v) => v.tOff, SEEDS);
-  const demoMean = {}, demoP5 = {}, demoP95 = {}, ppms = [], ppm20 = [], inits = [];
-  for (const tOff of [4, 5, 6]) {
-    const curves = [];
-    for (const vs of byTOff[tOff]) {
-      const v = def.variant(vs);
-      const c = new Cell(def.config(v, 'demo'));
-      const curve = [c.observe().geneById.lacY.protein];
+  const round100 = (x) => Math.round(x / 100) * 100, ceil100 = (x) => Math.ceil(x / 100) * 100;
+  const LREF = PV.lambda_ref;
+  const n = Math.max(8, SEEDS);
+  // (a) The lactose splitter "already made": the lab strain's LacZ at ×1, as a newborn cell has it at steady state.
+  const births = [];
+  for (let seed = 1; seed <= Math.min(n, 16); seed++) {
+    const c = new Cell({ seed: 7000 + seed, strain: 'm1-lab', start: 'steady', medium: { glucose_mM: 10 }, genes: { lacZ: { level: 1 } } });
+    c.advance(3 * 3600);
+    c.takeEvents();
+    for (let t = 0; t < 3 * 3600; t++) {
       c.step();
-      const view = c.observe();
-      inits.push(1 / (view.ribosomes.kInitPerMRNA * view.geneById.lacY.rbs));
-      for (let t = 1; t <= 30 * 60; t++) {
-        if (t > 1) c.step();
-        if (t % 60 === 0 && t <= 20 * 60) curve.push(c.observe().geneById.lacY.protein);
-        if (t === 20 * 60) { const g = c.observe().geneById.lacY; ppm20.push(g.proteinMade / g.mRNAMade); }
-      }
+      if (c.takeEvents().some((e) => e.type === 'division')) births.push(c.observe().geneById.lacZ.protein);
+    }
+  }
+  const lacZReady = round100(mean(births));
+  console.log(`  LacZ at ×1 in a newborn cell (steady state): ${lacZReady} chains (${births.length} births, ${Math.round(Math.min(...births))}–${Math.round(Math.max(...births))})`);
+  // A cell of the level (the Try's config) switched on at ×4 at tick 0 and off by rule(g, tick) → stepped to D + 20.
+  const probe = (seed, D, rule) => {
+    const cfg = {
+      seed, strain: 'm1-lab', start: 'birth', medium: { glucose_mM: 10, lactose_mM: 0, aminoAcids_mM: 0 },
+      genes: { lacY: { level: 'off', initial: { clear: true, protein: 0 } }, lacZ: { level: 1, initial: { protein: lacZReady } } },
+      flags: { userGenes: ['lacY'] },
+      schedule: [{ tick: D * 60, cmd: { type: 'setMedium', glucose_mM: 0, lactose_mM: PV.lactosePresent } }, { tick: D * 60, cmd: { type: 'setControls', controls: 'locked' } }],
+    };
+    const c = new Cell(cfg);
+    c.command({ type: 'setPromoter', gene: 'lacY', level: 4 });
+    let on = true, Y = 0, lam = 0, k = 0;
+    const T = rule.T, out = { reach: -1, onReach: -1 };
+    const END = (D + 20) * 60;
+    for (let t = 1; t <= END; t++) {
+      c.step();
       const g = c.observe().geneById.lacY;
-      ppms.push(g.proteinMade / g.mRNAMade);
-      curves.push(curve);
+      if (out.reach < 0 && T && g.protein >= T && t <= D * 60) out.reach = t / 60;
+      if (on && t % 5 === 0 && t < D * 60 && rule.off(g, t)) { c.command({ type: 'setPromoter', gene: 'lacY', level: 'off' }); on = false; }
+      if (t === D * 60) Y = g.protein;
+      if (t > END - 300) { lam += c.observe().cell.lambda_perS; k++; }
     }
-    demoMean[tOff] = curves[0].map((x, t) => r1(mean(curves.map((c) => c[t]))));
-    demoP5[tOff] = curves[0].map((x, t) => Math.round(quantile(curves.map((c) => c[t]), 0.05)));
-    demoP95[tOff] = curves[0].map((x, t) => Math.round(quantile(curves.map((c) => c[t]), 0.95)));
-    const f = K.sketch.features(K.sketch.resample(demoMean[tOff].map((y, t) => [t, y])), { tOff });
-    console.log(`  demo tOff ${tOff}: mean LacY at tOff ${Math.round(demoMean[tOff][tOff])}, at 20 min ${Math.round(demoMean[tOff][20])} (5–95%: ${demoP5[tOff][20]}–${demoP95[tOff][20]}); ` +
-      `after the switch-off ${pct((demoMean[tOff][20] - demoMean[tOff][tOff]) / (demoMean[tOff][20] - demoMean[tOff][0]))} of the rise; last 5 min ${pct((demoMean[tOff][20] - demoMean[tOff][15]) / (demoMean[tOff][20] - demoMean[tOff][0]))}`);
-    if (!(f.F1 && f.F2 && f.F3 && f.F4)) fail('l12 demo mean for tOff ' + tOff + ' fails ' + ['F1', 'F2', 'F3', 'F4'].filter((k) => !f[k]).join(', '));
-  }
-  const l12 = {
-    ppm: r2(mean(ppms)), ppmDemo20: r2(mean(ppm20)), initSec: r2(mean(inits)), lifeMin: r2(PV.mRNAHalfLife / LN2 / 60),
-    D: { 400: 14, 500: 14, 600: 14 }, demoMean, demoP5, demoP95,
+    const g = c.observe().geneById.lacY;
+    return Object.assign(out, { Y, lam: lam / k / LREF, made: g.proteinMade, M: g.mRNAMade, ppm: g.proteinMade / Math.max(1, g.mRNAMade) });
   };
-  console.log(`  copies per mRNA ${l12.ppm} at 30 min (${r1(quantile(ppms, 0.05))}–${r1(quantile(ppms, 0.95))}), ${l12.ppmDemo20} at 20 min; ` +
-    `a ribosome starts every ${l12.initSec} s per mRNA; mean mRNA life ${l12.lifeMin} min`);
-  // Reference reach times per T: D grows by a minute for a T reached by D − 1 on fewer than 95% of seeds.
-  def = loadLevel('btc-level-1-2.js', Object.assign({}, base, { l12 }));
-  const byT = variantSeeds(def, (v) => v.T, SEEDS);
-  l12.reach = {};
-  for (const T of [400, 500, 600]) {
-    for (;;) {
-      const times = byT[T].map((vs) => {
-        const p = RUN.game.playHeadless(def, { variantSeed: vs, solution: 'reference', today: () => '2026-01-01' });
-        return p.runner.monitorResult.reachedTick;
-      });
-      const D = l12.D[T];
-      const reached = times.filter((t) => t >= 0);
-      // Runs that never reach T (the switch-off came too early for that seed's mRNA) are not helped by a later
-      // deadline; they count against the reference's pass rate below. Lateness is judged on the runs that reach T.
-      const ok = reached.filter((t) => t <= (D - 1) * 60).length / Math.max(1, reached.length);
-      l12.reach[T] = { p50: r1(quantile(reached, 0.5) / 60), p95: r1(quantile(reached, 0.95) / 60), max: r1(Math.max(...reached) / 60),
-        byDminus1: r2(ok), reached: r2(reached.length / times.length) };
-      console.log(`  reference T ${T}: reached on ${pct(reached.length / times.length)} of seeds, by ${l12.reach[T].p50} min (median), ${l12.reach[T].max} min at the latest; ` +
-        `by D − 1 = ${D - 1} min on ${pct(ok)} of those`);
-      if (ok >= 0.95 || D >= 20) break;
-      l12.D[T] = D + 1;
-      console.log(`  D for T ${T} grows to ${D + 1} min`);
-      def = loadLevel('btc-level-1-2.js', Object.assign({}, base, { l12 }));
+  // (b) Growth on milk sugar against the transporters in place when it arrives: ×4 switched off at 12 … 34 minutes.
+  const pts = [];
+  for (let s = 0; s < n; s++) for (let off = 12; off <= 34; off += 2) pts.push(probe(8000 + s, 34, { T: 0, off: (g, t) => t >= off * 60 }));
+  let Tenough = 0;
+  for (let y = 2000; y <= 12000; y += 100) {
+    const above = pts.filter((p) => p.Y >= y);
+    if (above.length >= 10 && above.filter((p) => p.lam >= 0.8).length / above.length >= 0.95) { Tenough = y; break; }
+  }
+  if (!Tenough) fail('l12: no transporter count gives growth on milk sugar ≥ 0.8 of the glucose rate on 95% of runs');
+  const ppm = r2(mean(pts.map((p) => p.ppm)));
+  const band = (lo, hi) => { const b = pts.filter((p) => p.Y >= lo && p.Y < hi).map((p) => p.lam); return b.length ? r2(mean(b)) : NaN; };
+  console.log(`  growth on milk sugar (÷ glucose rate) by transporters in place: 3,000–4,000 ${band(3000, 4000)}; 4,000–5,000 ${band(4000, 5000)}; ` +
+    `5,000–6,000 ${band(5000, 6000)}; 6,000–7,000 ${band(6000, 7000)}; 7,000+ ${band(7000, 1e9)}`);
+  console.log(`  enough to live on milk sugar (≥ 0.8 of the glucose rate on 95% of runs): ${Tenough} transporters; ${ppm} transporters per copy`);
+  // (c) The variants: 0.9·T, T, 1.1·T with the lowest still "enough".
+  const Tmid = ceil100(Tenough / 0.9);
+  const Ts = [round100(0.9 * Tmid), Tmid, round100(1.1 * Tmid)];
+  while (Ts[0] < Tenough) Ts[0] += 100;
+  const refMargin = 1.04;
+  // (d) Per T: the reference and the misconception "stop at the target", with a late milk (60 min) so the deadline does not bind.
+  const refRule = (T) => ({ T, off: (g) => g.protein + ppm * (g.mRNA + g.nascent) >= refMargin * T });
+  const stopRule = (T) => ({ T, off: (g) => g.protein >= T });
+  const onRule = (T) => ({ T, off: () => false });
+  const D = {}, stats = {};
+  for (const T of Ts) {
+    const ref = [], stop = [], always = [];
+    for (let s = 0; s < n; s++) {
+      ref.push(probe(9000 + s, 60, refRule(T)));
+      stop.push(probe(9000 + s, 60, stopRule(T)));
+      always.push(probe(9000 + s, 60, onRule(T)));
     }
+    const reachRef = quantile(ref.map((p) => (p.reach < 0 ? 99 : p.reach)), 0.95), reachOn = quantile(always.map((p) => p.reach), 0.95);
+    D[T] = Math.max(Math.ceil(reachRef) + 1, Math.ceil(reachOn) + 3);
+    const fRef = ref.map((p) => p.made / T), fStop = stop.map((p) => p.made / T);
+    stats[T] = { refP90: quantile(fRef, 0.9), refP95: quantile(fRef, 0.95), refMin: Math.min(...fRef), stopP5: quantile(fStop, 0.05), stopP10: quantile(fStop, 0.1),
+      reachRef, reachOn, mRef: quantile(ref.map((p) => p.M), 0.5), mStop: quantile(stop.map((p) => p.M), 0.5) };
+    console.log(`  T ${T}: reference reaches it by ${r1(reachRef)} min (p95), ×4 kept on by ${r1(reachOn)} min → D ${D[T]}; transporters made ÷ T: reference ` +
+      `${r2(stats[T].refMin)}–${r2(stats[T].refP95)} (p95), stopping at the target ${r2(stats[T].stopP5)} (p5)–; copies ${stats[T].mRef} vs ${stats[T].mStop} (median)`);
   }
-  l12.mPar = { 400: Math.round((1.7 * 400) / l12.ppm), 500: Math.round((1.7 * 500) / l12.ppm), 600: Math.round((1.7 * 600) / l12.ppm) };
-  // Every solution on all 9 variants.
-  def = loadLevel('btc-level-1-2.js', Object.assign({}, base, { l12 }));
-  const groups = variantSeeds(def, (v) => 'T' + v.T + '/tOff' + v.tOff, SEEDS);
-  const ms = {};
+  // (e) Par: between the reference's p95 and "stop at the target"'s p10 (transporters made beyond T, as a share of T).
+  const refHi = Math.max(...Ts.map((T) => stats[T].refP95)), stopLo = Math.min(...Ts.map((T) => stats[T].stopP10));
+  const parX = r2((refHi + stopLo) / 2 - 1), parFree = r2(Math.max(0, parX - 0.06));
+  if (!(refHi - 1 < parX && parX < stopLo - 1)) fail('l12 par ' + parX + ' does not separate the reference (' + r2(refHi) + ') from stopping at the target (' + r2(stopLo) + ')');
+  // (f) The Expert: finish with no more than Tmax (rounded up to 100), set where the reference finishes on 90% of runs.
+  const tMaxF = Math.max(1.08, Math.ceil(100 * Math.max(...Ts.map((T) => stats[T].refP95))) / 100);
+  if (tMaxF - 1 > parX) fail('l12 the Expert limit ' + tMaxF + ' is looser than par ' + (1 + parX));
+  const tMax = {};
+  for (const T of Ts) tMax[T] = ceil100(tMaxF * T);
+  console.log(`  par: E = 1 up to ${Math.round(100 * parFree)}% extra, 0.8 at ${Math.round(100 * parX)}% extra; Expert: no more than ${tMaxF}·T (${Ts.map((T) => tMax[T]).join(', ')})`);
+  const l12 = { v: 2, T: Ts, D, tMax, ppm, lacZReady, Tenough, refMargin, parX, parFree, growthAtT: {} };
+  for (const T of Ts) l12.growthAtT[T] = band(T - 250, T + 250);
+  // (g) Every solution on the three variants, through the real runner (the watch included).
+  const def = loadLevel('btc-level-1-2.js', Object.assign({}, base, { l12 }));
+  const groups = variantSeeds(def, (v) => 'T' + v.T, SEEDS);
+  const xs = {}, E0 = {}, ppmWatch = [], growth = {};
   const rates = playAll(def, groups, (name, key, p) => {
-    const m = p.runner.monitorResult;
-    (ms[name] || (ms[name] = {}));
-    const T = key.split('/')[0];
-    (ms[name][T] || (ms[name][T] = [])).push(m.m);
+    const r = p.result, m = p.runner.monitorResult;
+    (xs[name] || (xs[name] = [])).push(r.X & 1);
+    (E0[name] || (E0[name] = [])).push(r.E === 0 ? 1 : 0);
+    (growth[name] || (growth[name] = [])).push(m.growth);
+    if (name === 'reference') { const g1 = p.runner.watch && p.runner.watch.gateTick; if (g1) ppmWatch.push(1); }
   });
-  for (const name of ['reference', 'stopAtTarget']) {
-    console.log(`  ${name} mRNAs: ` + Object.keys(ms[name]).map((T) => `${T} ${Math.min(...ms[name][T])}–${Math.max(...ms[name][T])} (mPar ${l12.mPar[T.slice(1)]})`).join('; '));
-  }
-  l12.mRNAs = {};
-  for (const name of ['reference', 'stopAtTarget']) {
-    l12.mRNAs[name] = {};
-    for (const T of Object.keys(ms[name])) l12.mRNAs[name][T.slice(1)] = [Math.min(...ms[name][T]), Math.max(...ms[name][T])];
-  }
+  for (const name of Object.keys(growth)) console.log(`  ${name.padEnd(13)} growth on milk sugar ${r2(Math.min(...growth[name]))}–${r2(Math.max(...growth[name]))} of the glucose rate; Expert on ${pct(mean(xs[name]))}; E = 0 on ${pct(mean(E0[name]))}`);
+  if (mean(xs.reference) < 0.9) fail('l12 the reference meets the Expert limit on only ' + pct(mean(xs.reference)));
+  if (mean(E0.keepOn) < 0.9) fail('l12 keepOn has E = 0 on only ' + pct(mean(E0.keepOn)));
+  if (ppm < 15 || ppm > 25) fail('l12 transporters per copy ' + ppm + ' is not "about twenty" (15–25)');
+  l12.expertRef = r2(mean(xs.reference));
   l12.passRates = judge(def, rates);
   return l12;
 }
@@ -469,7 +516,9 @@ function currentConstants() {
   try {
     delete require.cache[require.resolve(OUT)];
     const c = require(OUT);
-    return c.engineVersion === ENGINE_VERSION ? c : null;
+    // A patch release changes no physics (PROLOGUE §7): the constants of 1.1.0 stand for 1.1.1.
+    const mm = (x) => String(x).split('.').slice(0, 2).join('.');
+    return mm(c.engineVersion) === mm(ENGINE_VERSION) ? c : null;
   } catch (e) { return null; }
 }
 
@@ -507,13 +556,15 @@ function write(c) {
 function main() {
   const t0 = Date.now();
   const cur = currentConstants() || {};
-  const base = { l11: cur.l11 || PROVISIONAL.l11, l12: cur.l12 || PROVISIONAL.l12, l14: cur.l14 || PROVISIONAL.l14, l17: cur.l17 || PROVISIONAL.l17 };
+  const base = { l11: cur.l11 || PROVISIONAL.l11, l12: cur.l12 && cur.l12.v === 2 ? cur.l12 : PROVISIONAL.l12, l14: cur.l14 || PROVISIONAL.l14,
+    l17: cur.l17 || PROVISIONAL.l17, economy: cur.economy || PROVISIONAL.economy };
   console.log(`Calibrating on engine ${ENGINE_VERSION} with ${SEEDS} engine seeds per variant` + (ONLY ? ' (only ' + ONLY + ')' : ''));
   const out = { engineVersion: ENGINE_VERSION, generated: new Date().toISOString().slice(0, 10), seeds: SEEDS };
-  out.l11 = !ONLY || ONLY === 'l11' ? calibrate11(base) : base.l11;
-  out.l12 = !ONLY || ONLY === 'l12' ? calibrate12(Object.assign({}, base, { l11: out.l11 })) : base.l12;
-  out.l14 = !ONLY || ONLY === 'l14' ? calibrate14(Object.assign({}, base, { l11: out.l11, l12: out.l12 })) : base.l14;
-  out.l17 = !ONLY || ONLY === 'l17' ? calibrate17(Object.assign({}, base, { l11: out.l11, l12: out.l12, l14: out.l14 })) : base.l17;
+  out.economy = calibrateEconomy();
+  out.l11 = !ONLY || ONLY === 'l11' ? calibrate11(Object.assign({}, base, { economy: out.economy })) : base.l11;
+  out.l12 = !ONLY || ONLY === 'l12' ? calibrate12(Object.assign({}, base, { l11: out.l11, economy: out.economy })) : base.l12;
+  out.l14 = !ONLY || ONLY === 'l14' ? calibrate14(Object.assign({}, base, { l11: out.l11, l12: out.l12, economy: out.economy })) : base.l14;
+  out.l17 = !ONLY || ONLY === 'l17' ? calibrate17(Object.assign({}, base, { l11: out.l11, l12: out.l12, l14: out.l14, economy: out.economy })) : base.l17;
   console.log(`\n${((Date.now() - t0) / 1000).toFixed(0)} s; ${problems.length ? problems.length + ' problem(s)' : 'all checks pass'}`);
   if (!CHECK_ONLY && (!problems.length || args.indexOf('--force') >= 0)) {
     write(out);

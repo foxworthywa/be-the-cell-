@@ -99,5 +99,15 @@
     return template.replace(/\{(\w+)\}/g, (m, k) => (vars[k] === undefined ? m : String(vars[k])));
   }
 
-  return { commas, sig2, count, mM, pct, clock, minutes, speedLabel, fill, capital };
+  /**
+   * A gene's finished proteins as the student counts them: working machines, so a four-chain LacZ is one
+   * lactose splitter (the engine counts chains). machinesRaw is the unrounded amount, for graph lines.
+   */
+  function machinesRaw(gv) { const o = gv && gv.oligomer > 1 ? gv.oligomer : 1; return gv ? gv.protein / o : 0; }
+  function machines(gv) {
+    if (!gv) return 0;
+    return gv.oligomer > 1 ? Math.round(gv.protein / gv.oligomer) : (typeof gv.proteinRounded === 'number' ? gv.proteinRounded : Math.round(gv.protein));
+  }
+
+  return { commas, sig2, count, mM, pct, clock, minutes, speedLabel, fill, capital, machines, machinesRaw };
 });

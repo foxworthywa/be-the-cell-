@@ -256,7 +256,8 @@
         cv.dirty = true;
       }
       if (was !== level && this.els.chip) this.els.chip.hidden = true;
-      this.app.narrTick = -1;                 // the narrator reads the new zoom's rules at once, even while paused
+      // The narrator reads the new zoom's rules at once, even while paused, and names the focus gene's protein (not a line held from before).
+      if (typeof this.app.renarrate === 'function') this.app.renarrate(); else this.app.narrTick = -1;
       this.syncControl();
       if (this.app.requestPaint) this.app.requestPaint();
     }
@@ -346,7 +347,8 @@
       this.rebuildGene();
       const plan = this.gplan, T = this.CU.TEXT.gene;
       const wl = this.watch && this.watch.gene === id && this.watch.watching ? this.watch : null;
-      const made = wl ? Math.round(wl.made) : -1;
+      // "Read into n": the chains ribosomes have started on this copy (it counts 1, 2, 3 … as they start; PROLOGUE §6.2.4 W1b).
+      const made = wl ? Math.round(wl.started) : -1;
       // The words (and the options the drawing reads) are rebuilt only when a number they show changes.
       this.kBegin();
       this.kPut(f); this.kPut(plan.d); this.kPut(plan.m); this.kPut(plan.n); this.kPut(plan.R); this.kPut(plan.P); this.kPut(plan.protMore);
@@ -368,6 +370,8 @@
         }) : null;
         const summary = plan.d < plan.m ? F.fill(T.summaryCapped, { d: plan.d, m: F.count(plan.m) })
           : plan.m === 0 && plan.n > 0 ? F.fill(T.summaryMade, { r: F.count(plan.R), n: F.count(plan.n) })
+            // No copies left: ribosomes already on a copy when it was broken down finish their chains.
+            : plan.m === 0 ? (plan.R >= 0.5 ? F.fill(T.summaryFinishing, { r: F.count(plan.R) }) : T.summaryNone)
             : F.fill(plan.m === 1 ? T.summaryOne : T.summary, { r: F.count(plan.R), m: F.count(plan.m) });
         // The copies not drawn (and their ribosomes) are in the summary, the canvas label and the key.
         const cap = wl && !wl.alive ? F.fill(T.watchedGone, { n: F.count(made) }) : '';

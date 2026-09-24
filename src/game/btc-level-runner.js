@@ -24,7 +24,9 @@
  *   r.phase, r.gate(), r.next()       the phase and its gate; next() → {ok, phase} or {ok: false, reason}
  *   r.storyLine() / storyNext() / storySkip()        the active story beat (intro; outro in result or echo)
  *   r.watchInfo() / watchNext() / watchPick() / watchSee() / watchCommand()   the watch phase (above)
- *   r.sceneInfo() / sceneNext() / sceneSkip()        Prologue scenes
+ *   r.sceneInfo() / sceneNext() / sceneSkip()        the opening's scenes; sceneAct(action) does a scene's activity
+ *                                                    (letters, copies, codons, a run), sceneBack() / sceneJump(i) move
+ *                                                    along the zoom ladder (rungs already visited)
  *   r.items() / select(id, v) / lock(id, v) / skip(id) / optionOrder(id)   predictions
  *   r.ensureRun() → cell; r.halted(); r.retry(); r.continueWithoutGoal()  the run
  *   r.tap(qid, option) → {correct, fb, mc}           debrief (and scene) questions, with retries
@@ -318,7 +320,9 @@
       this.taps = [];
       this.beat = null;
       this.outroShown = false;
-      this.scene = { index: 0, line: 0 };
+      this.scene = { index: 0, line: 0, max: 0 };
+      this.acts = {};             // the opening's activities, by scene id (PROLOGUE §2.3): letters placed, copies made, codons read
+      this.shownBeats = {};       // mid-run story beats already shown (def.runBeats; 1.2's milk arrival)
       this.echoIndex = 0;
       this.cards = [];
       this.runs = 0;
@@ -345,7 +349,11 @@
 
     get phase() { return this.phases[this.phaseIndex]; }
     has(p) { return this.phases.indexOf(p) >= 0; }
-    text(s) { return K.fill(s, this.vars); }
+    /** A level string filled with the variant's words, and once the run has ended the run's own numbers (def.resultVars). */
+    text(s) {
+      if (this.monitorResult && this.def.resultVars) return K.fill(s, Object.assign({}, this.vars, this.def.resultVars(this.variant, this.monitorResult)));
+      return K.fill(s, this.vars);
+    }
 
     // --- telemetry --------------------------------------------------------------
     log(type, d, tick) {
@@ -369,7 +377,7 @@
       const p = this.phase;
       this.log('phase', { name: p });
       if (p === 'intro') this.beat = { name: 'intro', index: 0 };
-      else if (p === 'scenes') this.scene = { index: 0, line: 0 };
+      else if (p === 'scenes') this.scene = { index: 0, line: 0, max: 0 };
       else if (p === 'watch') this.startWatch();
       else if (p === 'run') {
         // A designer level's cell is built from the design the student ran (it applies at tick 0).
@@ -438,7 +446,8 @@
       if (p === 'predict' || p === 'predict2') {
         for (const it of this.items()) if (!this.answers[it.id]) this.skip(it.id);
       }
-      if (p === 'scenes' && !this.has('echo')) this.collectCards();
+      // A level with no "Meanwhile, in you" (the opening) collects its cards as it completes.
+      if (!this.has('echo') && this.phases[this.phaseIndex + 1] === 'complete') this.collectCards();
       if (p === 'echo') this.collectCards();
       if (p === 'design' && this.design) this.log('design_submit', { design: this.design });
       if (p === 'watch') this.dropWatch();
@@ -482,11 +491,13 @@
     /** Replays a beat (the level menu's "Replay the story"); it does not change the phase. */
     replayLines(name) { return this.beatLines(name).map((l) => ({ who: l.who, text: this.text(l.text), denies: !!l.denies })); }
 
-    // --- Prologue scenes -----------------------------------------------------------------
+    // --- the opening's scenes (PROLOGUE §2.3, §2.4) --------------------------------------------
     sceneSolved(i) {
       const sc = this.def.scenes[i], q = sc.question;
       // A scene's guess ("Guess, then see") must be seen through before the scene moves on; it is never marked.
       if (sc.guess && !this.watch.guesses[sc.guess.id]) return false;
+      // An activity (letters, copies, codons, a run) must be finished: nothing moves on because time passed.
+      if (sc.activity && !this.actDone(sc)) return false;
       return !q || !!(this.debriefState[q] && this.debriefState[q].solved);
     }
     sceneInfo() {
@@ -496,15 +507,19 @@
       const g = lastLine && sc.guess ? sc.guess : null, got = g ? this.watch.guesses[g.id] : null;
       return {
         index: s.index, count: this.def.scenes.length, scene: sc, line: s.line, lines: sc.lines.length,
-        who: l.who, text: this.text(l.text), denies: !!l.denies, lastLine,
+        who: l.who, text: this.text(l.text), denies: !!l.denies, lastLine, max: s.max,
         last: lastLine && s.index >= this.def.scenes.length - 1,
         question: lastLine && sc.question ? this.question(sc.question) : null,
         // The scene's guess on its last line: options in this attempt's order, the pick, and whether it was seen.
         guess: g ? { id: g.id, prompt: this.text(g.prompt), picked: this.watch.picks[g.id] === undefined ? null : this.watch.picks[g.id], seen: !!got,
           options: this.optionOrder(g.id).map((i) => ({ index: i, t: this.text(g.options[i].t) })) } : null,
+        // The scene's activity (on its last line, once any guess is seen): its stage, counts and the last feedback.
+        activity: sc.activity ? this.activityInfo(sc, lastLine && (!g || !!got)) : null,
         // "What happened" for the guesses due on this scene (showAt, else their own scene), once seen.
         feedback: lastLine ? this.sceneFeedback(sc.id) : [],
         solved: this.sceneSolved(s.index),
+        // Back and the zoom ladder: a rung may step back to the rung before it.
+        canBack: !!sc.rung && s.index > 0 && !!this.def.scenes[s.index - 1].rung,
       };
     }
     sceneFeedback(id) {
@@ -539,19 +554,21 @@
       this.log('guess', { id: g.id, option: opt, cause: o.cause === true, step: sc.id });
       return { ok: true };
     }
-    /** Next inside the scenes: the next line, then the next scene once the question is right. */
+    /** Next inside the scenes: the next line, then the next scene once its guess, activity and question are done. */
     sceneNext() {
       if (this.phase !== 'scenes') return { ok: false, reason: 'phase' };
       const s = this.scene, sc = this.def.scenes[s.index];
       if (s.line < sc.lines.length - 1) { s.line++; }
       else if (sc.guess && !this.watch.guesses[sc.guess.id]) return { ok: false, reason: 'guess' };
+      else if (sc.activity && !this.actDone(sc)) return { ok: false, reason: 'activity' };
       else if (!this.sceneSolved(s.index)) return { ok: false, reason: 'question' };
-      else if (s.index < this.def.scenes.length - 1) { s.index++; s.line = 0; }
+      else if (s.index < this.def.scenes.length - 1) { s.index++; s.line = 0; if (s.index > s.max) s.max = s.index; }
       else return { ok: false, reason: 'end' };
+      this.log('step', { id: this.def.scenes[s.index].id, action: 'shown' });
       this.log('story', { beat: 'scene:' + this.def.scenes[s.index].id, line: s.line, action: 'next' });
       return { ok: true };
     }
-    /** Skip: forward to the next unanswered question, or to the last line. */
+    /** Skip: forward to the next scene whose guess, activity or question is not done, or to the last line. */
     sceneSkip() {
       if (this.phase !== 'scenes') return false;
       const s = this.scene, scenes = this.def.scenes;
@@ -560,9 +577,126 @@
         s.line = sc.lines.length - 1;
         if (!this.sceneSolved(s.index) || s.index >= scenes.length - 1) break;
         s.index++;
+        if (s.index > s.max) s.max = s.index;
       }
       this.log('story', { beat: 'scene:' + scenes[s.index].id, line: s.line, action: 'skip' });
       return true;
+    }
+    /** Back one rung of the zoom ladder (a rung only goes back to the rung before it), shown on its last line. */
+    sceneBack() {
+      if (this.phase !== 'scenes') return { ok: false, reason: 'phase' };
+      const s = this.scene, scenes = this.def.scenes;
+      if (!scenes[s.index].rung || s.index === 0 || !scenes[s.index - 1].rung) return { ok: false, reason: 'first' };
+      s.index--;
+      s.line = scenes[s.index].lines.length - 1;
+      this.log('story', { beat: 'scene:' + scenes[s.index].id, line: s.line, action: 'back' });
+      return { ok: true };
+    }
+    /** Jumps to a rung already visited (the ladder rail's "Zoom levels" sheet); unvisited rungs keep the story's order. */
+    sceneJump(index) {
+      if (this.phase !== 'scenes') return { ok: false, reason: 'phase' };
+      const s = this.scene, scenes = this.def.scenes, sc = scenes[index];
+      if (!sc || !sc.rung || index > s.max || !scenes[s.index].rung) return { ok: false, reason: 'not visited' };
+      s.index = index;
+      s.line = sc.lines.length - 1;
+      this.log('story', { beat: 'scene:' + sc.id, line: s.line, action: 'jump' });
+      return { ok: true };
+    }
+
+    // --- the opening's activities (PROLOGUE §2.3.3–§2.3.5) ------------------------------------------
+    /**
+     * Activity kinds (a scene's `activity`; every expected value is computed by BTC.seq in the level file):
+     *   copy   {template, expect, total, words}: six letters picked on a keypad (the right one always goes in),
+     *          then "Let it run" copies the rest (progress in letters) up to total
+     *   copies {n, total}: "Copy again" starts one more copy; copies advance together; done after n
+     *   read   {codons, rows, total, words}: each codon decoded on the small table, then "Let it run" reads to the stop
+     *   show   {total}: a short picture that plays by itself (seconds), e.g. the copy leaving through a pore
+     * The view advances runs with sceneAct({advance: amount}) from its own clock; the gate is the state reached.
+     */
+    actState(sc) {
+      return this.acts[sc.id] || (this.acts[sc.id] = { i: 0, k: 0, made: 0, runs: [], started: false, last: null, hint: null, tries: 0 });
+    }
+    actDone(sc) {
+      const a = sc.activity, st = this.acts[sc.id];
+      if (!a || a.kind === 'explore') return true;
+      if (!st) return false;
+      if (a.kind === 'copies') return st.made >= a.n;
+      if (a.kind === 'copy') return st.i >= a.expect.length && st.k >= a.total;
+      if (a.kind === 'read') return st.i >= a.codons.length && st.k >= a.total;
+      return st.k >= a.total;
+    }
+    activityInfo(sc, open) {
+      const a = sc.activity, st = this.actState(sc);
+      let stage = 'done';
+      if (!this.actDone(sc)) {
+        if (a.kind === 'copy') stage = st.i < a.expect.length ? 'fill' : 'run';
+        else if (a.kind === 'read') stage = st.i < a.codons.length ? 'decode' : 'run';
+        else stage = 'run';
+      }
+      return { kind: a.kind, open: !!open, stage, done: this.actDone(sc), i: st.i, k: st.k, made: st.made, runs: st.runs.slice(),
+        started: st.started, total: a.total, n: a.n || (a.expect ? a.expect.length : a.codons ? a.codons.length : 0),
+        last: st.last ? Object.assign({}, st.last) : null, hint: st.hint === null ? null : st.hint, spec: a };
+    }
+    /**
+     * Does the current scene's activity: {pick: letter} (copy), {row: index} (read), {start: true} ("Let it run" or
+     * "Copy again"), {advance: amount} (the view's clock: letters, codons or seconds). Returns {ok, …} or {ok: false, reason}.
+     * Picks are logged (telemetry 'activity'), never marked wrong: a copy letter always goes in right, with a sentence.
+     */
+    sceneAct(action) {
+      if (this.phase !== 'scenes') return { ok: false, reason: 'phase' };
+      const sc = this.def.scenes[this.scene.index], a = sc.activity;
+      if (!a) return { ok: false, reason: 'no activity' };
+      const info = this.activityInfo(sc, true);
+      if (this.scene.line < sc.lines.length - 1 || (sc.guess && !this.watch.guesses[sc.guess.id])) return { ok: false, reason: 'not yet' };
+      const st = this.actState(sc), x = action || {};
+      if (a.kind === 'copy' && info.stage === 'fill' && typeof x.pick === 'string') {
+        const want = a.expect[st.i], dna = a.template[st.i], match = x.pick === want;
+        let fb = '';
+        if (!match) fb = dna === 'A' && x.pick === 'T' ? a.words.noT : K.fill(a.words.other, { dna, rna: want });
+        st.last = { i: st.i, value: x.pick, expected: want, match, dna, fb };
+        this.log('activity', { id: sc.id, i: st.i, value: x.pick, expected: want, match });
+        st.i++; st.k = st.i;
+        return { ok: true, match, fb };
+      }
+      if (a.kind === 'read' && info.stage === 'decode' && typeof x.row === 'number') {
+        const row = a.rows[x.row], want = a.codons[st.i];
+        if (!row) return { ok: false, reason: 'no such row' };
+        const match = row.codon === want;
+        const right = a.rows.findIndex((r) => r.codon === want);
+        st.tries++;
+        this.log('activity', { id: sc.id, i: st.i, value: row.codon, expected: want, match });
+        if (match) { st.last = { i: st.i, value: row.codon, expected: want, match: true, fb: '' }; st.hint = null; st.i++; st.k = st.i; }
+        else {
+          const r = a.rows[right];
+          st.last = { i: st.i, value: row.codon, expected: want, match: false, fb: K.fill(a.words.wrong, { codon: want, three: r.three, name: r.name }) };
+          st.hint = right;
+        }
+        return { ok: true, match, fb: st.last.fb };
+      }
+      if (x.start) {
+        if (a.kind === 'copies') {
+          if (st.made + st.runs.length >= a.n + 8) return { ok: false, reason: 'busy' };
+          st.runs.push(0);
+          this.log('activity', { id: sc.id, i: st.made + st.runs.length - 1, value: 'copy', expected: 'copy', match: true });
+          return { ok: true };
+        }
+        if (info.stage !== 'run' || st.started) return { ok: false, reason: 'not now' };
+        st.started = true;
+        return { ok: true };
+      }
+      if (typeof x.advance === 'number' && x.advance > 0) {
+        if (a.kind === 'copies') {
+          const before = st.made;
+          for (let j = 0; j < st.runs.length; j++) st.runs[j] = Math.min(a.total, st.runs[j] + x.advance);
+          while (st.runs.length && st.runs[0] >= a.total) { st.runs.shift(); st.made++; }
+          return { ok: true, finished: st.made - before };
+        }
+        if ((a.kind === 'copy' || a.kind === 'read') && !st.started) return { ok: false, reason: 'not started' };
+        if (a.kind === 'show') st.started = true;
+        st.k = Math.min(a.total, st.k + x.advance);
+        return { ok: true, done: st.k >= a.total };
+      }
+      return { ok: false, reason: 'not now' };
     }
 
     // --- predictions (§4.3) ---------------------------------------------------------
@@ -577,7 +711,8 @@
     }
     item(id) { return this.def.predictions.find((x) => x.id === id) || null; }
     question(id) {
-      const w = this.def.watch ? W.guesses(this.def)[id] : null;
+      // A guess of the watch or of an opening scene (its options are shown in this attempt's order too).
+      const w = this.def.watch || this.def.scenes ? W.guesses(this.def)[id] : null;
       return this.def.predictions.find((x) => x.id === id) || this.def.debrief.find((x) => x.id === id) || (w ? w.guess : null);
     }
 
@@ -704,12 +839,28 @@
         onTick(c) {
           if (runner.run !== run) return;
           feed.onTick(c);
+          // A mid-run story beat (1.2: the milk arrives) is shown once, when the level's condition holds; the run waits for it.
+          if (runner.phase === 'run' && !runner.beat && def.runBeats && !run.endReason) runner.checkRunBeats(run);
           if (runner.phase === 'epilogue' && runner.epilogue.started && !runner.epilogue.done && def.epilogue &&
             c.tick - runner.epilogue.startTick >= def.epilogue.durationTicks) runner.epilogue.done = true;
         },
       };
       cell.attachRecorder(run.recorder);
       this.run = run;
+    }
+
+    /** Opens the first mid-run beat (def.runBeats: [{name, when(monitorSave)}]) not shown yet whose condition holds. */
+    checkRunBeats(run) {
+      const st = run.monitor.save ? run.monitor.save() : null;
+      for (const b of this.def.runBeats) {
+        if (this.shownBeats[b.name] || !b.when(st)) continue;
+        this.shownBeats[b.name] = true;
+        if (!this.beatLines(b.name).length) continue;
+        this.beat = { name: b.name, index: 0, mid: true };
+        this.log('story', { beat: b.name, line: 0, action: 'shown' });
+        return true;
+      }
+      return false;
     }
 
     endRun(reason, tick) {
@@ -728,7 +879,7 @@
       if (this.phase === 'demo') return !this.demo.cell || this.demo.done || this.demo.cell.tick >= this.def.demo.durationTicks;
       if (!this.run) return true;
       if (this.phase === 'epilogue') return !this.epilogue.started || this.epilogue.done;
-      if (this.phase === 'run') return !!this.run.endReason;
+      if (this.phase === 'run') return !!this.run.endReason || !!(this.beat && this.beat.mid);
       return true;
     }
     /** True when time may run for the cell on screen. */
@@ -1062,6 +1213,8 @@
         guess: null, act: w.stage === 'act' ? copy(s.act) : null,
         cause: w.open && s.cause ? fill(s.cause) : null, feedback: w.open ? this.feedbackAt(s.id) : [],
         note: null, offer: s.offer ? copy(s.offer) : null, offerSpeed: s.offerSpeed || null, gate: s.gate.kind,
+        // Readouts this step's own line explains (P2's H2, H4, H9): the tiered screen does not introduce them again.
+        introduces: s.introduces ? s.introduces.slice() : null,
       };
       if (w.stage === 'guess') {
         const g = s.guess;
@@ -1102,13 +1255,15 @@
       // In the watch phase the step's id comes along: a readout may appear from a given step on (PROLOGUE §5.3: energy at H4).
       const step = this.phase === 'watch' ? (this.watchStep() || {}).id || null : null;
       return this.def.labConfig(this.variant, Object.assign({ phase: this.phase, revealed, scene: this.phase === 'scenes' ? this.scene.index : null,
-        design: this.design, step }, extraState || {}));
+        design: this.design, step, monitor: mon }, extraState || {}));
     }
     /** A key that changes whenever the labConfig would (the revealed genes), so the app knows to rebuild its panels. */
     labConfigKey() {
       const mon = this.run && this.run.monitor.save ? this.run.monitor.save() : null;
       const step = this.phase === 'watch' ? (this.watchStep() || {}).id || '' : '';
-      return this.phase + '|' + step + '|' + (mon && mon.revealed ? Object.keys(mon.revealed).sort().join(',') : '');
+      // A level whose screen follows its run (1.2: the milk phase adds the economy readouts) names what matters in uiKey.
+      const own = this.def.uiKey ? String(this.def.uiKey(mon, this.phase)) : '';
+      return this.phase + '|' + step + '|' + (mon && mon.revealed ? Object.keys(mon.revealed).sort().join(',') : '') + '|' + own;
     }
     hud() {
       if (!this.def.hud) return null;
@@ -1219,6 +1374,7 @@
         deviceSeed: this.deviceSeed, phase: this.phase, phaseIndex: this.phaseIndex, runs: this.runs,
         answers: copy(this.answers), selected: copy(this.selected), debrief: copy(this.debriefState), taps: copy(this.taps),
         beat: copy(this.beat), outroShown: this.outroShown, scene: copy(this.scene), textIndex: this.beat ? this.beat.index : this.scene.line,
+        acts: copy(this.acts), shownBeats: copy(this.shownBeats),
         echoIndex: this.echoIndex, cards: this.cards.slice(), withoutGoal: this.withoutGoal, design: copy(this.design),
         demo: { done: this.demo.done, record: copy(this.demo.record), result: copy(this.demo.result) },
         epilogue: copy(this.epilogue),
@@ -1261,7 +1417,10 @@
     r.taps = copy(s.taps) || [];
     r.beat = copy(s.beat) || null;
     r.outroShown = !!s.outroShown;
-    r.scene = copy(s.scene) || { index: 0, line: 0 };
+    r.scene = Object.assign({ index: 0, line: 0, max: 0 }, copy(s.scene) || {});
+    if (r.scene.max < r.scene.index) r.scene.max = r.scene.index;
+    r.acts = copy(s.acts) || {};
+    r.shownBeats = copy(s.shownBeats) || {};
     r.echoIndex = s.echoIndex || 0;
     r.cards = (s.cards || []).slice();
     r.withoutGoal = !!s.withoutGoal;
@@ -1355,6 +1514,30 @@
   }
 
   /**
+   * Does a scene's activity as a student would (headless): the right letters and codons (or sol.activities[sceneId]:
+   * {picks: [...], rows: [...]} to pick others first), three copies, and the runs played to their end.
+   */
+  function playActivity(r, info, sol) {
+    const a = info.scene.activity, own = (sol && sol.activities && sol.activities[info.scene.id]) || {};
+    let guard = 0;
+    while (!r.activityInfo(info.scene, true).done) {
+      if (guard++ > 1000) throw new Error('level ' + r.def.id + ': the activity of scene ' + info.scene.id + ' is stuck');
+      const st = r.activityInfo(info.scene, true);
+      if (st.stage === 'fill') r.sceneAct({ pick: own.picks && own.picks[st.i] !== undefined ? own.picks[st.i] : a.expect[st.i] });
+      else if (st.stage === 'decode') {
+        const want = own.rows && own.rows[st.i] !== undefined && st.hint === null ? own.rows[st.i] : a.rows.findIndex((x) => x.codon === a.codons[st.i]);
+        r.sceneAct({ row: want });
+      } else if (a.kind === 'copies') {
+        if (st.made + st.runs.length < a.n) r.sceneAct({ start: true });
+        else r.sceneAct({ advance: a.total });
+      } else {
+        if ((a.kind === 'copy' || a.kind === 'read') && !st.started) r.sceneAct({ start: true });
+        r.sceneAct({ advance: a.total });
+      }
+    }
+  }
+
+  /**
    * opts: {variantSeed, solution ('reference'), attempt, override, deviceSeed, telemetry, makeCell,
    *        maxTicks (per run, default 200,000), interruptAt (tick: save → JSON → restore mid-run),
    *        retryFailed (Try again once after a failed run), onPhase(runner)}
@@ -1380,6 +1563,8 @@
     const stepCell = (runner, cell, until) => {
       let n = 0;
       while (!until() && n++ < maxTicks) {
+        // A mid-run story beat (1.2's milk arrival) holds the run until it is read: the player reads it at once.
+        if (runner.beat && runner.beat.mid) { runner.storySkip(); runner.next(); }
         if (o.interruptAt !== undefined && !restored && cell.tick === o.interruptAt && runner.phase === 'run') {
           const saved = JSON.parse(JSON.stringify(runner.save()));
           r = runner = LevelRunner.restore(def, saved, { telemetry: o.telemetry, makeCell: o.makeCell, today: o.today });
@@ -1407,6 +1592,7 @@
           r.scenePick(info.guess.id, want); r.sceneSee();
         }
         if (info.question && !info.solved) answer(info.scene.question);
+        if (info.activity && info.lastLine && !info.activity.done) playActivity(r, info, sol);
         if (!r.sceneNext().ok) r.next();
         continue;
       }
@@ -1579,6 +1765,6 @@
     return out;
   }
 
-  const game = { makeCell, playHeadless, playWatch, LevelRunner, answerRecord, markTable, debriefFromTaps, summarise, monitorFeed, verifyRunFile, checkExpect, parRunner };
+  const game = { makeCell, playHeadless, playWatch, playActivity, LevelRunner, answerRecord, markTable, debriefFromTaps, summarise, monitorFeed, verifyRunFile, checkExpect, parRunner };
   return { LevelRunner, game };
 });

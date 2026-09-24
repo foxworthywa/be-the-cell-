@@ -251,6 +251,7 @@
       const gg = app.ui.graphGenes;
       if (gg.indexOf(id) < 0) { if (gg.length >= 3) gg.shift(); gg.push(id); }
       app.logEvent('focus', { gene: id });
+      app.renarrate();
       app.savePrefs();
       views.genes.updateFocus();
       views.graphs.syncControls();
@@ -502,6 +503,11 @@
     function showNarr() {
       if (narrView.show(hold.key, hold.gene, hold.text)) views.cellView.setLabel(hold.text, hold.key);
     }
+    /**
+     * The student looked at something else (another zoom, another focus gene): the narrator reads the new view at
+     * once, even while paused, and its line names what is now shown (never the gene or zoom seen before).
+     */
+    app.renarrate = () => { hold.reset(); narrView.key = null; app.narrTick = -1; app.requestPaint(); };
 
     // --- frame --------------------------------------------------------------------
     app.render = (dtReal, stepped, force, dtSimOverride) => {
@@ -788,7 +794,10 @@
      */
     app.zoomChanged = (level) => {
       const L = app.level;
-      if (app.mode === 'level' && L && !L.live && L.runner.phase === 'watch' && L.runner.watchZoom(level)) views.levelUI.afterWatch();
+      if (app.mode === 'level' && L && !L.live && L.runner.phase === 'watch') {
+        if (L.runner.watchZoom(level)) views.levelUI.afterWatch();
+        else views.levelUI.syncGuide();                          // its "Look closer" buttons follow the close-up shown
+      }
     };
     if (!app.setZoom) app.setZoom = (level, via) => { if (views.zoom && typeof views.zoom.set === 'function') views.zoom.set(level, via || 'guide'); };
     function hookZoom() {
@@ -1068,8 +1077,8 @@
           showSurface('app');
         } else {
           if (L.live) { L.live = false; app.loop.stop(); }
-          views.prologue.show(info.scene, r.def, views.levelUI.title());
           showSurface('prologue');
+          views.prologue.show(info, r.def, views.levelUI.title());
         }
         return;
       }
@@ -1170,6 +1179,7 @@
     function hudGoalTap() {
       const r = app.level && app.level.runner;
       if (!r) return;
+      if (r.phase === 'watch') return;                                   // the task card comes after the watch
       if (r.phase === 'demo' && r.demo.done) views.levelUI.sync();     // its sheet carries the Continue
       else if (hudMode(r)) { r.next(); views.levelUI.after(); }
       else views.levelUI.task(true);
@@ -1210,6 +1220,20 @@
         runEnded();
         if (!r.goal) { r.next(); views.levelUI.after(); }    // a missed goal opens the result; a met one waits on the goal chip
       }
+      // A mid-run story beat (1.2: the milk arrives) holds the run: the loop stops there and the beat is shown; at the
+      // milk's arrival the view moves to the whole cell, where lactose comes in through the transporters (PROLOGUE §6.2.4).
+      if (r.phase === 'run' && r.beat && r.beat.mid && L.lastMid !== r.beat.name + ':' + r.runs) {
+        L.lastMid = r.beat.name + ':' + r.runs;
+        if (app.loop.running) app.loop.stop();
+        if (r.beat.name === 'milk') app.setZoom('cell', 'level');
+        // The run's own commands at this tick (1.2: the switch locks with the milk) show at once, with the readouts.
+        app.refreshControls();
+        views.cellView.dirty = true;
+        app.requestPaint();
+        saveLevelNow();
+        runEnded();
+        views.levelUI.after();
+      }
       if (r.phase === 'epilogue' && r.epilogue.done && L.lastEpilogue !== r.runs) {
         L.lastEpilogue = r.runs;
         if (app.loop.running) app.loop.stop();
@@ -1243,6 +1267,9 @@
             if (views.tierBar) views.tierBar.update(v); else views.cellView.updateFocusBar(v);
             app.refreshControls();
             saveLevelNow();
+            // … and the cell is drawn at that tick, so the guide finds the mark it points at (the first strand).
+            views.cellView.dirty = true;
+            app.requestPaint();
           }
           views.levelUI.syncGuide();
         }
@@ -1508,6 +1535,13 @@
               app.render(0, true, true, 0);
               return { tick: app.cell.tick, info: r.watchInfo() };
             },
+          },
+          /** The opening's scenes (PROLOGUE §2.3): the scene now, and an activity step as a tap would do it. */
+          scene: {
+            info: () => (R() ? R().sceneInfo() : null),
+            act(action) { const r = R(), out = r.sceneAct(action); views.levelUI.after(); views.prologue.loop(); return out; },
+            /** Plays the current scene's activity to its end, as the headless player does (picks right, runs to the end). */
+            finish() { const r = R(), info = r.sceneInfo(); if (info.activity) BTC.game.playActivity(r, info, null); views.levelUI.after(); return r.sceneInfo().activity; },
           },
           /** Registers a level definition loaded into the page (a test fixture), so it can be opened. */
           add(id) { return !!BTC.levels.add(BTC.levelDefs[id]); },

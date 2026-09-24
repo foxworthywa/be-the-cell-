@@ -209,8 +209,8 @@
       const i0 = m.count ? lowerBound(m.ticks, m.count, Math.floor(m.t0 / m.dt)) : 0;
       let maxV = 0;
       for (let s = 0; s < m.nSeries; s++) {
-        const d = m.series[s].data;
-        if (d) for (let i = i0; i < m.count; i++) if (d[i] > maxV) maxV = d[i];
+        const d = m.series[s].data, k = m.series[s].div || 1;
+        if (d) for (let i = i0; i < m.count; i++) if (d[i] / k > maxV) maxV = d[i] / k;
         if (m.series[s].live > maxV) maxV = m.series[s].live;
       }
       if (this.overlay) for (const p of this.overlay.points) if (p && p[1] > maxV) maxV = p[1];
@@ -240,7 +240,7 @@
     }
 
     /**
-     * m: {ticks (Int32Array), count, dt, t0, t1 (sim s shown), series: [{data, live, color, label}], nSeries,
+     * m: {ticks (Int32Array), count, dt, t0, t1 (sim s shown), series: [{data, div? (data are divided by it), live, color, label}], nSeries,
      *     markers: {n, tick, kind, label, prio?}, bands: {n, t0, t1, color, label?}, scrubT (sim s or -1),
      *     gutterL?, gutterR? (shared side gutters, px)}
      */
@@ -401,7 +401,7 @@
         for (let i = i0; i < m.count; i++) {
           const q = Math.floor(tx(m.ticks[i] * m.dt) - x0);
           if (q < 0 || q >= cols) continue;
-          const y = ty(ser.data[i]);
+          const y = ty(ser.data[i] / (ser.div || 1));
           if (cmin[q] !== cmin[q] || y < cmin[q]) cmin[q] = y;
           if (cmax[q] !== cmax[q] || y > cmax[q]) cmax[q] = y;
         }

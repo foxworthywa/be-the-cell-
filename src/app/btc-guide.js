@@ -63,6 +63,7 @@
     /** Shows (or updates in place) the callout. Buttons: [{label, action, primary, disabled, onClick}]. */
     show(o) {
       const h = LY.h;
+      if (!this.cur || this.cur.key !== o.key) this.retries = 0;
       this.cur = o;
       const who = o.who || 'narrator';
       LY.setText(this.speaker, (C.game.speakers && C.game.speakers[who]) || who);
@@ -139,7 +140,15 @@
         this.ring.style.left = Math.round(x) + 'px'; this.ring.style.top = Math.round(y) + 'px';
         this.ring.classList.toggle('is-point', point);
         this.ring.hidden = false;
-      } else this.ring.hidden = true;
+        this.retries = 0;
+      } else {
+        this.ring.hidden = true;
+        // A mark on the canvas is found only once the cell view has painted it (a paused cell paints on demand):
+        // look again on the next frames, a few times.
+        if (this.cur.point && (this.retries = (this.retries || 0) + 1) <= 12 && typeof requestAnimationFrame === 'function') {
+          requestAnimationFrame(() => { if (this.cur) this.place(); });
+        }
+      }
       // Over the cell view when it is on screen, else over the open panel (the Graph tab on a phone).
       const wrap = this.stage.closest('#stage-wrap') || this.stage;
       let area = rectOf(this.stage), overCell = !!area;

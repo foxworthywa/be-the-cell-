@@ -206,7 +206,11 @@
     stepCallout(info) {
       const r = this.runner, app = this.app, W = G.watch;
       const buttons = [], extra = [];
-      let text = info.text, who = info.who, point = info.point;
+      // {N}: how many glucose one moving mark stands for, as the cell view draws them now (PROLOGUE §2.4.3 H11).
+      const cv = app.views.cellView, N = cv && cv.markerN ? F.count(cv.markerN[0]) : '';
+      let text = F.fill(info.text, { N }), who = info.who, point = info.point;
+      // A step whose own line explains a readout (P2's H2, H4, H9): the student has met it; it is not introduced again.
+      if (info.introduces && (info.stage === 'lines' || info.stage === 'tap') && app.progress) for (const id of info.introduces) app.progress.markIntroduced(id);
       if (info.stage === 'until') {
         // The step appears once the model gets there: until then, what to do to see it.
         text = ''; who = 'narrator'; point = null;
@@ -227,7 +231,9 @@
       if (info.waiting && !app.isRunning() && app.canRun()) buttons.push({ label: W.run, action: 'watch-run', primary: true, onClick: () => { app.resume(); this.syncGuide(); } });
       if (info.offerSpeed && app.speed() < info.offerSpeed) buttons.push({ label: W.speedUp, action: 'watch-speed', onClick: () => { app.setSpeed(info.offerSpeed); this.syncGuide(); } });
       if (info.offer && typeof app.setZoom === 'function') {
-        for (const o of info.offer) buttons.push({ label: r.text(o.label || W.lookCloser), action: 'watch-zoom-' + o.zoom, onClick: () => app.setZoom(o.zoom, 'guide') });
+        // Not while that close-up is already showing.
+        const zl = app.views && app.views.zoom ? app.views.zoom.level : 'cell';
+        for (const o of info.offer) if (o.zoom !== zl) buttons.push({ label: r.text(o.label || W.lookCloser), action: 'watch-zoom-' + o.zoom, onClick: () => app.setZoom(o.zoom, 'guide') });
       }
       this.guide().show({ key: 'step:' + info.id + ':' + info.stage + ':' + info.line, who, text, extra, point,
         count: F.fill(W.stepOf, { i: info.index + 1, n: info.count }), buttons });
@@ -307,15 +313,27 @@
       this.guide().hide();
     }
 
-    // --- Prologue scenes (§7.P) --------------------------------------------------------
+    // --- the opening's scenes (PROLOGUE §2.3, §2.4; §2.5 the screens) ------------------------------------
+    /**
+     * One scene of the opening: the speaker and the line, then (on its last line) its guess, its activity (the
+     * letter keys, "Copy again", the codon table, "Let it run"), "What happened" for guesses due here, and the
+     * actions: Back and Closer on the zoom ladder's rungs, Skip and Next elsewhere. Next waits for the guess, the
+     * activity and any question; nothing is marked wrong.
+     */
     scene() {
-      const r = this.runner, h = LY.h, info = r.sceneInfo(), W = G.watch;
-      const tall = !!info.question || !!info.guess;
-      this.sheet('scene', { className: 'lv-sheet lv-story' + (tall ? ' lv-tall' : ''), backdropClass: 'lv-dim lv-clear', label: G.speakers[info.who] }, (body) => {
+      const r = this.runner, h = LY.h, info = r.sceneInfo(), W = G.watch, T = this.def.text, U = T.ui || {};
+      const act = info.activity && info.activity.open ? info.activity : null, g = info.guess;
+      const rung = !!info.scene.rung;
+      const busy = !!act && (act.stage === 'fill' || act.stage === 'decode');
+      const tall = !!info.question || (!!g && !g.seen) || busy;
+      // The drawing above (or beside) the sheet stays live: its ring, the ladder rail, pinch and the letters take taps.
+      this.sheet('scene', { className: 'lv-sheet lv-story lv-scene' + (tall ? ' lv-tall' : '') + (busy ? ' lv-act' : ''), backdropClass: 'lv-dim lv-clear pl-through',
+        label: G.speakers[info.who] }, (body) => {
         body.appendChild(this.speaker(info.who, info.lines > 1 ? F.fill(G.lineOf, { i: info.line + 1, n: info.lines }) : ''));
         body.appendChild(h('p', { class: 'lv-line', 'aria-live': 'polite', text: info.text }));
+        // A9: tap a letter to see its partner (optional exploring; the gate is Next).
+        if (info.scene.explore && info.lastLine) body.appendChild(h('p', { class: 'sheet-note pl-pairnote', 'aria-live': 'polite', text: U.tapLetter || '' }));
         // A guess before the scene's show (PROLOGUE §2.3.4): pick, then "See what happens"; never marked right or wrong.
-        const g = info.guess;
         if (g && !g.seen) {
           body.appendChild(h('p', { class: 'lv-prompt', text: g.prompt }));
           const list = h('div', { class: 'lv-options', role: 'radiogroup', 'aria-label': g.prompt });
@@ -326,23 +344,119 @@
           }
           body.appendChild(list);
           body.appendChild(h('p', { class: 'sheet-note', text: W.guessNote }));
-          body.appendChild(h('button', { class: 'btn primary lv-wide', type: 'button', 'data-action': 'guess-see', disabled: g.picked === null,
-            onclick: () => { if (r.sceneSee().ok) this.after(); } }, W.see));
         }
+        if (act) this.activityBlock(body, info, act, U);
         for (const f of info.feedback || []) {
           body.appendChild(h('p', { class: 'lv-fb-line is-guessed', text: F.fill(W.youGuessed, { option: f.picked }) }));
           body.appendChild(h('p', { class: 'lv-fb-line', text: F.fill(W.happened, { fb: f.fb }) }));
         }
+        // An "About" row (Prologue 2's Q4): tap to open; it costs nothing to a student who does not.
+        const about = info.scene.about && T.about && T.about[info.scene.about];
+        if (about && info.lastLine) {
+          const open = !!(this.aboutOpen && this.aboutOpen[info.scene.id]);
+          body.appendChild(h('button', { class: 'btn row-btn lv-about', type: 'button', 'aria-expanded': open ? 'true' : 'false', 'data-action': 'about',
+            onclick: () => { (this.aboutOpen || (this.aboutOpen = {}))[info.scene.id] = !open; if (!open) this.app.logEvent('about', { row: info.scene.about }); this.sync(); } },
+          [h('span', { text: about.row }), h('span', { class: 'chev', 'aria-hidden': 'true', text: open ? '−' : '+' })]));
+          if (open) body.appendChild(h('p', { class: 'lv-about-text', text: about.text }));
+        }
         if (info.question) body.appendChild(this.questionBlock(info.scene.question));
-        const blocked = (info.question || (g && !g.seen)) && !info.solved;
-        const next = h('button', { class: 'btn primary lv-next', type: 'button', 'data-primary': '', disabled: blocked, onclick: () => {
-          if (info.last) r.next(); else r.sceneNext();
+        const blocked = !info.solved && info.lastLine;
+        const onNext = () => {
+          if (info.last) r.next(); else if (!r.sceneNext().ok) return;
+          if (rung) this.app.logEvent('rung', { id: info.scene.id, action: 'closer', via: 'button' });
           this.after();
-        } }, info.last ? G.continue : G.next);
-        const canSkip = !info.last && !blocked;
-        const skip = canSkip ? h('button', { class: 'btn lv-skip', type: 'button', onclick: () => { r.sceneSkip(); this.after(); } }, G.skipStory) : h('span');
-        // With a question the sheet scrolls: Next stays in reach at the bottom, as on the other level sheets.
-        body.appendChild(h('div', { class: 'lv-actions' + (tall ? ' lv-sticky' : '') }, [skip, next]));
+        };
+        let left;
+        const closerWord = rung && info.lastLine && !info.last && this.def.scenes[info.index + 1] && this.def.scenes[info.index + 1].rung;
+        // A guess not yet seen: the sheet's main button is "See what happens" (never hidden below the options).
+        const next = g && !g.seen
+          ? h('button', { class: 'btn primary lv-next lv-see', type: 'button', 'data-primary': '', 'data-action': 'guess-see', disabled: g.picked === null,
+            onclick: () => { if (r.sceneSee().ok) this.after(); } }, W.see)
+          : h('button', { class: 'btn primary lv-next', type: 'button', 'data-primary': '', 'data-action': closerWord ? 'rung-closer' : 'scene-next', disabled: blocked,
+            onclick: onNext }, info.last ? G.continue : closerWord ? (U.closer || G.next) + ' \u203a' : G.next);
+        if (rung) {
+          left = h('button', { class: 'btn lv-back', type: 'button', 'data-action': 'rung-back', disabled: !info.canBack,
+            onclick: () => { const id = info.scene.id; if (r.sceneBack().ok) { this.app.logEvent('rung', { id, action: 'back', via: 'button' }); this.after(); } } },
+          '‹ ' + (U.back || 'Back'));
+        } else {
+          const canSkip = !info.last && !blocked;
+          left = canSkip ? h('button', { class: 'btn lv-skip', type: 'button', onclick: () => { r.sceneSkip(); this.after(); } }, G.skipStory) : h('span');
+        }
+        // Kept in reach whenever the sheet may be taller than the screen (a question, a guess, an activity, feedback, an open About).
+        const sticky = tall || !!act || info.feedback.length > 0 || !!(this.aboutOpen && this.aboutOpen[info.scene.id]);
+        body.appendChild(h('div', { class: 'lv-actions' + (sticky ? ' lv-sticky' : '') }, [left, next]));
+      });
+    }
+    /** A9's note: the letter tapped and its partner. */
+    pairNote(text) {
+      const cur = LY.currentSheet(), el = cur && cur.body.querySelector('.pl-pairnote');
+      if (el) LY.setText(el, text);
+    }
+
+    /** The scene's activity (§2.3.3 the letter keys, §2.3.4 "Copy again", §2.3.5 the codon table): each pick is logged, none marked wrong. */
+    activityBlock(body, info, act, U) {
+      const r = this.runner, h = LY.h, spec = act.spec;
+      const run = (label, busyText) => {
+        if (act.done) return;
+        if (!act.started) {
+          body.appendChild(h('div', { class: 'lv-actions lv-actions-end' }, h('button', { class: 'btn primary lv-run', type: 'button', 'data-action': 'activity-run',
+            onclick: () => { if (r.sceneAct({ start: true }).ok) { this.after(); this.app.views.prologue.loop(); } } }, label + ' ›')));
+        } else body.appendChild(h('p', { class: 'sheet-note', 'aria-live': 'polite', text: busyText }));
+      };
+      const lastFb = act.last && !act.last.match && act.last.fb ? act.last.fb : '';
+      if (act.kind === 'copy') {
+        if (act.stage === 'fill') {
+          const keys = h('div', { class: 'pl-keys', role: 'group', 'aria-label': U.keys });
+          for (const x of ['A', 'C', 'G', 'T', 'U']) {
+            keys.appendChild(h('button', { class: 'btn pl-key', type: 'button', 'data-key': x, 'aria-label': F.fill(U.letterKey, { x }),
+              onclick: () => { r.sceneAct({ pick: x }); this.after(); } }, x));
+          }
+          body.appendChild(keys);
+          body.appendChild(h('p', { class: 'sheet-note pl-num', text: F.fill(U.fillCount, { i: act.i, n: act.n }) }));
+        } else if (!act.started) body.appendChild(h('p', { class: 'sheet-note', text: U.fillDone }));
+        if (lastFb) body.appendChild(h('p', { class: 'lv-fb-line pl-actfb', 'aria-live': 'polite', text: lastFb }));
+        if (act.stage === 'run') run(U.runCopy, U.running);
+      } else if (act.kind === 'copies') {
+        if (!act.done) {
+          body.appendChild(h('p', { class: 'sheet-note', text: U.copiesHint }));
+          body.appendChild(h('div', { class: 'lv-actions lv-actions-end' }, h('button', { class: 'btn primary lv-run', type: 'button', 'data-action': 'copy-again',
+            disabled: act.made + act.runs.length >= act.n,
+            onclick: () => { if (r.sceneAct({ start: true }).ok) { this.after(); this.app.views.prologue.loop(); } } }, U.copyAgain)));
+        }
+      } else if (act.kind === 'read') {
+        if (act.stage === 'decode') {
+          const codon = spec.codons[act.i];
+          body.appendChild(h('p', { class: 'pl-codon', text: F.fill(U.thisCodon, { codon }) }));
+          const rows = h('div', { class: 'pl-rows', role: 'group' });
+          spec.rows.forEach((row, j) => {
+            const tried = act.last && !act.last.match && act.last.i === act.i && act.last.value === row.codon;
+            const word = row.start ? row.three + ' (' + U.startWord + ')' : row.stop ? U.stopWord : row.three;
+            rows.appendChild(h('button', { class: 'btn pl-row' + (tried ? ' is-tried' : '') + (act.hint === j ? ' is-hint' : ''), type: 'button', 'data-row': String(j),
+              onclick: () => { r.sceneAct({ row: j }); this.after(); } }, [h('span', { class: 'pl-row-codon', text: row.codon }), h('span', { class: 'pl-row-aa', text: word })]));
+          });
+          body.appendChild(rows);
+          if (lastFb && act.last.i === act.i) body.appendChild(h('p', { class: 'lv-fb-line pl-actfb', 'aria-live': 'polite', text: lastFb }));
+          body.appendChild(h('button', { class: 'btn row-btn', type: 'button', 'data-action': 'full-table', onclick: () => this.codeTable(U) }, U.fullTable));
+        } else {
+          if (!act.started) body.appendChild(h('p', { class: 'sheet-note', text: U.readDone }));
+          run(U.runRead, U.reading);
+        }
+      }
+    }
+    /** "Full table": all 64 codons of the standard code (BTC.seq.CODE), in the order U, C, A, G. */
+    codeTable(U) {
+      const h = LY.h, SEQ = this.app.BTC.seq, B = 'UCAG';
+      LY.openSheet({
+        title: U.tableTitle, className: 'pl-table-sheet', onClose: () => this.sync(),
+        build: (body) => {
+          body.appendChild(h('p', { class: 'sheet-note', text: U.tableNote }));
+          const grid = h('div', { class: 'pl-table num' });
+          for (const a of B) for (const b of B) for (const c of B) {
+            const cd = a + b + c, aa = SEQ.CODE[cd];
+            grid.appendChild(h('span', { class: 'pl-cell' + (aa === '*' ? ' is-stop' : cd === 'AUG' ? ' is-start' : '') }, [h('b', { text: cd }), ' ' + (aa === '*' ? U.stopWord : SEQ.AA[aa].three)]));
+          }
+          body.appendChild(grid);
+        },
       });
     }
 
@@ -395,6 +509,16 @@
       const build = (body, close) => {
         // A level not yet in the new pattern (no watch phase) says so (PROLOGUE §5.1: it keeps the full lab screen).
         if (LevelUI.isOlder(def)) body.appendChild(h('p', { class: 'lv-older', text: C.tiers.older }));
+        // Machine cards first (PROLOGUE §1.4): what each machine does, its name, and how many the cell has now.
+        if (T.cards && this.app.BTC.MachineCard) {
+          const CU = this.app.BTC.closeup, row = h('div', { class: 'lv-cards' });
+          for (const id of Object.keys(T.cards)) {
+            const w = T.cards[id];
+            row.appendChild(this.app.BTC.MachineCard.create(CU.machineOf(id), 'g-' + id, { job: r.text(w.job), name: r.text(w.name), symbol: w.symbol, where: r.text(w.state) },
+              { className: 'is-' + id }));
+          }
+          body.appendChild(row);
+        }
         // A level may set the scene in plain words before the goal (TEXT.task.context: one or more paragraphs).
         for (const t of [].concat(T.context || [])) body.appendChild(h('p', { class: 'lv-context', text: r.text(t) }));
         body.appendChild(h('h3', { text: G.task.goal }));
@@ -701,6 +825,8 @@
         const own = typeof this.def.missReason === 'function' && r.monitorResult ? this.def.missReason(r.monitorResult) : null;
         const reason = own || R.reasons[r.run && r.run.endReason] || R.reasons.done;
         body.appendChild(h('p', { class: 'lv-outcome ' + (r.goal ? 'is-met' : 'is-not'), text: r.goal ? R.met : F.fill(R.notMet, { reason }) }));
+        // What the goal meant for the cell (1.2: how fast it grew on milk sugar), met or not.
+        if (this.def.resultLead) for (const t of this.def.resultLead(r.variant, prev)) body.appendChild(h('p', { class: 'lv-lead', text: t }));
         const parPending = r.hasPar() && !r.par.done;
         if (parPending) body.appendChild(h('p', { class: 'sheet-note lv-working', 'aria-live': 'polite', text: r.text((this.def.text.result || {}).working || '') }));
         if (this.def.resultHint) for (const t of this.def.resultHint(r.variant, prev, r.monitorResult || {}, r.goal)) body.appendChild(h('p', { class: 'lv-hint', text: t }));
@@ -911,11 +1037,20 @@
           more.push(h('button', { class: 'btn', type: 'button', onclick: () => app.playAgain() }, K.again));
         }
         if (more.length) body.appendChild(h('div', { class: 'lv-actions lv-actions-start' }, more));
+        // The opening's "What is simplified" sheet (PROLOGUE §2.6): one plain line each.
+        const simp = this.def.text.simplified, U = this.def.text.ui || {};
+        if (Array.isArray(simp) && simp.length) {
+          body.appendChild(h('button', { class: 'btn row-btn', type: 'button', 'data-action': 'simplified', onclick: () => {
+            app.logEvent('about', { row: 'simplified' });
+            LY.openSheet({ title: U.simplifiedTitle || U.simplified, className: 'lv-sheet', onClose: () => this.sync(),
+              build: (b) => b.appendChild(h('ul', { class: 'lv-simplified' }, simp.map((t) => h('li', { text: t })))) });
+          } }, U.simplified));
+        }
         const nextDef = app.BTC.levels.after(this.def.id);
         const last = [];
         if (nextDef) {
-          last.push(h('button', { class: 'btn', type: 'button', 'data-action': 'next-level', onclick: () => app.enterLevel(nextDef.id) },
-            this.def.scored ? K.next + ' ›' : F.fill(K.startNamed, { id: nextDef.id })));
+          last.push(h('button', { class: 'btn' + (this.def.scored ? '' : ' primary'), type: 'button', 'data-action': 'next-level', onclick: () => app.enterLevel(nextDef.id) },
+            this.def.scored ? K.next + ' ›' : U.next ? U.next + ' ›' : F.fill(K.startNamed, { id: nextDef.id })));
         }
         last.push(h('button', { class: 'btn', type: 'button', 'data-action': 'levels', onclick: () => app.enterHome() }, K.levels));
         body.appendChild(h('div', { class: 'lv-actions lv-actions-start' }, last));

@@ -62,6 +62,7 @@
       summary: '{r} ribosomes on {m} copies',
       summaryOne: '{r} ribosomes on 1 copy',
       summaryMade: '{r} ribosomes on {n} copies being made',
+      summaryFinishing: '{r} ribosomes finishing chains', summaryNone: 'no copies',
       none: 'No copies of this gene right now.',
       outside: 'outside', membrane: 'membrane', inside: 'inside the cell', promoter: 'promoter', dna: 'DNA',
       beingMade: 'copies being made',

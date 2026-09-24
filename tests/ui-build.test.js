@@ -80,8 +80,8 @@ test('b-2 / U-12: the bundle inlines every script, stamps the build hash and kee
     const r = build({ out, quiet: true });
     const html = fs.readFileSync(path.join(out, 'index.html'), 'utf8');
     assert.ok(!/<script src=/.test(html), 'an external script remains');
-    // LEVELS.md §16: 1.5 MB throw, 1.2 MB warn (levels 1.1 and 1.7 on top of 1.2 and 1.4; no comment stripping).
-    assert.ok(r.bytes <= 1536 * 1024, `bundle is ${Math.round(r.bytes / 1024)} KB`);
+    // LEVELS.md §16: 1.5 MB throw, 1.2 MB warn; the scripts are inlined without comments and indentation (strip).
+    assert.ok(r.bytes <= 1229 * 1024, `bundle is ${Math.round(r.bytes / 1024)} KB, over the 1.2 MB warning`);
     assert.match(html, new RegExp('<meta name="btc-build" content="' + r.buildHash + '">'));
     assert.ok(html.indexOf("window.BTC_BUILD = '" + r.buildHash + "'") >= 0);
     for (const m of html.matchAll(/\s(?:src|href)="([^"]*)"/g)) {
@@ -117,11 +117,73 @@ test('b-2: the build throws on a missing or extra script tag, and uses a functio
     const extra = (f) => (f === 'index.html' ? real(f).replace('</head>', '<script src="x.js"></script>\n</head>') : real(f));
     assert.throws(() => build({ out, quiet: true, read: extra }), /extra: x\.js/);
     // "$'" and "$&" are replacement patterns for a string replacer; they must survive verbatim.
-    const dollars = (f) => (f === 'src/app/btc-format.js' ? real(f) + "\n// keep: $' $& $$ </script>\n" : real(f));
+    const dollars = (f) => (f === 'src/app/btc-format.js' ? real(f) + "\nvar keepDollars = \"keep: $' $& $$ </script>\";\n" : real(f));
     build({ out, quiet: true, read: dollars });
     const html = fs.readFileSync(path.join(out, 'index.html'), 'utf8');
-    assert.ok(html.indexOf("// keep: $' $& $$ <\\/script>") >= 0);
+    assert.ok(html.indexOf("\"keep: $' $& $$ <\\/script>\"") >= 0);
   } finally {
     fs.rmSync(out, { recursive: true, force: true });
   }
+});
+
+// ---------------------------------------------------------------------------------------------------------------
+// The bundle's scripts go in without comments and indentation (build.js strip): a tokenizer that copies every token
+// byte for byte, so the stripped code is the same program.
+// ---------------------------------------------------------------------------------------------------------------
+const { strip } = require('../build.js');
+
+test('b-2: strip drops comments and needless whitespace and keeps every token, and every line break a semicolon may hang on', () => {
+  const cases = [
+    ['a + +b; c - -d; e++ / 2; f = g / h / i;', 'a+ +b;c- -d;e++/2;f=g/h/i;'],
+    ['x = /[/]"\\//g.test(y) // a "comment"\nz()', 'x=/[/]"\\//g.test(y)\nz()'],
+    ['const s = `a ${ b + `c${ d }` } e`; /* one\nor two */ f()', 'const s=`a ${b+`c${d}`} e`;f()'],
+    ['a = b /* a comment over\ntwo lines is a line break */ c()', 'a=b\nc()'],
+    ['return\nx', 'return\nx'],
+    ['f()\n(g)()', 'f()\n(g)()'],
+    ['a = b\n+c', 'a=b\n+c'],
+    ['if (a) {\n  b();\n}\n', 'if(a){b();}'],
+    ['x = 1 .toFixed; y = a ? .5 : 1', 'x=1 .toFixed;y=a? .5:1'],
+    ["case 'x': return 'y // no comment';", "case 'x':return 'y // no comment';"],
+    ['r = /re/ instanceof RegExp', 'r=/re/ instanceof RegExp'],
+    ['const o = {\n  a: 1,\n  b: [2, 3],\n};', 'const o={a:1,b:[2,3],};'],
+    ['x = y\n.z', 'x=y\n.z'],
+    ['n = a-- > 0', 'n=a-- >0'],
+    ['s = "a\\\nb"', 's="a\\\nb"'],
+    ['if (x) return /a/.test(y); else throw /b/', 'if(x)return/a/.test(y);else throw/b/'],
+  ];
+  for (const [src, want] of cases) assert.equal(strip(src), want, JSON.stringify(src));
+  assert.throws(() => strip('a = "open'), /unterminated string/);
+  assert.throws(() => strip('a = `open'), /unterminated template/);
+  assert.throws(() => strip('/* open'), /unterminated comment/);
+});
+
+test('b-2: every bundled script strips to code that compiles, strips again to itself, and is at most two thirds its size', () => {
+  let before = 0, after = 0;
+  for (const f of FILES) {
+    const src = fs.readFileSync(path.join(ROOT, f), 'utf8'), out = strip(src, f);
+    assert.doesNotThrow(() => new vm.Script(out, { filename: f }), f);
+    assert.equal(strip(out, f), out, f + ': strip is not a fixed point');
+    before += src.length; after += out.length;
+  }
+  assert.ok(after <= (2 / 3) * before, `stripped ${after} of ${before} characters`);
+});
+
+test('b-2: the stripped scripts run the same: the engine gives the golden hash, and a level reference play the same code', () => {
+  const ctx = vm.createContext({});
+  vm.runInContext('var self = this;', ctx);
+  for (const f of FILES.filter((x) => !x.startsWith('src/app/'))) vm.runInContext(strip(fs.readFileSync(path.join(ROOT, f), 'utf8'), f), ctx, { filename: f });
+  const B = ctx.self.BTC, G = require('./golden.json');
+  const cell = new B.Cell(G.config);
+  let k = 0;
+  for (let t = 0; t < G.ticks; t++) {
+    while (k < G.commands.length && G.commands[k].tick === t) cell.command(G.commands[k++].cmd);
+    cell.step();
+  }
+  assert.equal(cell.hash(), G.hash, 'the golden hash from the stripped engine');
+  const RUN = require('../src/game/btc-level-runner.js'), LV = require('../src/game/btc-levels.js'), K = require('../src/game/btc-level-kit.js');
+  const vs = K.variantSeed(3, '1.2', 0);
+  const plain = RUN.game.playHeadless(LV.validate(require('../src/levels/btc-level-1-2.js')), { variantSeed: vs, solution: 'reference', today: () => '2026-01-01' });
+  const reg = B.levels.build(B.levelDefs);
+  const stripped = B.game.playHeadless(reg.get ? reg.get('1.2') : B.levelDefs['1.2'], { variantSeed: vs, solution: 'reference', today: () => '2026-01-01' });
+  assert.equal(stripped.code, plain.code);
 });

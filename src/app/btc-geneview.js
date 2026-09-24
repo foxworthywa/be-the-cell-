@@ -155,9 +155,15 @@
       this.batch(c, plan, REP, P[o.repColor] || P.muted, 'vee');
 
       if (plan.m + plan.n === 0) {
+        // Centred in the room left of the key (drawn at the right when it fits), on two lines when one is too long.
         c.font = '600 15px ' + FONT; c.textAlign = 'center'; c.textBaseline = 'middle';
         c.fillStyle = P.muted;
-        c.fillText(L.none, w / 2, (plan.laneTop + plan.nascentTop) / 2);
+        const room = w - (o.inline && plan.legendW ? plan.legendW : 0) - 16, cx = 8 + room / 2, cy = (plan.laneTop + plan.nascentTop) / 2;
+        if (c.measureText(L.none).width <= room) c.fillText(L.none, cx, cy);
+        else {
+          const words = String(L.none).split(' '), half = Math.ceil(words.length / 2);
+          c.fillText(words.slice(0, half).join(' '), cx, cy - 10); c.fillText(words.slice(half).join(' '), cx, cy + 10);
+        }
       }
 
       // Copies in progress: the strand growing from each polymerase.

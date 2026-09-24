@@ -109,7 +109,9 @@
       lines.forEach((ln, s) => {
         const gv = view.geneById[ln.gene], ser = m.series[s];
         ser.data = rec.series((ln.kind === 'mRNA' ? 'mRNA:' : 'protein:') + ln.gene);
-        ser.live = gv ? (ln.kind === 'mRNA' ? gv.mRNA + gv.nascent : gv.protein) : 0;
+        // Proteins in working machines (a four-chain LacZ is one); the recorder keeps the engine's chains.
+        ser.div = ln.kind !== 'mRNA' && gv && gv.oligomer > 1 ? gv.oligomer : 1;
+        ser.live = gv ? (ln.kind === 'mRNA' ? gv.mRNA + gv.nascent : F.machinesRaw(gv)) : 0;
         ser.color = model ? model.color(ln.gene) : 'accent';
         const noun = model ? (ln.kind === 'mRNA' ? C.tiers.counters.mRNA : TI.proteinsWord(model, ln.gene)) : ln.gene;
         ser.label = lines.length > 1 ? noun + ' ' + F.count(ser.live) : '';

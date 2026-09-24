@@ -91,6 +91,8 @@
     },
     /** Energy (ATP charge) above 0.7 for n ticks. */
     energyNormal: (v, p, mem) => held(mem, v.energy.E > 0.7, p.n),
+    /** The energy word reads low (or very low) for n ticks: what the energy bar shows. */
+    energyLow: (v, p, mem) => held(mem, !!v.energy.state && v.energy.state !== 'normal', p.n),
     /** The watched mRNA has been broken down. */
     watchedGone: (v, p, mem, ctx) => ctx.watchedId !== null && ctx.watchedId !== undefined && !hasId(gv(v, p), ctx.watchedId),
     /** No mRNA of the gene is left, mature or being made. */

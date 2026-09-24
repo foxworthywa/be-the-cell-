@@ -67,9 +67,9 @@ test('L-13: the home list model: names, challenges, status chips, minutes, Conti
   const T = LV.validate(stub.playable());
   const p = PROG.create({ storage: memStorage(), today: () => '2026-09-24', randomU32: () => 9 });
   let m = Home.model([P, T], p);
-  assert.deepEqual(m.rows.map((r) => [r.name, r.status]), [['Prologue · You, right now', 'new'], ['T · Test bench', 'new']]);
-  assert.equal(m.rows[0].challenge, 'From you to one cell, then a bacterium.');
-  assert.equal(m.rows[0].minutes, 'about 3 min');
+  assert.deepEqual(m.rows.map((r) => [r.name, r.status]), [['Prologue 1 · How a gene becomes a machine', 'new'], ['T · Test bench', 'new']]);
+  assert.equal(m.rows[0].challenge, 'From you to the letters of your insulin gene, then to a working machine.');
+  assert.equal(m.rows[0].minutes, 'about 7 min');
   assert.equal(m.continueRow, null);
   p.open('T', p.attemptFor('T'));
   m = Home.model([P, T], p);
@@ -88,7 +88,10 @@ test('L-13: the home list model: names, challenges, status chips, minutes, Conti
   assert.equal(m.rows[1].status, 'done · 95', 'the latest total');
   assert.equal(m.rows[1].expertText, 'Expert ✓', 'every Expert objective met in some attempt');
   const idx = Home.cardIndex([P, T]);
-  assert.deepEqual(idx['no-nucleus'], { id: 'no-nucleus', title: 'No nucleus', stamp: 'bacteria', level: 'P' });
+  assert.deepEqual(idx['genetic-code'], { id: 'genetic-code', title: 'Genetic code', stamp: 'universal', level: 'P' });
+  const P2 = LV.validate(require('../src/levels/btc-level-p2.js'));
+  assert.equal(Home.model([P, P2, T], p).rows[1].name, 'Prologue 2 · A cell’s economy');
+  assert.deepEqual(Home.cardIndex([P, P2])['no-nucleus'], { id: 'no-nucleus', title: 'No nucleus', stamp: 'bacteria', level: 'P2' });
 });
 
 test('L-13: the code box breaks only after hyphens, into lines that fit', () => {
@@ -120,26 +123,41 @@ test('L-13: completion score lines use the words of §6.1; predictions are repor
   assert.equal(LevelUI.isOlder(LV.validate(require('./fixtures/level-watch-stub.js'))), false);
 });
 
-test('the Prologue drawings: ≤ 4 KB each, labelled from TEXT, with a scale bar, drawn in palette tokens', () => {
+test('the opening\'s drawings: the zoom ladder\'s rungs with honest scale bars, the sequence pictures from BTC.seq, labels from TEXT, palette tokens only', () => {
   const T = P.text;
-  const pictures = P.scenes.filter((s) => !s.live).map((s) => s.picture).filter((x, i, a) => a.indexOf(x) === i);
-  assert.deepEqual(pictures, ['body', 'pancreas', 'betaCell', 'ribosome']);
-  for (const pic of pictures) {
-    const svg = Prologue.svg(pic, T);
-    assert.ok(Buffer.byteLength(svg) <= 4096, pic + ' is ' + Buffer.byteLength(svg) + ' bytes');
-    assert.ok(/^<svg class="pl-svg" viewBox="0 0 \d+ \d+"/.test(svg), pic);
-    assert.ok(!/#[0-9a-f]{3,6}\b|rgb\(/i.test(svg), pic + ' uses a hard-coded colour');
-    assert.ok(/class="pl-sb"/.test(svg), pic + ' has a scale bar');
-    assert.ok(T.alt[pic], pic + ' has alt text');
+  // Part 1's rungs: each drawn with its scale bar, labelled from TEXT; the ladder skips the spools rung.
+  const rungs = P.scenes.filter((s) => s.rung).map((s) => s.rung).filter((x, i, a) => a.indexOf(x) === i);
+  assert.deepEqual(rungs, ['you', 'pancreas', 'islet', 'betaCell', 'nucleus', 'chromosome', 'stretch', 'helix', 'letters']);
+  assert.deepEqual(Prologue.RUNGS, rungs);
+  for (const id of rungs) {
+    const out = { svg: Prologue.svg(id, T) };
+    if (id !== 'letters') assert.ok(Array.isArray(Prologue.ringOf(id, T)), id + ': where "Look closer" sits (the letters are the last rung)');
+    assert.ok(/^<svg class="pl-svg" viewBox="0 0 \d+ \d+"/.test(out.svg), id);
+    assert.ok(Buffer.byteLength(out.svg) <= 16384, id + ' is ' + Buffer.byteLength(out.svg) + ' bytes');
+    assert.ok(!/#[0-9a-f]{3,6}\b|rgb\(/i.test(out.svg), id + ' uses a hard-coded colour');
+    assert.ok(/class="pl-sb"/.test(out.svg), id + ' has a scale bar');
+    assert.ok(T.alt[id], id + ' has alt text');
   }
-  assert.ok(Prologue.svg('body', T).indexOf('>1 m<') > 0);
-  const pan = Prologue.svg('pancreas', T);
-  assert.ok(pan.indexOf('>10 cm<') > 0 && pan.indexOf('>100 µm<') > 0, 'pancreas, then an islet: two scale bars');
-  assert.ok(pan.indexOf('>' + T.labels.islet + '<') > 0);
-  assert.ok(Prologue.svg('betaCell', T).indexOf('>' + T.labels.insulinGene + '<') > 0);
-  const rib = Prologue.svg('ribosome', T);
-  for (const k of ['ribosome', 'mRNA', 'chain']) assert.ok(rib.indexOf('>' + T.labels[k] + '<') > 0, k);
-  assert.ok(rib.indexOf('>30 nm<') > 0);
+  // The sequence pictures (BTC.SeqScene) and part 2's: every scene's picture draws, in palette tokens, with its words.
+  const SS = require('../src/app/btc-seqscene.js');
+  const P2 = LV.validate(require('../src/levels/btc-level-p2.js'));
+  for (const def of [P, P2]) {
+    for (const sc of def.scenes) {
+      const kind = sc.picture || (sc.activity && sc.activity.kind);
+      if (!kind || sc.rung || kind === 'pairs' || kind === 'cards') continue;
+      const svg = SS.svg(kind, { step: sc.step || 0 }, def.text.labels || {});
+      assert.ok(/^<svg class="pl-svg"/.test(svg), def.id + ' ' + sc.id + ' ' + kind);
+      assert.ok(!/#[0-9a-f]{3,6}\b|rgb\(/i.test(svg), def.id + ' ' + sc.id + ' uses a hard-coded colour');
+      assert.ok(!/undefined|NaN/.test(svg), def.id + ' ' + sc.id + ' ' + kind + ' has an undefined word or number');
+    }
+  }
+  // The first letters shown are the insulin gene's own (computed, never typed).
+  const SEQ = require('../src/shared/btc-seq.js'), DATA = require('../src/shared/btc-seqdata.js');
+  const c4 = P.scenes.find((x) => x.id === 'c4').activity;
+  assert.equal(String(c4.expect), SEQ.transcribe(DATA.INS.mRNA).slice(0, 6));
+  assert.equal(String(c4.template), SEQ.complement(DATA.INS.mRNA.slice(0, 6)));
   // Labels are escaped.
-  assert.ok(Prologue.svg('body', { labels: { pancreas: 'a<b' }, scale: { m1: '1 m' } }).indexOf('a&lt;b') > 0);
+  const esc = Prologue.svg('pancreas', Object.assign({}, T, { labels: Object.assign({}, T.labels, { pancreas: 'a<b' }) }));
+  assert.ok(esc.indexOf('a&lt;b') > 0 && esc.indexOf('a<b') < 0);
 });
+

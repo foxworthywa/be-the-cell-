@@ -107,9 +107,11 @@
     const follower = opts.follower || null, lacI = view.lac && opts.lacI >= 0 ? opts.lacI : -1;
     p.focus = f;
     p.genes = NGv;
-    // One shared protein scale, so dot counts compare honestly across genes (LacI is counted in tetramers).
+    // One shared protein scale, so dot counts compare honestly across genes. Proteins are counted in working
+    // machines, as every count the student sees: a four-chain LacZ is one glyph (LacI is counted in tetramers).
+    const machines = (gi) => (gi.oligomer > 1 ? gi.protein / gi.oligomer : gi.protein);
     let maxProt = 0;
-    for (let i = 0; i < NGv; i++) if (i !== lacI && genes[i].protein > maxProt) maxProt = genes[i].protein;
+    for (let i = 0; i < NGv; i++) if (i !== lacI && machines(genes[i]) > maxProt) maxProt = machines(genes[i]);
     p.P = D.scaleFor(maxProt, 120, p.P || 0);
     p.polyN = D.polysomeScale(genes[f].ribosomes, p.polyN || 1);
     p.ribN = 100; p.atpN = 1e5; p.aaN = 1e5; p.lacN = 1e5;
@@ -141,9 +143,9 @@
           // The repressor: every tetramer not sitting on an operator, one glyph each.
           p.protein[i] = Math.min(400, view.lac.lacIFree); p.hollow[i] = 0;
         } else {
-          // lacZ is drawn as tetramers at P/4 each, so one glyph still stands for P monomers.
-          p.protein[i] = glyphs(gi.protein, p.P);
-          p.hollow[i] = p.protein[i] === 0 && gi.proteinRounded > 0 ? 1 : 0;
+          // One glyph stands for P machines (LacZ: P four-chain enzymes).
+          p.protein[i] = glyphs(machines(gi), p.P);
+          p.hollow[i] = p.protein[i] === 0 && Math.round(machines(gi)) > 0 ? 1 : 0;
         }
         // A unit's mRNA is one molecule list: its first gene draws it, once.
         const fol = follower && follower[i];
@@ -435,7 +437,14 @@
       this.dirty = true;
     }
 
-    setVisible(v) { this.visible = v; if (v) { this.dirty = true; this.resize(); } }
+    setVisible(v) {
+      this.visible = v;
+      if (!v) return;
+      this.dirty = true; this.resize();
+      // Shown in the middle of a relayout (panels being remounted), the stage may not have its final size yet,
+      // and the observer reports no change once it has: measure again next frame.
+      if (typeof requestAnimationFrame === 'function') requestAnimationFrame(() => this.resize());
+    }
 
     /** The screen's gene model (the app's; a stand-in that shows everything by name when there is none). */
     model() {
@@ -1244,7 +1253,7 @@
       if (k === this.lastLabelKey) return;
       this.lastLabelKey = k;
       this.canvas.setAttribute('aria-label', F.fill(C.cell.canvasLabel, {
-        sentence, name: words.name, m: F.count(gv.mRNA), n: F.count(gv.nascent), p: F.count(gv.proteinRounded),
+        sentence, name: words.name, m: F.count(gv.mRNA), n: F.count(gv.nascent), p: F.count(F.machines(gv)),
       }));
     }
 
@@ -1283,7 +1292,7 @@
       LY.setText(this.fb.name, words.name);
       LY.setText(this.fb.sym, words.symbol);
       LY.setText(this.fb.countsM, F.fill(C.focus.counts, { m: F.count(gv.mRNA), n: F.count(gv.nascent) }));
-      LY.setText(this.fb.countsP, F.fill(C.focus.protein, { p: F.count(gv.proteinRounded) }));
+      LY.setText(this.fb.countsP, F.fill(C.focus.protein, { p: F.count(F.machines(gv)) }));
       const label = F.fill(C.focus.buttonLabel, { name: words.name });
       if (this.fb.btn.getAttribute('aria-label') !== label) this.fb.btn.setAttribute('aria-label', label);
       const pl = F.fill(C.focus.promoterLabel, { name: words.name });

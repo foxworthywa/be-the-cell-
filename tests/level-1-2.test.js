@@ -1,8 +1,7 @@
-// Level 1.2, "One gene, many copies" (LEVELS §7.2; §12.1 L-4, L-5, L-11): the reference and
-// every misconception solution meet their expectations on every variant, the calibration that
-// produced the level's constants passed its own checks, the demo is the scripted test run, the
-// deadline locks the dial and the settle shows what the leftover mRNA still makes, and the
-// level narrator rule only speaks when it is true.
+// Level 1.2, "Milk is on its way" (PROLOGUE §6.2; LEVELS §12.1 L-4, L-5, L-11): the variants and their cells,
+// every solution on every variant, the calibration behind the level's constants, the watch (one copy read
+// into transporters until it is broken down; the gene off, the copies still read), the milk's arrival at
+// minute D (the switch locks, a story beat, growth on milk sugar), the HUD and the level's narrator rules.
 'use strict';
 const test = require('node:test');
 const assert = require('node:assert/strict');
@@ -12,43 +11,71 @@ const RUN = require('../src/game/btc-level-runner.js');
 const LC = require('../src/levels/btc-level-constants.js');
 const N = require('../src/shared/btc-narrate.js');
 const OBS = require('../src/engine/btc-observe.js');
+const F = require('../src/app/btc-format.js');
 const { Cell } = require('../src/engine/btc-cell.js');
 const def = LV.validate(require('../src/levels/btc-level-1-2.js'));
+const L = LC.l12, ECO = LC.economy;
 
-/** n variant seeds per variant (T, tOff), found as the app draws them (attempt indices from 0). */
+/** n variant seeds per target T, found as the app draws them (attempt indices from 0). */
 function sample(n) {
   const groups = {};
   for (let i = 0; i < 2000; i++) {
     const vs = K.variantSeed(i, def.id, 0);
-    const v = def.variant(vs), k = 'T' + v.T + '/tOff' + v.tOff;
+    const k = 'T' + def.variant(vs).T;
     const g = groups[k] || (groups[k] = []);
     if (g.length < n) g.push(vs);
-    if (Object.keys(groups).length === 9 && Object.values(groups).every((x) => x.length >= n)) break;
+    if (Object.keys(groups).length === L.T.length && Object.values(groups).every((x) => x.length >= n)) break;
   }
   return groups;
 }
 
-test('L-3: 9 variants (T 400/500/600 × tOff 4/5/6), deterministic, JSON-safe; mPar from the calibrated copies per mRNA; D from the calibration', () => {
+/** A runner brought to its run (the story read, the watch played as a student would). */
+function toRun(vs) {
+  const r = new RUN.LevelRunner({ def, variantSeed: vs, attempt: 1 }).start();
+  for (let guard = 0; r.phase !== 'run' && guard < 100; guard++) {
+    if (r.beat) { r.storySkip(); r.next(); continue; }
+    if (r.phase === 'watch') RUN.game.playWatch(r, {}, 40000);
+    assert.ok(r.next().ok, 'Continue in ' + r.phase);
+  }
+  assert.equal(r.phase, 'run');
+  while (r.beat) { r.storySkip(); r.next(); }             // the story as the run opens
+  return r;
+}
+
+test('L12-1: three targets from the calibration, each with its milk minute D and Expert ceiling; deterministic, JSON-safe; the cells', () => {
   const seen = new Set();
-  for (let s = 0; s < 500; s++) {
+  for (let s = 0; s < 300; s++) {
     const vs = K.variantSeed(s, def.id, 0);
     const v = def.variant(vs);
     assert.deepEqual(def.variant(vs), v);
     assert.deepEqual(JSON.parse(JSON.stringify(v)), v);
-    assert.ok([400, 500, 600].includes(v.T) && [4, 5, 6].includes(v.tOff));
-    assert.equal(v.mPar, Math.round((1.7 * v.T) / LC.l12.ppm));
-    assert.equal(v.D, LC.l12.D[v.T]);
-    seen.add(v.T + '/' + v.tOff);
-    for (const role of ['task', 'demo']) {
-      const c = new Cell(def.config(v, role));
-      assert.deepEqual(c.config.variant, { levelId: '1.2', content: def.version, seed: vs, T: v.T, tOff: v.tOff, D: v.D, mPar: v.mPar });
+    assert.ok(L.T.includes(v.T), 'T ' + v.T);
+    assert.equal(v.D, L.D[v.T]);
+    assert.equal(v.tMax, L.tMax[v.T]);
+    seen.add(v.T);
+    if (s < 20) {
+      const task = def.config(v, 'task'), watch = def.config(v, 'watch');
+      // The run: at minute D the glucose goes, milk sugar comes and the switch locks; the watch cell has no schedule.
+      assert.deepEqual(task.schedule, [
+        { tick: v.D * 60, cmd: { type: 'setMedium', glucose_mM: 0, lactose_mM: ECO.lactose_mM } },
+        { tick: v.D * 60, cmd: { type: 'setControls', controls: 'locked' } },
+      ]);
+      assert.equal(watch.schedule, undefined);
+      const c = new Cell(task), g = c.observe().geneById;
+      assert.deepEqual(c.config.variant, { levelId: '1.2', content: def.version, seed: vs, T: v.T, D: v.D, tMax: v.tMax });
+      assert.equal(g.lacY.protein, 0, 'no lactose transporters yet');
+      assert.equal(g.lacY.level, 'off');
+      // The lactose splitter is already made, and counted in whole four-chain enzymes where the student sees it.
+      assert.ok(Math.abs(g.lacZ.protein - L.lacZReady) <= 1, 'LacZ chains ' + g.lacZ.protein);
+      assert.equal(F.machines(g.lacZ), Math.round(g.lacZ.protein / 4));
     }
   }
-  assert.equal(seen.size, 9);
+  assert.equal(seen.size, L.T.length);
+  assert.deepEqual(L.T.slice().sort((a, b) => a - b), L.T, 'the targets rise');
 });
 
-test('L-4/L-5: every solution meets its expectation on every variant (3 seeds each; at least 2 of 3, and 90% overall)', (t) => {
-  const groups = sample(3);
+test('L12-2 (L-4/L-5): every solution meets its expectation on every target (5 seeds each; at least 4 of 5, and its rate overall)', (t) => {
+  const groups = sample(5);
   const lines = [];
   for (const name of Object.keys(def.solutions)) {
     let met = 0, n = 0;
@@ -59,135 +86,147 @@ test('L-4/L-5: every solution meets its expectation on every variant (3 seeds ea
         const bad = RUN.game.checkExpect(def.solutions[name].expect, p.result);
         if (!bad.length) ok++; else lines.push(name + ' ' + k + ' seed ' + vs + ': ' + bad.join('; '));
       }
-      assert.ok(ok >= 2, `${name} on ${k}: met its expectation on ${ok} of 3 seeds`);
+      assert.ok(ok >= 4, `${name} on ${k}: met its expectation on ${ok} of 5 seeds (${lines.join(' | ')})`);
       met += ok; n += groups[k].length;
     }
     const need = def.solutions[name].expect.rate || 0.9;
-    assert.ok(met / n >= need, `${name}: ${met} of ${n}`);
+    assert.ok(met / n >= need, `${name}: ${met} of ${n} (${lines.join(' | ')})`);
   }
   t.diagnostic(lines.length ? 'misses (noise): ' + lines.join(' | ') : 'no misses');
 });
 
-test('§3.7 calibration: the constants file was calibrated on this engine and its pass rates meet the rules (reference ≥ 95% goal within par; misconceptions pass par ≤ 5%)', () => {
-  const R = LC.l12.passRates;
+test('L12-3 (§3.7): the constants were calibrated on this engine and their pass rates meet the rules', () => {
+  const R = L.passRates;
+  assert.equal(L.v, 2, 'the economy version of 1.2');
   assert.ok(LC.seeds >= 40, 'calibrated with ' + LC.seeds + ' seeds per variant');
-  assert.ok(R.reference.goalPar >= 0.95, 'reference ' + R.reference.goalPar);
+  assert.ok(R.reference.goalPar >= 0.95, 'reference goal within par on ' + R.reference.goalPar);
+  assert.ok(L.expertRef >= 0.9, 'the reference meets the Expert objective on ' + L.expertRef);
   for (const name of Object.keys(def.solutions)) {
     const e = def.solutions[name].expect;
     assert.ok(R[name], 'no pass rate for ' + name);
-    if ((e.par === false || e.goal === false) && typeof e.rate !== 'number') assert.ok(R[name].goalPar <= 0.05, name + ' passes par on ' + R[name].goalPar);
+    if (e.par === false || e.goal === false) assert.ok(R[name].goalPar <= 0.05, name + ' passes par on ' + R[name].goalPar);
     assert.ok(R[name].expect >= (e.rate || 0.9), name + ' meets its expect on ' + R[name].expect);
   }
-  // The demo mean passes the four shape features (the reference sketch), and each T is reached well before D.
-  for (const tOff of [4, 5, 6]) {
-    const f = K.sketch.features(K.sketch.resample(LC.l12.demoMean[tOff].map((y, m) => [m, y])), { tOff });
-    assert.deepEqual([f.F1, f.F2, f.F3, f.F4], [true, true, true, true], 'demo mean, tOff ' + tOff);
+  // About twenty transporters per copy; every target is enough to live on milk sugar; the milk comes late enough for
+  // the target to be reached; Expert allows about a tenth over the target.
+  assert.ok(L.ppm >= 15 && L.ppm <= 25, 'transporters per copy ' + L.ppm);
+  assert.ok(L.T[0] >= L.Tenough, 'the lowest target ' + L.T[0] + ' vs enough ' + L.Tenough);
+  for (const T of L.T) {
+    assert.ok(L.D[T] >= 20 && L.D[T] <= 45, 'D ' + L.D[T]);
+    assert.ok(L.tMax[T] > T && L.tMax[T] <= 1.2 * T, 'Tmax ' + L.tMax[T]);
   }
-  for (const T of [400, 500, 600]) assert.ok(LC.l12.reach[T].max <= LC.l12.D[T] - 1, 'T ' + T + ' reached at ' + LC.l12.reach[T].max + ' min');
+  assert.ok(L.parFree < L.parX, 'efficiency falls from parFree to par at parX');
+  assert.ok(L.lacZReady >= 4 * 1000, 'LacZ ready: ' + L.lacZReady + ' chains');
 });
 
-test('the demo is the scripted test run: ×4 at 0, off at tOff, controls locked; its copies per mRNA and curve feed the Expert number and the sketch accuracy', () => {
-  const vs = sample(1)['T500/tOff5'][0];
-  const r = new RUN.LevelRunner({ def, variantSeed: vs, attempt: 1 }).start();
-  while (r.phase !== 'predict') { if (r.beat) r.storySkip(); r.next(); }
-  assert.equal(r.currentItem().id, 'ppm', 'the Expert number comes before the sketch');
-  assert.ok(r.lock('ppm', 21).ok);
-  const sketch = LC.l12.demoMean[5].map((y, m) => [m, Math.round(y)]);
-  assert.ok(r.lock('sketch', sketch).ok);
-  assert.deepEqual(r.answers.sketch.features, [true, true, true, true]);
-  r.next();
-  assert.equal(r.phase, 'demo');
-  const cell = r.startDemo();
-  assert.equal(cell.command({ type: 'setPromoter', gene: 'lacY', level: 1 }).error, 'locked', 'the student only watches');
-  let offAt = -1;
-  while (!r.halted()) {
-    cell.step();
-    const g = cell.observe().geneById.lacY;
-    if (offAt < 0 && g.level === 'off' && cell.tick > 1) offAt = cell.tick;
-  }
-  assert.equal(offAt, 5 * 60 + 1, 'off from minute 5');
-  assert.equal(cell.tick, 20 * 60, 'the demo stops at 20 min');
-  assert.equal(r.checkDemo(), true);
-  const d = r.demo.result;
-  assert.equal(d.curve.length, 81);
-  assert.ok(d.ppm > 15 && d.ppm < 28, 'copies per mRNA ' + d.ppm);
-  assert.ok(d.curve[80] > d.curve[20] * 1.3, 'LacY kept rising after the switch-off');
-  assert.equal(typeof r.answers.ppm.answer, 'number');
-  assert.equal(r.answers.ppm.answer, d.ppm, 'the Expert number is judged against this demo');
-  assert.equal(r.answers.ppm.correct, Math.abs(21 - d.ppm) / d.ppm <= 0.3);
-});
-
-test('the deadline locks the dial; a met goal runs a 10-min settle and ends "done"; a missed one ends "deadline" at D', () => {
-  const vs = sample(1)['T400/tOff4'][0];
-  const v = def.variant(vs);
-  const play = (level) => {
+test('L12-4: the watch — the outlined copy is read into about twenty transporters and broken down; switched off, the copies left are still read', () => {
+  for (const vs of sample(1)['T' + L.T[1]].concat(sample(1)['T' + L.T[0]])) {
     const r = new RUN.LevelRunner({ def, variantSeed: vs, attempt: 1 }).start();
-    const c = r.run.cell;
-    r.phaseIndex = def.phases.indexOf('run');
-    c.command({ type: 'setPromoter', gene: 'lacY', level });
-    let rejectedAfterD = null;
-    while (!r.run.endReason) {
-      if (c.tick === v.D * 60 + 5) rejectedAfterD = c.command({ type: 'setPromoter', gene: 'lacY', level: 'off' }).error || 'accepted';
-      c.step();
-    }
-    return { r, rejectedAfterD };
-  };
-  const on = play(4);
-  assert.equal(on.r.run.endReason, 'done');
-  assert.equal(on.r.run.endTick, (v.D + 10) * 60);
-  assert.equal(on.rejectedAfterD, 'locked');
-  assert.equal(on.r.monitorResult.goal, true);
-  assert.equal(on.r.monitorResult.onAtDeadline, true);
-  assert.equal(on.r.beatLines('outro'), def.story.extra.keptOn, 'the gene was on at the deadline: the other outro');
-  const weak = play(0.25);
-  assert.equal(weak.r.run.endReason, 'deadline');
-  assert.equal(weak.r.run.endTick, v.D * 60);
-  assert.equal(weak.r.monitorResult.goal, false);
-  assert.equal(weak.r.beatLines('outro'), def.story.extra.missed, 'a missed target: the outro does not say the gene was switched off');
+    while (r.phase !== 'watch') { if (r.beat) r.storySkip(); r.next(); }
+    const seen = { left: 0 };
+    const gates = RUN.game.playWatch(r, {
+      watch: {
+        every: 1,
+        policy(view, tick, api, id) { if (id === 'w2b') seen.left = Math.max(seen.left, view.geneById.lacY.mRNA); },
+      },
+    }, 40000);
+    const m = r.watchMon.save();
+    assert.ok(gates['w1b:until'] > 0 && gates.w1b > gates['w1b:until'], 'the first copy is outlined, then read until it is gone');
+    assert.equal(m.alive, false, 'the outlined copy is broken down when w1b opens');
+    // One copy's life is chance (its break-down is random); the calibrated mean is about twenty transporters per copy.
+    assert.ok(m.n >= 1 && m.n <= 150, 'read into ' + m.n + ' transporters');
+    assert.ok(m.life > 0, 'the copy lasted ' + m.life + ' s');
+    assert.ok(m.k > 0, 'copies were made meanwhile: ' + m.k);
+    assert.ok(seen.left > 0, 'copies were still there after the switch-off');
+    assert.ok(m.a > 0, 'transporters still arrived after the switch-off: ' + m.a);
+    assert.ok(gates.w2b > gates.w1b, 'w2b opens when the last copy is gone');
+    const g = r.watchCell.observe().geneById.lacY;
+    assert.equal(g.mRNA + g.nascent, 0);
+  }
 });
 
-test('HUD texts (run, settle, demo; long and short forms) are filled for every variant and pass the level lint', () => {
-  for (let s = 0; s < 100; s++) {
+test('L12-5: at minute D the milk arrives — the glucose goes, the switch locks, a story beat holds the run; it ends 20 min later with growth on milk sugar', () => {
+  // A seed on which the reference meets the target (it misses on about 2% of runs: one copy more or less is chance).
+  const vs = sample(5)['T' + L.T[2]].find((s) => RUN.game.playHeadless(def, { variantSeed: s, solution: 'reference', today: () => '2026-01-01' }).runner.monitorResult.goal);
+  const r = toRun(vs), v = r.variant, c = r.run.cell;
+  assert.equal(c.command({ type: 'setPromoter', gene: 'lacY', level: 4, source: 'user' }).error, undefined, 'the switch works before D');
+  let lockedAfterD = null, beatAt = -1, lactoseAfter = -1, glucoseAfter = -1;
+  while (!r.run.endReason) {
+    if (r.beat && r.beat.mid) {
+      if (beatAt < 0) { beatAt = c.tick; assert.equal(r.beat.name, 'milk'); assert.ok(r.halted(), 'the beat holds the run'); }
+      r.storySkip(); r.next();
+    }
+    const g = c.observe().geneById.lacY;
+    // The reference's rule: off when the transporters plus about ppm per copy still here reach the target.
+    if (c.tick < v.D * 60 && g.level !== 'off' && g.protein + L.ppm * (g.mRNA + g.nascent) >= L.refMargin * v.T) {
+      c.command({ type: 'setPromoter', gene: 'lacY', level: 'off', source: 'user' });
+    }
+    if (beatAt === c.tick) {
+      // As the beat opens, the glucose is already gone and the switch already locked.
+      assert.equal(c.observe().env.glucose_mM, 0);
+      assert.equal(c.command({ type: 'setPromoter', gene: 'lacY', level: 4, source: 'user' }).error, 'locked');
+    }
+    if (c.tick === v.D * 60 + 5) {
+      lockedAfterD = c.command({ type: 'setPromoter', gene: 'lacY', level: 4, source: 'user' }).error || 'accepted';
+      const env = c.observe().env;
+      lactoseAfter = env.lactose_mM; glucoseAfter = env.glucose_mM;
+    }
+    c.step();
+  }
+  assert.equal(beatAt, v.D * 60 + 1, 'the milk beat opens at minute D, once its commands have run');
+  assert.equal(lockedAfterD, 'locked');
+  assert.equal(glucoseAfter, 0);
+  assert.equal(lactoseAfter, ECO.lactose_mM);
+  assert.equal(r.run.endReason, 'done');
+  assert.equal(r.run.endTick, (v.D + 20) * 60);
+  const m = r.monitorResult;
+  assert.equal(m.goal, true);
+  assert.ok(m.growth >= 0.8 && m.growth <= 1.3, 'growth on milk sugar ' + m.growth);
+  // The result sheet leads with that growth, then the copies against what was needed.
+  const comp = def.score(v, m, { debrief: {} });
+  const lead = def.resultLead(v, comp), lines = def.resultLines(v, comp);
+  assert.match(lead[0], /^On milk sugar the cell grew at \d+% of its glucose speed\.$/);
+  assert.match(lines[0], /copies/);
+});
+
+test('L12-6: HUD texts (watch, run, milk; long and short forms) are filled for every target and pass the level lint', () => {
+  for (let s = 0; s < 60; s++) {
     const v = def.variant(K.variantSeed(s, def.id, 0));
-    const states = [null, { tick: 0, count: 4, m: 0 }, { tick: 400, count: v.T + 10, m: 30, reached: true },
-      { tick: v.D * 60 + 30, count: 900, m: 40, reached: true, settle: true }, { demo: true, tick: 700, count: 800, m: 44 }];
+    const states = [null, { tick: 0, count: 0, m: 0 }, { tick: 600, count: 1404, m: 104, made: 1500 },
+      { tick: 1800, count: v.T + 10, m: 330, made: v.T * 1.3, reached: true }, { tick: v.D * 60 + 30, count: v.T, m: 330, milk: true, reached: true },
+      { watch: true, step: 'w1', tick: 0, m: 0 }, { watch: true, step: 'w1b', watching: true, alive: true, n: 12, tick: 200, m: 40 },
+      { watch: true, step: 'w1b', watching: true, alive: false, n: 37, tick: 600, m: 125 }, { watch: true, step: 'w2b', offTick: 590, a: 1125, tick: 800, m: 134 }];
     for (const st of states) {
       const h = def.hud(v, st);
       for (const text of [h.goal.text, h.goal.short, h.timer.text, h.timer.short, h.counter.text, h.counter.short].filter((x) => x !== undefined)) {
         assert.ok(text.length <= 40 && !/[{}!]/.test(text) && !N.TELEOLOGY.test(text), text);
       }
+      if (st && !st.watch) assert.ok(h.goal.short.length <= 20, 'the short goal fits a phone: ' + h.goal.short);
     }
   }
 });
 
-test('narrator rule l12.settle speaks only after the deadline, with lacY off and its mRNA still there, and it is reached', () => {
-  const rule = def.narratorRules.find((x) => x.key === 'l12.settle');
+test('L12-6: the level narrator rules speak only when true — copies read, copies left after the switch-off, the milk', () => {
+  const rules = def.narratorRules;
   const facts = OBS.createFacts();
-  const scenario = (vs, script) => {
-    const r = new RUN.LevelRunner({ def, variantSeed: vs, attempt: 1 }).start();
-    const c = r.run.cell, v = r.variant;
-    let fired = 0;
-    while (!r.run.endReason) {
-      script(c, v);
-      c.step();
-      const lv = { phase: 'run', monitor: r.run.monitor.save(), variant: v };
-      if (rule.when(OBS.facts(c, facts), null, c.tick, lv)) {
-        fired++;
-        const g = c.observe().geneById.lacY;
-        assert.ok(c.tick >= v.D * 60 && g.level === 'off' && g.mRNA + g.nascent > 0, 'l12.settle at tick ' + c.tick);
-      }
+  const vs = sample(1)['T' + L.T[0]][0];
+  const r = toRun(vs), c = r.run.cell, v = r.variant;
+  const said = {};
+  c.command({ type: 'setPromoter', gene: 'lacY', level: 4, source: 'user' });
+  while (!r.run.endReason) {
+    if (r.beat && r.beat.mid) { r.storySkip(); r.next(); }
+    if (c.tick === 20 * 60) c.command({ type: 'setPromoter', gene: 'lacY', level: 'off', source: 'user' });
+    c.step();
+    const lv = { phase: 'run', monitor: r.run.monitor.save(), variant: v };
+    const f = OBS.facts(c, facts), g = c.observe().geneById.lacY;
+    for (const rule of rules) {
+      if (!rule.when(f, null, c.tick, lv)) continue;
+      said[rule.key] = (said[rule.key] || 0) + 1;
+      if (rule.key === 'l12.leftover') assert.ok(g.level === 'off' && g.mRNA > 0, 'leftover at ' + c.tick);
+      if (rule.key === 'l12.read') assert.ok(g.level !== 'off' && g.mRNA > 0, 'read at ' + c.tick);
+      if (['l12.milk', 'l12.fed', 'l12.short'].includes(rule.key)) assert.ok(c.tick >= v.D * 60, rule.key + ' before the milk at ' + c.tick);
     }
-    return fired;
-  };
-  const vs = sample(1)['T400/tOff4'][0];
-  // ×2, switched off a minute before the deadline: after it, the leftover mRNA is still read.
-  const late = scenario(vs, (c, v) => {
-    if (c.tick === 0) c.command({ type: 'setPromoter', gene: 'lacY', level: 2 });
-    if (c.tick === (v.D - 1) * 60) c.command({ type: 'setPromoter', gene: 'lacY', level: 'off' });
-  });
-  assert.ok(late > 0, 'the settle line is reachable');
-  // Kept on at ×4 through the deadline: new mRNA is still being made, so the line must not speak.
-  const on = scenario(vs, (c) => { if (c.tick === 0) c.command({ type: 'setPromoter', gene: 'lacY', level: 4 }); });
-  assert.equal(on, 0);
+  }
+  for (const key of ['l12.read', 'l12.leftover', 'l12.milk']) assert.ok(said[key] > 0, key + ' is reachable');
   assert.deepEqual(LV.lintText(def).filter((x) => /narratorRules/.test(x.where)), []);
 });

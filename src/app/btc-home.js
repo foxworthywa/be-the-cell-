@@ -25,7 +25,8 @@
   const H = C.home;
 
   const textAt = (def, key) => String(key).split('.').reduce((x, k) => (x && typeof x === 'object' ? x[k] : undefined), def.text);
-  const nameOf = (def) => F.fill(def.id === 'P' ? H.prologueName : H.levelName, { id: def.id, title: textAt(def, def.title) });
+  // The opening's two parts: "Prologue 1 · How a gene becomes a machine", "Prologue 2 · A cell's economy" (PROLOGUE §2.1).
+  const nameOf = (def) => F.fill(def.prologue ? H.prologueName : H.levelName, { id: def.id, n: def.prologue || '', title: textAt(def, def.title) });
 
   /** The list model: rows with name, challenge, status chip and minutes; the Continue row; the card count. */
   function model(levels, progress) {

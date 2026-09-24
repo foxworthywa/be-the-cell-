@@ -14,6 +14,9 @@ const LC = require('../src/levels/btc-level-constants.js');
 const { ENGINE_VERSION } = require('../src/engine/btc-cell.js');
 const K = require('../src/game/btc-level-kit.js');
 const MC = require('../src/game/btc-misconceptions.js');
+const SEQ = require('../src/shared/btc-seq.js');
+const SEQDATA = require('../src/shared/btc-seqdata.js');
+const MRNAWatch = require('../src/shared/btc-mrnawatch.js');
 
 const LEVEL_DIR = path.join(ROOT, 'src', 'levels');
 const levelFiles = fs.readdirSync(LEVEL_DIR).filter((f) => /^btc-level-[\w-]+\.js$/.test(f) && f !== 'btc-level-constants.js').sort();
@@ -42,7 +45,9 @@ test('L-11: every constant a level file reads exists (500 variants and their con
     const ctx = vm.createContext({});
     vm.runInContext('var self = this;', ctx);
     // A plain copy: the shipped constants are frozen, and a proxy must not wrap a frozen object's properties.
-    ctx.self.BTC = { levelKit: K, misconceptions: MC, levelConstants: strict(JSON.parse(JSON.stringify(LC)), 'LC') };
+    ctx.self.BTC = { levelKit: K, misconceptions: MC, levelConstants: strict(JSON.parse(JSON.stringify(LC)), 'LC'),
+      // The opening reads the insulin gene (BTC.seq over BTC.seqdata); 1.2 watches one copy (BTC.MRNAWatch).
+      seq: SEQ, seqdata: SEQDATA, MRNAWatch };
     vm.runInContext(fs.readFileSync(path.join(LEVEL_DIR, f), 'utf8'), ctx, { filename: f });
     const defs = ctx.self.BTC.levelDefs;
     const ids = Object.keys(defs);
@@ -50,8 +55,10 @@ test('L-11: every constant a level file reads exists (500 variants and their con
     const def = defs[ids[0]];
     for (let s = 0; s < 500; s++) {
       const v = def.variant(K.variantSeed(s, def.id, 0));
-      for (const role of ['task', 'demo', 'par']) def.config(v, role, { deviceSeed: s, design: null });
+      for (const role of ['task', 'demo', 'par', 'watch']) def.config(v, role, { deviceSeed: s, design: null });
       def.labConfig(v, { phase: 'run', revealed: {} });
+      if (def.watch) def.labConfig(v, { phase: 'watch', revealed: {}, step: def.watch.steps[def.watch.steps.length - 1].id });
+      if (def.textVars) def.textVars(v);
     }
   }
   // The strict view catches a missing constant (negative control).

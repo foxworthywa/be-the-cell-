@@ -17,17 +17,18 @@
   'use strict';
 
   const LIST = [
-    ['DNA_DIRECT', 'DNA acts directly or "makes" the trait', ['P', '1.1']],
-    ['ENERGY_FIRST', 'Food is energy by itself; ATP comes before the machines', ['1.1']],
+    ['DNA_DIRECT', 'DNA acts directly or "makes" the trait', ['P', 'P2', '1.1']],
+    ['ENERGY_FIRST', 'Food is energy by itself; ATP comes before the machines', ['P2', '1.1']],
+    ['MEMBRANE_OPEN', 'Molecules such as glucose cross the membrane by themselves', ['P']],
     ['PROTEIN_AS_FOOD', 'Proteins are food', ['1.1']],
     ['PROTEIN_AS_MATERIAL', 'Proteins are material, not machines', ['1.1']],
     ['PROTEIN_LOCATION', 'A protein works wherever it is', ['1.1']],
     ['MIDDLEMAN', 'mRNA is a pointless middleman', ['1.2']],
     ['PROTEIN_SELF_COPY', 'Proteins copy themselves', ['1.2']],
     ['DELAY_MISATTRIBUTED', 'The switch itself is slow', ['1.2']],
-    ['MOLECULES_LAST', 'Once made, molecules last', ['1.4']],
+    ['MOLECULES_LAST', 'Once made, molecules last', ['1.2', '1.4']],
     ['INSTANT', 'Changes happen at once', ['1.2', '1.4']],
-    ['CELL_DECIDES', 'The cell "decides"; someone is in charge', ['1.1', '1.2', '1.4', '1.7']],
+    ['CELL_DECIDES', 'The cell "decides"; someone is in charge', ['P', 'P2', '1.1', '1.2', '1.4', '1.7']],
     ['COMMANDER', 'The player runs the cell during the run', ['1.7']],
     ['RIBOSOME_DECIDES', 'Ribosomes choose what to read', ['1.7']],
     ['REPRESSOR_AS_ACTIVATOR', 'A repressor is needed to switch genes on', ['1.7']],

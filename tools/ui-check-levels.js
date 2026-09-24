@@ -1,6 +1,6 @@
 // Browser checks for the levels (LEVELS.md §12.2, LV-1, LV-3, LV-4, LV-5, LV-6, LV-7, LV-8, LV-9,
-// and the published codes page), called by tools/ui-check.js. The Prologue (LV-2) gets its
-// checks with its own build step.
+// and the published codes page), called by tools/ui-check.js. The opening (both parts; LV-2 before)
+// has its own checks in tools/ui-check-opening.js (docs/PROLOGUE.md §10.2, BO-1 … BO-4).
 //
 // Every level screen is checked at 360 × 740 (touch) and most at 1280 × 800 (no touch): no
 // console errors, no request off the origin, no horizontal scroll, the document does not
@@ -93,8 +93,8 @@ async function run(browser, port, OUT, check) {
     const probs = [];
     const shot = shotter(s, 'home', probs);
     const rows = await s.page.evaluate(() => Array.from(document.querySelectorAll('.level-row')).map((b) => b.getAttribute('data-level')));
-    const order = ['P', '1.1', '1.2', '1.4', '1.7'];
-    check('LV-1 home lists the Prologue, 1.1, 1.2, 1.4 and 1.7 in order', order.every((id) => rows.indexOf(id) >= 0) && order.every((id, k) => k === 0 || rows.indexOf(order[k - 1]) < rows.indexOf(id)), rows.join(', '));
+    const order = ['P', 'P2', '1.1', '1.2', '1.4', '1.7'];
+    check('LV-1 home lists Prologue 1, Prologue 2, 1.1, 1.2, 1.4 and 1.7 in order', order.every((id) => rows.indexOf(id) >= 0) && order.every((id, k) => k === 0 || rows.indexOf(order[k - 1]) < rows.indexOf(id)), rows.join(', '));
     await shot('home');
     await s.page.locator('[data-action="lab"]').click();
     await paint(s.page);
@@ -107,97 +107,97 @@ async function run(browser, port, OUT, check) {
     await s2.context.close();
   }
 
-  // --- LV-4: level 1.2 ------------------------------------------------------------------------------
+  // --- LV-4: level 1.2 (docs/PROLOGUE.md §6.2), by taps: the watch, the Try with the milk at minute D, the result, Explain -----
   for (const vp of [[360, 740], [1280, 800]]) {
     const touch = vp[0] < 1000;
-    const s = await openLevel(browser, port, vp, '?test=1&seed=1&level=1.2', { touch });
+    const s = await openLevel(browser, port, vp, '?test=1&seed=1&level=1.2&v=000C1S', { touch });
     const page = s.page, probs = [];
     const shot = shotter(s, '1.2', probs);
-    await shot('story');
-    while ((await L(page, 'phase')) === 'intro') await L(page, 'next');
-    await shot('task');
-    await L(page, 'next');
-    await shot('predict-expert-number');
-    await L(page, 'answer', 'ppm', 21);
-    // The sketch: Done disabled before full coverage; a scripted stroke with touch (or the mouse on a laptop).
-    const done = page.locator('[data-action="sketch-done"]');
-    const disabled0 = await done.isDisabled();
-    const box = await page.locator('.sketch-canvas').first().boundingBox();
-    const map = await page.evaluate(() => { const p = window.__btc.app.views.levelUI.sketch.plot; return { x0: p.x0, x1: p.x1, y0: p.ymap.y0, y1: p.ymap.y1 }; });
-    const X = (min) => box.x + map.x0 + (min / 20) * (map.x1 - map.x0);
-    const Y = (n) => box.y + map.y1 - (n / 2000) * (map.y1 - map.y0);
-    const curve = (m) => (m < 0.8 ? 5 : m < 6 ? 5 + (m - 0.8) * 90 : 473 + 700 * (1 - Math.exp(-(m - 6) / 3.5)));
-    const cdp = touch ? await s.context.newCDPSession(page) : null;
-    const stroke = async (from, to) => {
-      const n = 30;
-      if (cdp) {
-        await cdp.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ x: X(from), y: Y(curve(from)) }] });
-        for (let i = 1; i <= n; i++) { const m = from + ((to - from) * i) / n; await cdp.send('Input.dispatchTouchEvent', { type: 'touchMove', touchPoints: [{ x: X(m), y: Y(curve(m)) }] }); }
-        await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
-      } else {
-        await page.mouse.move(X(from), Y(curve(from)));
-        await page.mouse.down();
-        for (let i = 1; i <= n; i++) { const m = from + ((to - from) * i) / n; await page.mouse.move(X(m), Y(curve(m))); }
-        await page.mouse.up();
+    const tap = async (sel) => { const l = page.locator(sel).first(); if (touch) await l.tap(); else await l.click(); await paint(page); };
+    const hudGoal = () => R(page, "document.querySelector('.hud-goal-text').textContent");
+    const intros = async (name) => {
+      for (let k = 0; k < 4 && (await R(page, "!!document.querySelector('.guide:not([hidden]) [data-action=\"intro-next\"]')")); k++) {
+        if (name && k === 0) await shot(name);
+        await tap('[data-action="intro-next"]');
       }
     };
-    await stroke(0, 11);
-    const disabledPartial = await done.isDisabled();
-    await shot('sketch-partial');
-    await stroke(11, 20);
-    const enabledFull = !(await done.isDisabled());
-    await shot('sketch-drawn');
-    check('LV-4 ' + s.tag + ' sketch: Done disabled until the drawing spans the graph', disabled0 && disabledPartial && enabledFull,
-      [disabled0, disabledPartial, enabledFull].join('/'));
-    await done.click();
-    await paint(page);
-    const demo = await R(page, "{ phase: window.__btc.app.test.level.phase(), overlay: !!window.__btc.app.views.graphs.plots.find((p) => p.spec.key === 'protein').plot.overlay, tab: window.__btc.app.tab }");
-    check('LV-4 ' + s.tag + ' the demo runs with the sketch over the Protein plot', demo.phase === 'demo' && demo.overlay, JSON.stringify(demo));
-    await L(page, 'runTicks', 540);
-    if (touch) await shot('demo-running');
-    await L(page, 'runTicks', 800);
-    const demoEnd = await R(page, "{ done: window.__btc.app.test.level.runner().demo.done, tick: window.__btc.cell.tick, sheet: !!document.querySelector('[data-action=\"demo-continue\"]'), features: document.querySelectorAll('.lv-features li').length }");
-    check('LV-4 ' + s.tag + ' the demo stops at 20 min and shows the sketch against it, feature by feature', demoEnd.done && demoEnd.tick === 1200 && demoEnd.sheet && demoEnd.features === 4, JSON.stringify(demoEnd));
-    await shot('demo-result');
-    await page.locator('[data-action="demo-continue"]').click();
-    await paint(page);
-    // The run: the HUD with the mRNA counter; the reference play through the Genes tab.
-    const hud = await page.evaluate(() => ({ h: document.getElementById('hud').getBoundingClientRect().height, stage: document.getElementById('stage').getBoundingClientRect().height, counter: document.querySelector('.hud-counter').textContent }));
-    check('LV-4 ' + s.tag + ' run: 44 px HUD with the mRNA counter (a unit on phones); canvas ≥ 220 px', hud.h === 44 && (touch ? /^\d+\/\d+ mRNA$/ : /mRNAs \d+ \/ \d+/).test(hud.counter) && (!touch || hud.stage >= 220), JSON.stringify(hud));
-    if (touch) await page.locator('[data-tab="genes"]:visible').first().click();
-    await page.locator('[data-gene="lacY"] .seg[data-key="4"]').click();
-    await L(page, 'runTicks', 1);
-    for (let i = 0; i < 200; i++) {
-      await L(page, 'runTicks', 10);
-      if (await R(page, "(() => { const g = window.__btc.cell.observe().geneById.lacY, T = window.__btc.app.test.level.runner().variant.T; return g.protein + 15 * g.mRNA + 20 * g.nascent >= 1.1 * T; })()")) break;
+    await shot('story');
+    while ((await L(page, 'phase')) === 'intro') await tap('.lv-next');
+    // The watch: one copy outlined and followed in the HUD; the gene off, the transporters since then counted.
+    let readInto = '', sinceOff = '', zoom = '';
+    for (let g = 0; g < 80 && (await L(page, 'phase')) === 'watch'; g++) {
+      const w = await R(page, 'window.__btc.app.test.level.watch.info()');
+      if (!w || w.done) break;
+      if (await R(page, "!!document.querySelector('.guide:not([hidden]) [data-action=\"intro-next\"]')")) { await tap('[data-action="intro-next"]'); continue; }
+      if (w.stage === 'guess') { await shot(w.id + '-guess'); await tap('.lv-option >> nth=1'); await tap('[data-action="guess-see"]'); continue; }
+      if (w.stage === 'act') { await tap('.tb-ctrl .seg[data-key="' + (w.act.expect.on === false ? 'off' : 'on') + '"]'); await L(page, 'runTicks', 1); continue; }
+      if (w.stage === 'until' || w.stage === 'wait') { await R(page, 'window.__btc.app.test.level.watch.untilGate(40000)'); await paint(page); continue; }
+      if (w.id === 'w1b') { readInto = await hudGoal(); zoom = await R(page, 'window.__btc.app.views.zoom.get()'); await shot('w1b'); }
+      if (w.id === 'w2b') { sinceOff = await hudGoal(); await shot('w2b'); }
+      await tap('[data-action="watch-next"]');
     }
-    await page.locator('[data-gene="lacY"] .seg[data-key="off"]').click();
-    if (touch) await page.locator('[data-tab="cell"]:visible').first().click();
+    check('LV-4 ' + s.tag + ' watch in the Gene close-up: the HUD follows the outlined copy, then counts the transporters since the switch-off',
+      zoom === 'gene' && /[Rr]ead into \d+/.test(readInto) && /since/.test(sinceOff), JSON.stringify({ zoom, readInto, sinceOff }));
+    // The task: the two machine cards, the goal and "Start".
+    const task = await R(page, "{ phase: window.__btc.app.test.level.phase(), cards: document.querySelectorAll('.lv-cards > *').length, text: document.querySelector('.sheet-body').textContent }");
+    await shot('task');
+    check('LV-4 ' + s.tag + ' task: the lactose transporter and splitter cards, the goal with its number and minute',
+      task.phase === 'task' && task.cards === 2 && /Have [\d,]+ lactose transporters in the membrane by minute \d+/.test(task.text), JSON.stringify(task).slice(0, 200));
+    await tap('.lv-sticky .btn.primary');
+    while (await R(page, '!!window.__btc.app.test.level.runner().beat')) await tap('.lv-next');
+    await intros('run-intro');
+    const hud = await page.evaluate(() => ({ h: document.getElementById('hud').getBoundingClientRect().height, stage: document.getElementById('stage').getBoundingClientRect().height,
+      goal: document.querySelector('.hud-goal-text').textContent, counter: document.querySelector('.hud-counter').textContent }));
+    check('LV-4 ' + s.tag + ' run: 44 px HUD with the target and the copies made; canvas ≥ 220 px',
+      hud.h === 44 && (touch ? /^LacY 0 \/ [\d,]+$/ : /^0 \/ [\d,]+ lactose transporters$/).test(hud.goal) && /copies/.test(hud.counter) && (!touch || hud.stage >= 220), JSON.stringify(hud));
+    // LacZ is counted in whole four-chain enzymes wherever the student sees a count.
+    const lacZ = await page.evaluate(() => {
+      const a = window.__btc.app; a.setFocus('lacZ'); a.render(0, true, true, 0);
+      const n = document.querySelector('[data-counter="protein"] .tb-num, [data-counter="protein"] .num, [data-counter="protein"] b');
+      const out = { shown: n ? n.textContent : '', chains: a.cell.observe().geneById.lacZ.protein };
+      a.setFocus('lacY'); a.render(0, true, true, 0);
+      return out;
+    });
+    check('LV-4 ' + s.tag + ' the lactose splitter is counted in whole four-chain enzymes', lacZ.shown.replace(/,/g, '') === String(Math.round(lacZ.chains / 4)), JSON.stringify(lacZ));
+    await tap('.tb-ctrl .seg[data-key="on"]');
+    await L(page, 'runTicks', 1);
+    for (let i = 0; i < 400; i++) {
+      await L(page, 'runTicks', 10);
+      if (await R(page, "(() => { const g = window.__btc.cell.observe().geneById.lacY, r = window.__btc.app.test.level.runner(), L = window.__btc.BTC.levelConstants.l12; return g.protein + L.ppm * (g.mRNA + g.nascent) >= L.refMargin * r.variant.T; })()")) break;
+    }
+    await tap('.tb-ctrl .seg[data-key="off"]');
     await L(page, 'runTicks', 60);
-    await shot('run-hud');
+    await shot('run-off');
+    // Minute D: the milk arrives; a story beat holds the run, the switch locks, the economy readouts join.
     const D = await R(page, 'window.__btc.app.test.level.runner().variant.D');
-    await L(page, 'runTicks', D * 60 + 30 - (await R(page, 'window.__btc.cell.tick')));
-    const settle = await page.evaluate(() => ({ goal: document.querySelector('.hud-goal-text').textContent, locked: Array.from(document.querySelectorAll('[data-gene="lacY"] .seg, .fb-row2 .seg')).every((b) => b.disabled), key: window.__btc.app.test.narratorKey() }));
-    check('LV-4 ' + s.tag + ' settle after D: the dial is locked and the HUD says the target was reached', /^Reached · watching/.test(settle.goal) && settle.locked, JSON.stringify(settle));
-    await shot('settle');
+    await L(page, 'runTicks', D * 60 + 2 - (await R(page, 'window.__btc.cell.tick')));
+    await paint(page);
+    const milk = await page.evaluate(() => ({ beat: (window.__btc.app.test.level.runner().beat || {}).name || null, running: window.__btc.app.isRunning(),
+      locked: Array.from(document.querySelectorAll('.tb-ctrl .seg')).every((b) => b.disabled), text: (document.querySelector('.sheet-body') || {}).textContent || '' }));
+    await shot('milk');
+    check('LV-4 ' + s.tag + ' minute D: the milk story holds the run and the switch is locked', milk.beat === 'milk' && !milk.running && milk.locked && /glucose is gone/i.test(milk.text), JSON.stringify(milk).slice(0, 200));
+    while (await R(page, '!!window.__btc.app.test.level.runner().beat')) await tap('.lv-next');
+    await intros('milk-intro');
+    const readouts = await page.evaluate(() => ['.st-atp', '.st-growth-word', '.st-sugar'].map((q) => { const e = document.querySelector(q); return !!e && !e.closest('[hidden]') && e.getBoundingClientRect().width > 0; }));
+    check('LV-4 ' + s.tag + ' after the milk: energy, growth and sugar coming in are shown', readouts.every(Boolean), JSON.stringify(readouts));
     await L(page, 'runToEnd');
-    await L(page, 'next');
-    while (await R(page, '!!window.__btc.app.test.level.runner().beat')) await L(page, 'next');
+    await paint(page);
+    const end = await hudGoal();
+    await shot('run-end');
+    await tap('.hud-goal');
+    const result = await R(page, "document.querySelector('.sheet-body').textContent");
     await shot('result');
-    await page.evaluate(() => { const b = document.querySelector('.sheet-body'); b.scrollTop = b.scrollHeight; });
-    await shot('result-sketch-overlay');
-    const hasChart = await R(page, "!!document.querySelector('.lv-sketch-chart canvas')");
-    check('LV-4 ' + s.tag + ' result shows the sketch over the test run', hasChart);
-    await L(page, 'next');
-    await L(page, 'answer', 'l12.d1', 1);
-    await shot('debrief-wrong');
-    await L(page, 'answer', 'l12.d1', 'ok'); await L(page, 'next');
-    await L(page, 'answer', 'l12.d2', 'ok'); await L(page, 'next');
-    while (await R(page, '!!window.__btc.app.test.level.runner().beat')) await L(page, 'next');
-    await shot('echo');
-    await L(page, 'next');
-    await shot('echo-cards');
-    await L(page, 'next');
+    check('LV-4 ' + s.tag + ' result: goal met, growth on milk sugar, the copies against what was needed', /Goal met/.test(end) && /On milk sugar the cell grew at \d+% of its glucose speed/.test(result) && /copies/.test(result), end + ' / ' + result.slice(0, 160));
+    await tap('[data-action="result-continue"]');
+    await tap('.lv-option >> nth=0');
+    await shot('explain-first-tap');
+    await L(page, 'answer', 'l12.d1', 'ok'); await paint(page);
+    await tap('.lv-sticky .btn.primary');
+    await L(page, 'answer', 'l12.d2', 'ok'); await paint(page);
+    await shot('explain-2');
+    await tap('.lv-sticky .btn.primary');
+    while (await R(page, '!!window.__btc.app.test.level.runner().beat')) await tap('.lv-next');
+    for (let k = 0; k < 4 && (await L(page, 'phase')) === 'echo'; k++) { if (k === 0) await shot('echo'); await tap('.lv-sticky .btn.primary'); }
     await shot('complete');
     const code = await L(page, 'code');
     const dec = await page.evaluate((c) => window.__btc.BTC.code.decode(c), code);
@@ -206,24 +206,29 @@ async function run(browser, port, OUT, check) {
     await s.context.close();
   }
 
-  // --- LV-9: 375 × 553, the 1.2 run keeps its canvas ----------------------------------------------------
+  // --- LV-9: 375 × 553, the 1.2 watch and run keep their canvas ----------------------------------------------------
   {
     const s = await openLevel(browser, port, [375, 553], '?test=1&seed=1&level=1.2&v=000C1S');
     const page = s.page, probs = [];
     const shot = shotter(s, '1.2', probs);
+    const size = () => page.evaluate(() => ({ stage: Math.round(document.getElementById('stage').getBoundingClientRect().height), hud: document.getElementById('hud').getBoundingClientRect().height }));
     while ((await L(page, 'phase')) === 'intro') await L(page, 'next');
-    await L(page, 'next');
-    await L(page, 'answer', 'ppm', 20);
-    await shot('sketch-short');
-    const sk = await R(page, "window.__btc.BTC.levelConstants.l12.demoMean[window.__btc.app.test.level.runner().variant.tOff].map((y, m) => [m, y])");
-    await L(page, 'sketch', sk);
-    await L(page, 'runTicks', 1300);
-    await shot('demo-result-short');
-    await page.locator('[data-action="demo-continue"]').click();
-    await paint(page);
+    const w = await size();
+    await shot('watch-short');
+    // The watch played through its test hooks, then the run.
+    for (let g = 0; g < 80 && (await L(page, 'phase')) === 'watch'; g++) {
+      const i = await R(page, 'window.__btc.app.test.level.watch.info()');
+      if (!i || i.done) break;
+      if (i.stage === 'guess') await R(page, 'window.__btc.app.test.level.watch.guess()');
+      else if (i.stage === 'act') { await page.locator('.tb-ctrl .seg[data-key="' + (i.act.expect.on === false ? 'off' : 'on') + '"]').first().tap(); await L(page, 'runTicks', 1); }
+      else if (i.stage === 'until' || i.stage === 'wait') await R(page, 'window.__btc.app.test.level.watch.untilGate(40000)');
+      else await R(page, 'window.__btc.app.test.level.watch.next()');
+    }
+    while ((await L(page, 'phase')) === 'task') await L(page, 'next');
+    while (await R(page, '!!window.__btc.app.test.level.runner().beat')) await L(page, 'next');
     await L(page, 'runTicks', 30);
-    const m = await page.evaluate(() => ({ stage: document.getElementById('stage').getBoundingClientRect().height, hud: document.getElementById('hud').getBoundingClientRect().height }));
-    check('LV-9 375×553 1.2 run: canvas ≥ 220 px with the 44 px HUD', m.stage >= 220 && m.hud === 44, JSON.stringify(m));
+    const m = await size();
+    check('LV-9 375×553 1.2 watch and run: canvas ≥ 220 px with the 44 px HUD', w.stage >= 220 && w.hud === 44 && m.stage >= 220 && m.hud === 44, JSON.stringify({ w, m }));
     await shot('run-short');
     finish(s, 'LV-9', probs);
     await s.context.close();
@@ -561,49 +566,6 @@ async function run(browser, port, OUT, check) {
     await s.context.close();
   }
 
-  // --- LV-2: the Prologue, played by taps from home to its completion screen (M2 review blocker) ----------------
-  {
-    const s = await openLevel(browser, port, [360, 740], '?test=1&seed=1');
-    const page = s.page, probs = [];
-    const shot = shotter(s, 'P', probs);
-    await page.locator('.level-row[data-level="P"]').tap();
-    await paint(page);
-    let tapped = 0, qShot = false;
-    for (let i = 0; i < 60; i++) {
-      if ((await L(page, 'phase')) === 'complete') break;
-      // The question: the right option, by tapping it, as a student would; Next must stay in reach (sticky).
-      const opt = await page.evaluate(() => { const i = window.__btc.app.level.runner.sceneInfo();
-        return i && i.question && !i.solved ? i.question.options.findIndex((o) => o.ok) : -1; });
-      if (opt >= 0) {
-        await page.locator('.lv-option[data-option="' + opt + '"]').tap();
-        await paint(page);
-        if (!qShot) {
-          qShot = true;
-          const next = await page.evaluate(() => { const b = document.querySelector('.lv-next'); const r = b.getBoundingClientRect(); return { bottom: Math.round(r.bottom), h: innerHeight, enabled: !b.disabled }; });
-          check('LV-2 360x740 the Prologue question: after the right answer, Next is enabled and on screen', next.enabled && next.bottom <= next.h, JSON.stringify(next));
-          await shot('question-answered');
-        }
-        continue;
-      }
-      await page.locator('.lv-next').tap();
-      tapped++;
-      await paint(page);
-    }
-    await page.waitForTimeout(200);
-    const st = await page.evaluate(() => ({
-      phase: window.__btc.app.level && window.__btc.app.level.runner.phase, code: window.__btc.app.level && window.__btc.app.level.runner.code,
-      codeBox: !!document.querySelector('.code-box'), copy: !!document.querySelector('[data-action="copy-code"]'),
-      next: !!document.querySelector('[data-action="next-level"]'), canvas: (document.querySelector('.lv-canvas') || {}).textContent || '',
-      stored: ((JSON.parse(localStorage.getItem('btc.progress.v1')).levels.P || {}).results || []).length,
-    }));
-    await shot('complete');
-    check('LV-2 360x740 the Prologue plays by taps to its completion screen: code, Copy, the Canvas line, Next level; the result is stored',
-      st.phase === 'complete' && /^BTC2-P0-/.test(st.code || '') && st.codeBox && st.copy && st.next && /Canvas quiz for this level/.test(st.canvas) && st.stored === 1,
-      JSON.stringify(Object.assign({ taps: tapped }, st)));
-    finish(s, 'LV-2', probs);
-    await s.context.close();
-  }
-
   // --- LV-10: a run that ends in real time (the loop, not runTicks): the HUD says so at once ----------------------
   {
     const s = await openLevel(browser, port, [360, 740], '?test=1&seed=1&level=1.4');
@@ -792,4 +754,4 @@ async function run(browser, port, OUT, check) {
   return screens;
 }
 
-module.exports = { run };
+module.exports = { run, openLevel, layoutProblems };

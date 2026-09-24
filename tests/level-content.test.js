@@ -55,7 +55,7 @@ test('L-2: story lines, questions and the level UI words stay dry (≤ 140, no "
   (function walk(x, w) {
     if (typeof x === 'string') game.push({ w, x });
     else if (x && typeof x === 'object') for (const k of Object.keys(x)) walk(x[k], w + '.' + k);
-  })({ game: C.game, home: C.home }, 'content');
+  })({ game: C.game, home: C.home, tiers: C.tiers }, 'content');   // C-1: the readouts' introducing sentences too
   assert.ok(game.length > 60, game.length + ' level UI strings');
   for (const s of game) {
     assert.ok(s.x.length <= 140 && s.x.indexOf('!') < 0, s.w);

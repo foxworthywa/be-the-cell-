@@ -224,54 +224,92 @@ test('L-4/L-5 pattern: the stub\'s reference, idle and fiddler solutions meet th
   }
 });
 
-test('the Prologue: scenes gate on each line and on the question; cards; an unscored code', () => {
+test('the opening, part 1 (PROLOGUE §2.3): scenes gate on each line, on their activities and on their guesses; guesses are never marked; cards; an unscored code', () => {
   const r = new RUN.LevelRunner({ def: P, variantSeed: 12345, attempt: 1, deviceSeed: 42 }).start();
   assert.equal(r.phase, 'scenes');
-  assert.equal(r.variantSeed, 0, 'the Prologue has no variant');
+  assert.equal(r.variantSeed, 0, 'the opening has no variant');
   refused(r, 'scenes');
+  // On to scene id, doing the activities and guesses on the way as a student would.
+  const to = (id) => {
+    for (let g = 0; r.sceneInfo().scene.id !== id && g < 200; g++) {
+      const i = r.sceneInfo();
+      if (i.guess && !i.guess.seen) { r.scenePick(i.guess.id, 'cause'); r.sceneSee(); }
+      if (i.activity && i.lastLine && !i.activity.done) RUN.game.playActivity(r, r.sceneInfo(), null);
+      assert.ok(r.sceneNext().ok, 'Next at ' + i.scene.id);
+    }
+  };
+  const lastLine = () => { while (!r.sceneInfo().lastLine) assert.ok(r.sceneNext().ok); };
   let info = r.sceneInfo();
-  assert.equal(info.scene.id, 's1');
-  assert.equal(info.text, 'Congratulations. You are in charge of a cell.');
-  assert.ok(r.sceneNext().ok);
-  assert.ok(r.sceneNext().ok);
-  assert.equal(r.sceneInfo().scene.id, 's2');
-  while (r.sceneInfo().scene.id !== 's4') r.sceneNext();
-  info = r.sceneInfo();
-  assert.equal(info.who, 'narrator', 'scene 4 first says what a ribosome is');
-  assert.equal(info.question, null, 'the question waits for the ribosome line');
-  assert.ok(r.sceneNext().ok);
-  info = r.sceneInfo();
-  assert.equal(info.who, 'ribosome');
-  assert.ok(info.question, 'the question comes with the ribosome line');
-  assert.deepEqual(r.sceneNext(), { ok: false, reason: 'question' });
-  r.sceneSkip();
-  assert.equal(r.sceneInfo().scene.id, 's4', 'Skip stops at an unanswered question');
-  const t = r.tap('p.q1', 2);
-  assert.equal(t.correct, false);
-  assert.equal(t.mc, 'DNA_DIRECT');
-  assert.deepEqual(r.sceneNext(), { ok: false, reason: 'question' });
-  assert.equal(r.tap('p.q1', 'ok').correct, true);
-  assert.ok(r.sceneNext().ok);
-  assert.equal(r.sceneInfo().scene.id, 's5');
-  r.sceneNext();
-  info = r.sceneInfo();
-  assert.equal(info.scene.live, true);
-  const cfg = P.config(r.variant, 'task', r.extra());
-  assert.equal(cfg.seed, K.seedFor(42, 'prologue'), 'the live bacterium is seeded from the device');
-  r.sceneSkip();
-  info = r.sceneInfo();
-  assert.equal(info.last, true);
+  assert.equal(info.scene.id, 'a0');
   assert.equal(info.who, 'narrator');
+  assert.equal(info.text, 'This is you. Some of your cells are making a protein called insulin right now.');
+  // The zoom ladder, one rung per scene, down to the letters; each rung can step back to the one before it.
+  const rungs = [];
+  while (r.sceneInfo().scene.id !== 'b1') {
+    info = r.sceneInfo();
+    if (info.scene.rung && rungs[rungs.length - 1] !== info.scene.rung) rungs.push(info.scene.rung);
+    if (info.index > 0) assert.equal(info.canBack, true, info.scene.id);
+    assert.ok(r.sceneNext().ok);
+  }
+  assert.deepEqual(rungs, ['you', 'pancreas', 'islet', 'betaCell', 'nucleus', 'chromosome', 'stretch', 'helix', 'letters']);
+  // C4: the student makes the first six letters of the copy; Next waits for them. A T is answered with U's words.
+  to('c4'); lastLine();
+  assert.deepEqual(r.sceneNext(), { ok: false, reason: 'activity' });
+  const a = r.sceneInfo().scene.activity;
+  assert.equal(a.expect.length, 6);
+  assert.equal(a.expect[5], 'U', 'the sixth letter is the first U');
+  for (let i = 0; i < 5; i++) assert.equal(r.sceneAct({ pick: a.expect[i] }).match, true);
+  const t = r.sceneAct({ pick: 'T' });
+  assert.equal(t.match, false);
+  assert.equal(t.fb, a.words.noT);
+  assert.deepEqual(r.sceneNext(), { ok: false, reason: 'activity' }, 'the rest of the copy is still to run');
+  assert.ok(r.sceneAct({ start: true }).ok);
+  while (!r.sceneAct({ advance: 50 }).done) { /* the polymerase runs to the end of the gene */ }
+  assert.ok(r.sceneNext().ok);
+  // D1: a guess, never marked; its feedback shows where it is due (D2).
+  to('d1'); lastLine();
+  info = r.sceneInfo();
+  assert.ok(info.guess && !info.guess.seen);
+  assert.equal(r.sceneNext().ok, false, 'Next waits for the guess');
+  const wrong = P.scenes.find((x) => x.id === 'd1').guess.options.findIndex((o) => o.mc === 'DNA_DIRECT');
+  assert.ok(r.scenePick('d1', wrong));
+  assert.ok(r.sceneSee().ok);
+  assert.equal(r.sceneInfo().solved, true, 'a guess is seen, not marked');
+  assert.ok(r.sceneNext().ok);
+  assert.equal(r.sceneInfo().scene.id, 'd2');
+  lastLine();
+  assert.equal(r.sceneInfo().feedback.length, 1, 'D1\'s "what happened" shows at D2');
+  // E3: the student decodes the first two codons; a wrong row is answered with the right one's name, then picked.
+  to('e3'); lastLine();
+  const e3 = r.sceneInfo().scene.activity;
+  assert.deepEqual(e3.codons, ['AUG', 'GCC']);
+  const wrongRow = e3.rows.findIndex((x) => x.codon !== 'AUG');
+  assert.equal(r.sceneAct({ row: wrongRow }).match, false);
+  assert.equal(r.sceneInfo().activity.hint, e3.rows.findIndex((x) => x.codon === 'AUG'));
+  for (const c of e3.codons) assert.equal(r.sceneAct({ row: e3.rows.findIndex((x) => x.codon === c) }).match, true);
+  assert.ok(r.sceneAct({ start: true }).ok);
+  while (!r.sceneAct({ advance: 20 }).done) { /* the ribosome reads on to the stop */ }
+  assert.ok(r.sceneNext().ok);
+  // The rest by Skip (it stops at each unfinished activity or guess); F4's guess.
+  for (let g = 0; g < 60 && !r.sceneInfo().last; g++) {
+    info = r.sceneInfo();
+    if (info.guess && !info.guess.seen) { r.scenePick(info.guess.id, 'cause'); r.sceneSee(); }
+    if (info.activity && info.lastLine && !info.activity.done) RUN.game.playActivity(r, info, null);
+    if (!r.sceneNext().ok) r.sceneSkip();
+  }
+  info = r.sceneInfo();
+  assert.equal(info.scene.id, 'f7');
+  assert.equal(info.last, true);
   assert.ok(r.next().ok);
   assert.equal(r.phase, 'complete');
-  assert.deepEqual(r.cards, ['ribosome', 'genetic-code', 'no-nucleus']);
+  assert.deepEqual(r.cards, ['gene', 'mrna', 'ribosome', 'genetic-code']);
   const d = CODE.decode(r.code);
-  assert.match(r.code, /^BTC2-P0-000000-G1ENAPNAD01X0-F01-A1N1-R\w{3}C1-000000-/);
+  assert.match(r.code, /^BTC2-P0-000000-G1ENAPNAD12X0-F01-A1N1-R\w{3}C2-000000-/);
   assert.equal(d.total, null);
   assert.equal(r.result.total, null);
   assert.deepEqual(r.result.flags, ['PRED_DNA_DIRECT']);
   const ok = RUN.game.playHeadless(P, { deviceSeed: 1 });
-  assert.match(ok.code, /-G1ENAPNAD11X0-F00-/);
+  assert.match(ok.code, /-G1ENAPNAD22X0-F00-/);
 });
 
 test('M2 review: a designer level\'s Try again goes back to the DNA editor; the result waits for par; runs stop at 99 in the code', () => {
