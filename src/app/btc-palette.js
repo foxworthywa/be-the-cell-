@@ -29,6 +29,10 @@
     'muted-fill': '#eeede8',
     'g-ptsG': '#005533', 'g-gly': '#cc6644', 'g-aaSyn': '#3388dd', 'g-aaImp': '#554499',
     'g-lacY': '#aa77aa', 'g-lacZ': '#990066', 'g-fliC': '#664400',
+    // Level 1.7's repressor and the third lac gene (LEVELS §9 item 3; chosen by the §8.2 method, test U-5).
+    'g-lacI': '#8800e0', 'g-lacA': '#e05010',
+    // Sugar phases shaded on the graphs (level 1.7): glucose, lactose, both.
+    'band-G': '#2f6f95', 'band-L': '#95650a', 'band-B': '#4f7a3a',
     // ATP-spending bar: neutral greyscale steps, so it does not compete with gene colours.
     'ledger-0': '#3c4250', 'ledger-1': '#6b7282', 'ledger-2': '#9097a5', 'ledger-3': '#b4b9c3', 'ledger-4': '#cfd2d9', 'ledger-5': '#e3e5ea',
   };
@@ -44,14 +48,21 @@
     'muted-fill': '#262b35',
     'g-ptsG': '#61a17d', 'g-gly': '#ffac89', 'g-aaSyn': '#91c9ff', 'g-aaImp': '#a690e4',
     'g-lacY': '#e8b7e7', 'g-lacZ': '#e970b1', 'g-fliC': '#b78e53',
+    'g-lacI': '#a070ff', 'g-lacA': '#ff9a4d',
+    'band-G': '#7fb3d9', 'band-L': '#e0b35c', 'band-B': '#9cc27f',
     'ledger-0': '#d6d9e0', 'ledger-1': '#aab0bc', 'ledger-2': '#838a98', 'ledger-3': '#646b79', 'ledger-4': '#4b515d', 'ledger-5': '#3a3f49',
   });
 
   const GENE_IDS = ['ptsG', 'gly', 'aaSyn', 'aaImp', 'lacY', 'lacZ', 'fliC'];
+  // Every gene of every strain (m2-l11 adds araE, m2-lac lacI and lacA), in catalog order.
+  const ALL_GENE_IDS = GENE_IDS.concat(['araE', 'lacI', 'lacA']);
+  // Hidden-name levels colour by display position (labConfig.colorBy 'display', LEVELS §5.5.1): colour k goes to position k.
+  const DISPLAY_COLORS = ['g-ptsG', 'g-gly', 'g-aaSyn', 'g-aaImp', 'g-lacY', 'g-lacZ', 'g-fliC', 'g-lacI', 'g-lacA'];
 
-  // What each gene's protein is drawn as (LAB_UI §2.3).
+  // What each gene's protein is drawn as (LAB_UI §2.3); where it sits is part of what a student may reason from.
   const shape = {
     ptsG: 'membrane', gly: 'circle', aaSyn: 'circle', aaImp: 'membrane', lacY: 'membrane', lacZ: 'tetramer', fliC: 'bar',
+    araE: 'membrane', lacI: 'repressor', lacA: 'trimer',
   };
 
   function block(set) {
@@ -96,5 +107,5 @@
   function current() { return active; }
   function isDark() { return active === dark; }
 
-  return { light, dark, GENE_IDS, shape, css, apply, current, isDark };
+  return { light, dark, GENE_IDS, ALL_GENE_IDS, DISPLAY_COLORS, shape, css, apply, current, isDark };
 });

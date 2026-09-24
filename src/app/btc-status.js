@@ -98,7 +98,10 @@
         e.play.disabled = !can && !running;
         LY.setText(e.playWord, running ? S.running : S.paused);
       }
-      LY.setText(e.clock, F.clock(view.t_s, speed <= 10));
+      const clockText = F.clock(view.t_s, speed <= 10);
+      LY.setText(e.clock, clockText);
+      // "14 h 30 min" is wider than the phone strip leaves beside the Levels button: a smaller size then.
+      if (this.clockLong !== (clockText.length >= 9)) { this.clockLong = clockText.length >= 9; e.clock.classList.toggle('is-long', this.clockLong); }
       const gen = view.clock.generation - app.gen0;
       LY.setText(e.gen, F.fill(app.layout === 'compact' ? S.generation : S.generationShort, { n: gen }));
       let sp = null;

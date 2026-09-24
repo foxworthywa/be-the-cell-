@@ -48,6 +48,8 @@
             row.desc ? h('p', { class: 'ctl-desc', text: row.desc }) : null,
           ]));
         }
+        // A level's own line about the medium (1.1: what is free; 1.7: the sugars follow the flask).
+        if (lc.mediumNote) med.appendChild(h('p', { class: 'pane-foot medium-note', text: lc.mediumNote }));
         med.appendChild(h('p', { class: 'pane-foot', text: C.medium.footer }));
         root.appendChild(med);
       }

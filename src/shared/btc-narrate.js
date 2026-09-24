@@ -118,10 +118,13 @@
 
   const LETTERS = 'ABCDEFGHIJKLMNOP';
 
-  /** The words for gene id: named, or "gene A"/"protein A" by display slot when names are hidden. */
+  /**
+   * The words for gene id: named, or "gene A"/"protein A" by display slot when names are hidden.
+   * A phrase marked open (a background gene, or one revealed in level 1.1) keeps its name.
+   */
   function wordsFor(memory, id) {
     const ph = memory.phrases[id] || PHRASES[id];
-    if (memory.showNames) return ph;
+    if (memory.showNames || ph.open) return ph;
     const letter = LETTERS[ph.slot !== undefined ? ph.slot : (PHRASES[id] ? PHRASES[id].slot : 0)];
     return { genePhrase: 'gene ' + letter, noun: 'protein ' + letter, plural: false, name: 'protein ' + letter };
   }

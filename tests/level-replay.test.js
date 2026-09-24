@@ -22,7 +22,7 @@ for (const d of levels()) byId[d.id] = d;
 const copy = (x) => JSON.parse(JSON.stringify(x));
 
 test('L-7: every scored level\'s reference play verifies (score, flags, code); an edited command or answer does not', () => {
-  assert.ok(scored.length >= 2, 'levels 1.2 and 1.4 at least');
+  assert.deepEqual(scored.map((d) => d.id).sort(), ['1.1', '1.2', '1.4', '1.7']);
   for (const def of scored) {
     // A misconception play too, so flags are in the file.
     for (const name of ['reference', Object.keys(def.solutions).find((n) => n !== 'reference')]) {
@@ -31,13 +31,15 @@ test('L-7: every scored level\'s reference play verifies (score, flags, code); a
       const res = RUN.game.verifyRunFile(file, { levels: byId });
       assert.equal(res.ok, true, def.id + ' ' + name + ': ' + JSON.stringify(res.checks.filter((c) => !c.ok)));
       assert.equal(res.recomputed.code, p.code);
-      // Edit the first user command's argument: the replay no longer reaches the recorded hash.
+      // Edit the first user command's argument (a designer level has none: edit its design): the replay no
+      // longer reaches the recorded hash, or the record is not this level's run.
       const bad = copy(file);
       const e = bad.records.task.log.find((x) => x.source === 'user' && x.type === 'setPromoter');
-      e.args.level = e.args.level === 2 ? 1 : 2;
+      if (e) e.args.level = e.args.level === 2 ? 1 : 2;
+      else bad.level.design.lac.promoter = bad.level.design.lac.promoter === 2 ? 1 : 2;
       const r2 = RUN.game.verifyRunFile(bad, { levels: byId });
-      assert.equal(r2.ok, false, def.id + ': an edited command still verified');
-      assert.ok(r2.checks.some((c) => !c.ok && /hash|code|efficiency/.test(c.what)), JSON.stringify(r2.checks.filter((c) => !c.ok)));
+      assert.equal(r2.ok, false, def.id + ': an edited command or design still verified');
+      assert.ok(r2.checks.some((c) => !c.ok && /hash|code|efficiency|config/.test(c.what)), JSON.stringify(r2.checks.filter((c) => !c.ok)));
       // A changed prediction changes P (or the flags), and the stored result no longer matches.
       const ans = copy(file);
       const choice = def.predictions.find((it) => it.kind === 'choice');

@@ -15,6 +15,16 @@
  * buffer only when the tick, generation, focus gene or stage changed, then
  * draws batched by (shape, colour): one path and one fill or stroke per group.
  * Nothing is allocated per frame.
+ *
+ * The gene list comes from the cell (7 genes in the lab strain, 8 in m2-l11, 9 in m2-lac,
+ * LEVELS R-E19) and the screen's gene model (app.geneModel, BTC.content.geneModel): loci,
+ * colours and names follow its display order, so a hidden-name level (1.1) draws each gene
+ * where and in the colour its display position says. A transcription unit with several
+ * genes (m2-lac's lacZ lacY lacA) is one mRNA: it is drawn once, as one strand in three
+ * segments coloured by gene and sized by gene length. With the lac regulation module the
+ * repressor LacI is drawn as tetramers (1 dot = 1, a V; a dot inside when allolactose is
+ * bound), sitting on the operator at the lac locus while it is bound, and an enlarged "lac
+ * region" panel shows the design's parts and what sits on them.
  */
 (function (root, factory) {
   if (typeof module === 'object' && module.exports) {
@@ -27,8 +37,7 @@
 })(typeof self !== 'undefined' ? self : this, function (D, G, PAL, C, F, LY) {
   'use strict';
 
-  const NG = 7;                          // player genes
-  const GENE_IDS = PAL.GENE_IDS;
+  const MAXG = 16;                       // genes a strain may have (engine maxGenes)
   const MAX_GLYPHS = 1500;               // hard cap per frame (LAB_UI §2.3)
   const CAP = 2048;                      // buffer capacity (cap plus loci and headroom)
   const N_mM = 602214.076;               // molecules per (mM · fL)
@@ -44,6 +53,7 @@
   const K = {
     GLC_OUT: 1, LAC_OUT: 2, AA_OUT: 3, NASCENT: 4, MRNA_FOCUS: 5, MRNA: 6, RIB: 7, RIB_FREE: 8, RIB_STALLED: 9,
     POLY: 10, PROT: 11, ATP: 12, ADP: 13, AA: 14, LAC_IN: 15, LOCUS: 16, RNAP: 17,
+    OPER: 18, REP_BOUND: 19, INDUCER: 20,        // the lac operator, LacI sitting on it, allolactose on free LacI (m2-lac)
   };
 
   // ---------------------------------------------------------------------------
@@ -52,7 +62,8 @@
   function createPlan() {
     return {
       P: 0, polyN: 1, ribN: 100, atpN: 1e5, aaN: 1e5, lacN: 1e5, glcOutN: 1e6, lacOutN: 1e6, aaOutN: 1e6,
-      focus: 0, protein: new Int32Array(NG), hollow: new Uint8Array(NG), mRNA: new Int32Array(NG), nascent: new Int32Array(NG),
+      focus: 0, protein: new Int32Array(MAXG), hollow: new Uint8Array(MAXG), mRNA: new Int32Array(MAXG), nascent: new Int32Array(MAXG),
+      genes: 0,
       strandLen: 0, strandBase: 0,
       glcOut: 0, lacOut: 0, aaOut: 0, glcOutHollow: 0, lacOutHollow: 0, aaOutHollow: 0,
       ribFilled: 0, ribFree: 0, ribStalled: 0, poly: 0, atp: 0, adp: 0, aa: 0, lacIn: 0, loci: 0,
@@ -75,21 +86,25 @@
   function tally(p) {
     let t = p.glcOut + p.lacOut + p.aaOut + p.glcOutHollow + p.lacOutHollow + p.aaOutHollow +
       p.ribFilled + p.ribFree + p.ribStalled + p.poly + p.atp + p.adp + p.aa + p.lacIn + p.loci;
-    for (let i = 0; i < NG; i++) t += p.protein[i] + p.hollow[i] + p.mRNA[i] + 2 * p.nascent[i];
+    for (let i = 0; i < p.genes; i++) t += p.protein[i] + p.hollow[i] + p.mRNA[i] + 2 * p.nascent[i];
     p.total = t;
     return t;
   }
 
   /**
    * Fills p (from createPlan; its previous scales give the hysteresis) for this
-   * view, geometry and focus gene. opts: {focus, strandNt: per-gene mRNA length (nt)}.
+   * view, geometry and focus gene. opts: {focus, strandNt: per-gene mRNA length (nt),
+   * follower?: Uint8Array (1 for a gene whose mRNA its unit's first gene draws), lacI?: the
+   * repressor's index (drawn as free tetramers, 1 dot = 1, when view.lac exists)}.
    */
   function plan(view, g, opts, p) {
-    const genes = view.genes, f = opts.focus;
+    const genes = view.genes, f = opts.focus, NGv = Math.min(MAXG, genes.length);
+    const follower = opts.follower || null, lacI = view.lac && opts.lacI >= 0 ? opts.lacI : -1;
     p.focus = f;
-    // One shared protein scale, so dot counts compare honestly across genes.
+    p.genes = NGv;
+    // One shared protein scale, so dot counts compare honestly across genes (LacI is counted in tetramers).
     let maxProt = 0;
-    for (let i = 0; i < NG; i++) if (genes[i].protein > maxProt) maxProt = genes[i].protein;
+    for (let i = 0; i < NGv; i++) if (i !== lacI && genes[i].protein > maxProt) maxProt = genes[i].protein;
     p.P = D.scaleFor(maxProt, 120, p.P || 0);
     p.polyN = D.polysomeScale(genes[f].ribosomes, p.polyN || 1);
     p.ribN = 100; p.atpN = 1e5; p.aaN = 1e5; p.lacN = 1e5;
@@ -114,14 +129,21 @@
       p.adp = glyphs(view.energy.ADP, p.atpN);
       p.aa = glyphs(view.aminoAcids.count, p.aaN);
       p.lacIn = glyphs(view.lactose.inside, p.lacN);
-      p.loci = NG * (view.cell.dosage >= 2 ? 2 : 1);
-      for (let i = 0; i < NG; i++) {
+      p.loci = NGv * (view.cell.dosage >= 2 ? 2 : 1);
+      for (let i = 0; i < NGv; i++) {
         const gi = genes[i];
-        // lacZ is drawn as tetramers at P/4 each, so one glyph still stands for P monomers.
-        p.protein[i] = glyphs(gi.protein, p.P);
-        p.hollow[i] = p.protein[i] === 0 && gi.proteinRounded > 0 ? 1 : 0;
-        p.mRNA[i] = gi.mRNA;
-        p.nascent[i] = gi.nascent;
+        if (i === lacI) {
+          // The repressor: every tetramer not sitting on an operator, one glyph each.
+          p.protein[i] = Math.min(400, view.lac.lacIFree); p.hollow[i] = 0;
+        } else {
+          // lacZ is drawn as tetramers at P/4 each, so one glyph still stands for P monomers.
+          p.protein[i] = glyphs(gi.protein, p.P);
+          p.hollow[i] = p.protein[i] === 0 && gi.proteinRounded > 0 ? 1 : 0;
+        }
+        // A unit's mRNA is one molecule list: its first gene draws it, once.
+        const fol = follower && follower[i];
+        p.mRNA[i] = fol ? 0 : gi.mRNA;
+        p.nascent[i] = fol ? 0 : gi.nascent;
       }
       return tally(p);
     };
@@ -129,7 +151,7 @@
     // Over the cap: the species with the most glyphs (never mRNA or the focus polysome) steps up the ladder.
     for (let guard = 0; p.total > MAX_GLYPHS && guard < 24; guard++) {
       let protTotal = 0;
-      for (let i = 0; i < NG; i++) protTotal += p.protein[i];
+      for (let i = 0; i < NGv; i++) if (i !== lacI) protTotal += p.protein[i];
       const cands = [
         ['P', protTotal], ['ribN', p.ribFilled + p.ribFree + p.ribStalled], ['atpN', p.atp + p.adp], ['aaN', p.aa],
         ['lacN', p.lacIn], ['glcOutN', p.glcOut], ['lacOutN', p.lacOut], ['aaOutN', p.aaOut],
@@ -145,7 +167,7 @@
     const area = interiorArea(g);
     p.interiorArea = area;
     const base = Math.max(12, Math.min(48, opts.strandNt[f] / 40));
-    const m = genes[f].mRNA;
+    const m = genes[f].mRNA;     // a unit's genes share one mRNA count
     const fit = m > 0 ? (0.4 * area) / (2 * m) : base;
     p.strandBase = base;
     p.strandLen = Math.max(8, Math.min(base, fit));
@@ -182,6 +204,20 @@
     const d = s * 0.25, r = s * 0.27;
     circle(c, x - d, y - d, r); circle(c, x + d, y - d, r); circle(c, x - d, y + d, r); circle(c, x + d, y + d, r);
   }
+  // LacI tetramer (a dimer of dimers): a V of two rounded arms, open towards angle a.
+  function vee(c, x, y, a, s) {
+    const h = s * 0.5, w = s * 0.18;
+    for (const side of [-1, 1]) {
+      const b = a + Math.PI + side * 0.5;
+      const cx = x + Math.cos(b) * h * 0.55, cy = y + Math.sin(b) * h * 0.55;
+      rect(c, cx, cy, b, h * 1.1, w * 2);
+    }
+  }
+  // LacA trimer: three lobes.
+  function trimer(c, x, y, s) {
+    const d = s * 0.26, r = s * 0.26;
+    for (let k = 0; k < 3; k++) { const a = -Math.PI / 2 + (k * 2 * Math.PI) / 3; circle(c, x + Math.cos(a) * d, y + Math.sin(a) * d, r); }
+  }
   // A rectangle of length l along angle a and width w.
   function rect(c, x, y, a, l, w) {
     const ca = Math.cos(a), sa = Math.sin(a);
@@ -209,15 +245,17 @@
     return out;
   }
   const WP = { x: 0, y: 0 };
-  function wavy(c, x, y, a, l) {
-    const n = Math.max(4, Math.round(l / 2));
-    wavePoint(x, y, a, l, 0, WP); c.moveTo(WP.x, WP.y);
-    for (let k = 1; k <= n; k++) { wavePoint(x, y, a, l, k / n, WP); c.lineTo(WP.x, WP.y); }
+  /** A wavy strand, or its part from fraction s0 to s1 (a gene's segment of a unit's mRNA). */
+  function wavy(c, x, y, a, l, s0, s1) {
+    const t0 = s0 === undefined ? 0 : s0, t1 = s1 === undefined ? 1 : s1;
+    const n = Math.max(2, Math.round((l * (t1 - t0)) / 2));
+    wavePoint(x, y, a, l, t0, WP); c.moveTo(WP.x, WP.y);
+    for (let k = 1; k <= n; k++) { wavePoint(x, y, a, l, t0 + ((t1 - t0) * k) / n, WP); c.lineTo(WP.x, WP.y); }
   }
 
   // Glyph sizes (CSS px), from LAB_UI §2.3.
   const SZ = {
-    glcOut: 3.6, lacOut: 2.6, aaOut: 3.2, rib: 5, poly: 4, prot: 2.5, tetra: 7, atp: 3.4, aa: 2.4, lacIn: 2.2, rnap: 2.5,
+    glcOut: 3.6, lacOut: 2.6, aaOut: 3.2, rib: 5, poly: 4, prot: 2.5, tetra: 7, atp: 3.4, aa: 2.4, lacIn: 2.2, rnap: 2.5, vee: 8, trimer: 6,
   };
   // The watched gene is drawn on top at full strength; the crowd around it is dimmed (LAB_UI §2.7).
   // Only alpha changes: counts, positions and hit-testing are the same.
@@ -233,27 +271,43 @@
       this.geom = null;
       this.dpr = 1;
       this.cssW = 0; this.cssH = 0;
-      // Glyph buffer: stage positions (unjittered), kind, gene, source id, angle, length, jitter phase/frequency.
+      // Glyph buffer: stage positions (unjittered), kind, gene, source id, angle, length, jitter phase/frequency,
+      // and the part of a strand a glyph draws (a gene's segment of its unit's mRNA: fractions s0–s1).
       this.bx = new Float32Array(CAP); this.by = new Float32Array(CAP);
       this.bkind = new Uint8Array(CAP); this.bgene = new Uint8Array(CAP);
       this.bsrc = new Int32Array(CAP); this.bang = new Float32Array(CAP); this.blen = new Float32Array(CAP);
       this.bph = new Float32Array(CAP); this.bom = new Float32Array(CAP);
+      this.bs0 = new Float32Array(CAP); this.bs1 = new Float32Array(CAP).fill(1);
       this.n = 0;
       // Groups: contiguous ranges drawn with one fill or stroke. style: 0 fill, 1 stroke, 2 fill + ink outline, 3 fill + stalled bar.
-      this.gStart = new Uint16Array(96); this.gEnd = new Uint16Array(96); this.gKind = new Uint8Array(96);
-      this.gStyle = new Uint8Array(96); this.gColor = new Array(96).fill('ink'); this.gHollow = new Uint8Array(96);
+      this.gStart = new Uint16Array(160); this.gEnd = new Uint16Array(160); this.gKind = new Uint8Array(160);
+      this.gStyle = new Uint8Array(160); this.gColor = new Array(160).fill('ink'); this.gHollow = new Uint8Array(160);
       this.ng = 0;
-      this.geneRange = new Int32Array(NG * 2);          // [start, end) of each gene's protein glyphs
+      this.geneRange = new Int32Array(MAXG * 2);        // [start, end) of each gene's protein glyphs
       this.stip = new Float32Array(STIPPLE * 2);
       this.dnaCtl = [new Float64Array(32), new Float64Array(32)];
       this.dnaPts = new Float32Array(2 * 2 * 65);       // two lobes × 65 sampled points
       this.nucPts = new Float32Array(2 * 2 * 25);       // two lobes × 25 outline points
       this.lobeCount = 1;
-      this.locusX = new Float32Array(NG * 2); this.locusY = new Float32Array(NG * 2); this.locusA = new Float32Array(NG * 2);
+      this.locusX = new Float32Array(MAXG * 2); this.locusY = new Float32Array(MAXG * 2); this.locusA = new Float32Array(MAXG * 2);
+      this.operX = new Float32Array(2); this.operY = new Float32Array(2); this.operA = new Float32Array(2);
       this.hit = new G.HitGrid(CAP);
       this.hitDirty = true;
-      this.built = { tick: -1, epoch: -1, focus: -1, w: 0, h: 0, dosage: 0 };
-      this.strandNt = new Float64Array(NG);
+      this.built = { tick: -1, epoch: -1, focus: -1, w: 0, h: 0, dosage: 0, model: null };
+      // The cell's genes (set up when the cell changes): ids, units, segment fractions, mRNA lengths.
+      this.cellRef = null;
+      this.ids = [];
+      this.nGenes = 0;
+      this.idx = {};
+      this.strandNt = new Float64Array(MAXG);
+      this.follower = new Uint8Array(MAXG);
+      this.leaderOf = new Int8Array(MAXG);
+      this.seg0 = new Float32Array(MAXG); this.seg1 = new Float32Array(MAXG).fill(1);
+      this.members = [];                                // per unit leader: the unit's gene indices in order
+      this.pkey = [];
+      this.lacI = -1; this.lacLeader = -1;
+      this.fluxGene = [-1, -1, -1, -1];
+      this.strands = new Int32Array(CAP); this.strandProg = new Float32Array(CAP); this.nStrands = 0; this.strandFrom = 0;
       // Flux markers: 5 fluxes × 128, fixed straight paths, age in render seconds (< 0 unused).
       this.mAge = new Float32Array(NF * MARKERS).fill(-1);
       this.mX0 = new Float32Array(NF * MARKERS); this.mY0 = new Float32Array(NF * MARKERS);
@@ -276,16 +330,14 @@
       this.uv = { u: 0, v: 0 };
       this.lastLabelKey = '';
       this.legendScales = new Float64Array(4);
+      this.lacKey = '';
     }
 
     // --- mount -----------------------------------------------------------------
     mount(els) {
       this.els = els;
-      const app = this.app;
       this.canvas = els.canvas;
       this.ctx = this.canvas.getContext('2d');
-      const genes = app.BTC.catalog.STRAINS['m1-lab'].genes;
-      for (let i = 0; i < NG; i++) this.strandNt[i] = 3 * genes[i].length + 60;     // mRNA is 3L + 60 nt
       if (typeof ResizeObserver === 'function') {
         this.ro = new ResizeObserver(() => this.resize());
         this.ro.observe(els.stage);
@@ -296,27 +348,81 @@
       els.legend.addEventListener('click', () => this.openKey());
     }
 
+    /**
+     * The cell's genes, once per cell: ids in slot order, each gene's transcription unit (a
+     * unit's first gene draws its mRNA; the others are followers), each gene's share of the
+     * unit's mRNA (by gene length), and the mRNA length the focus strands are sized from.
+     */
+    setupGenes(view) {
+      const app = this.app;
+      this.cellRef = app.cell;
+      const strain = (app.cell.config && app.cell.config.strain) || 'm1-lab';
+      const cat = app.BTC.catalog.STRAINS[strain] || app.BTC.catalog.STRAINS['m1-lab'];
+      const len = {};
+      for (const g of cat.genes) len[g.id] = g.length;
+      this.ids = view.genes.map((g) => g.id);
+      this.nGenes = Math.min(MAXG, this.ids.length);
+      this.idx = {};
+      this.ids.forEach((id, i) => { this.idx[id] = i; });
+      this.pkey = this.ids.map((id) => 'p:' + id);
+      this.members = [];
+      this.follower.fill(0);
+      for (let i = 0; i < this.nGenes; i++) { this.leaderOf[i] = i; this.seg0[i] = 0; this.seg1[i] = 1; this.strandNt[i] = 3 * (len[this.ids[i]] || 400) + 60; this.members[i] = [i]; }
+      for (const tu of view.tus || []) {
+        if (!tu.cistrons || tu.cistrons.length < 2) continue;
+        const mem = tu.cistrons.map((id) => this.idx[id]).filter((i) => i >= 0);
+        const total = tu.cistrons.reduce((s, id) => s + 3 * (len[id] || 0), 0) + 60;
+        const lead = this.idx[tu.leader];
+        let off = 0;
+        for (const i of mem) {
+          this.leaderOf[i] = lead;
+          this.seg0[i] = off / total; off += 3 * (len[this.ids[i]] || 0); this.seg1[i] = off / total;
+          this.strandNt[i] = total;
+          if (i !== lead) { this.follower[i] = 1; this.members[i] = []; }
+        }
+        this.members[lead] = mem;
+      }
+      this.lacI = this.idx.lacI === undefined ? -1 : this.idx.lacI;
+      this.lacLeader = view.lac && this.idx.lacZ !== undefined ? this.leaderOf[this.idx.lacZ] : -1;
+      const at = (id) => (this.idx[id] === undefined ? -1 : this.idx[id]);
+      this.fluxGene = [at('ptsG'), at('lacY'), at('aaImp'), -1];   // glucose through PtsG, lactose through LacY, amino acids through the importers
+      this.plan = createPlan();
+    }
+
     resize() {
       const r = this.els.stage.getBoundingClientRect();
       const w = Math.max(1, Math.round(r.width)), h = Math.max(1, Math.round(r.height));
       const dpr = Math.min(2, (typeof devicePixelRatio === 'number' && devicePixelRatio) || 1);
-      if (w === this.cssW && h === this.cssH && dpr === this.dpr) return;
-      this.cssW = w; this.cssH = h; this.dpr = dpr;
+      const top = this.insetReserve();
+      if (w === this.cssW && h === this.cssH && dpr === this.dpr && top === this.topReserve) return;
+      this.cssW = w; this.cssH = h; this.dpr = dpr; this.topReserve = top;
       this.canvas.width = Math.round(w * dpr);
       this.canvas.height = Math.round(h * dpr);
       this.canvas.style.width = w + 'px';
       this.canvas.style.height = h + 'px';
       this.ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-      this.geom = G.create(w, h, this.geom ? this.geom.vertical : undefined);
+      // The lac region panel covers the top of the stage: the rod is fitted and centred below it.
+      const g = G.create(w, Math.max(1, h - top), this.geom ? this.geom.vertical : undefined);
+      if (top) { g.h = h; g.cy = top + (h - top) / 2; g.fitAlong = g.vertical ? h - top : w; }
+      this.geom = g;
       this.built.w = -1;
       this.dirty = true;
       this.updateScaleBar();
       this.app.requestPaint();
     }
 
+    /** Stage px taken at the top by the lac region panel while it shows (0 otherwise). */
+    insetReserve() {
+      const el = this.els.lacInset;
+      if (!el || el.hidden) return 0;
+      return Math.ceil(el.offsetTop + el.offsetHeight + 4);
+    }
+
     reset() {
       this.plan = createPlan();
       this.built.tick = -1;
+      this.cellRef = null;
+      this.lacKey = '';
       this.mAge.fill(-1);
       for (const e of this.emitters) e.reset();
       this.dirty = true;
@@ -324,16 +430,25 @@
 
     setVisible(v) { this.visible = v; if (v) { this.dirty = true; this.resize(); } }
 
+    /** The screen's gene model (the app's; a stand-in that shows everything by name when there is none). */
+    model() {
+      const m = this.app.geneModel;
+      if (m && m.ids.length === this.ids.length) return m;
+      if (!this.fallback || this.fallback.ids.length !== this.ids.length) this.fallback = C.geneModel(this.ids, {});
+      return this.fallback;
+    }
     /**
      * Genes outside labConfig.genesVisible keep running but are drawn in --muted, so colours stay
      * reserved for the genes a level is about (LEVELS §5.5.1); the key says so.
      */
     updateBackground() {
-      const gv = this.app.labConfig.genesVisible;
-      this.background = GENE_IDS.map((id) => gv !== 'all' && Array.isArray(gv) && gv.indexOf(id) < 0);
+      const m = this.model();
+      this.background = this.ids.map((id) => !m.isVisible(id));
     }
-    geneColor(i) { return this.background && this.background[i] ? 'muted' : 'g-' + GENE_IDS[i]; }
-    isBackground(id) { return !!(this.background && this.background[GENE_IDS.indexOf(id)]); }
+    geneColor(i) { return this.model().color(this.ids[i]); }
+    isBackground(id) { return !this.model().isVisible(id); }
+    shapeOf(i) { return PAL.shape[this.ids[i]] || 'circle'; }
+    words(id) { return this.model().words(id); }
 
     // --- geometry from the view --------------------------------------------------
     fitGeom(view) {
@@ -347,12 +462,13 @@
     // --- rebuild the glyph buffer (only when something changed) --------------------
     rebuild(view) {
       const g = this.geom, p = this.plan, app = this.app;
-      const f = app.focusIndex();
+      if (this.cellRef !== app.cell || this.ids.length !== view.genes.length) this.setupGenes(view);
+      const f = app.focusIndex(), fo = this.leaderOf[f];
       const epoch = view.clock.generation;
-      plan(view, g, { focus: f, strandNt: this.strandNt }, p);
+      plan(view, g, { focus: f, strandNt: this.strandNt, follower: this.follower, lacI: this.lacI }, p);
       this.n = 0; this.ng = 0;
       this.updateBackground();
-      const genes = view.genes;
+      const genes = view.genes, NGv = this.nGenes;
 
       // Outside molecules: uniform over the stage, rejected (deterministic retry) where the rod is.
       this.group(K.GLC_OUT, 'sugar', 1, 0); this.outside('glc', p.glcOut + p.glcOutHollow, epoch, K.GLC_OUT); this.endGroup();
@@ -367,37 +483,63 @@
       }
       this.buildNucleoid(view, epoch);
 
-      // Loci (hit targets; drawn as gene-coloured ticks on the DNA).
-      for (let i = 0; i < NG; i++) {
+      // Loci (hit targets; drawn as gene-coloured ticks on the DNA, in the screen's display order).
+      for (let i = 0; i < NGv; i++) {
         this.group(K.LOCUS, this.geneColor(i), 1, 0);
         for (let l = 0; l < this.lobeCount; l++) {
-          const j = l * NG + i;
+          const j = l * MAXG + i;
           this.push(K.LOCUS, i, j, this.locusX[j], this.locusY[j], this.locusA[j], 0, 0);
         }
         this.endGroup();
       }
-
-      // Transcripts in progress, then mature mRNA (focus gene as long strands, others as short marks).
-      for (let i = 0; i < NG; i++) {
-        if (!genes[i].nascent) continue;
-        this.group(K.NASCENT, this.geneColor(i), 1, 0);
-        this.nascent(genes[i], i, i === f);
+      // The lac operator on each copy of the chromosome, with LacI sitting on it while bound (m2-lac).
+      const lac = view.lac;
+      if (lac && this.lacLeader >= 0 && lac.design && lac.design.lac.operator) {
+        this.group(K.OPER, 'ink', 1, 0);
+        for (let l = 0; l < this.lobeCount; l++) this.push(K.OPER, this.lacLeader, l, this.operX[l], this.operY[l], this.operA[l], 0, 0);
         this.endGroup();
-      }
-      for (let i = 0; i < NG; i++) {
-        const gi = genes[i];
-        if (!gi.mRNA) continue;
-        const isF = i === f;
-        this.group(isF ? K.MRNA_FOCUS : K.MRNA, this.geneColor(i), 1, 0);
-        for (let j = 0; j < gi.mRNA; j++) {
-          const id = gi.mRNAIds[j];
-          D.pos('m', id, epoch, null, this.tmp2);
-          G.map(this.tmp2.x, 2 * this.tmp2.y - 1, g, this.tmp);
-          const a = D.hash01('ma', id, epoch) * Math.PI * 2;
-          const len = isF ? p.strandLen : 6 + 2 * D.hash01('ml', id, epoch);
-          this.push(isF ? K.MRNA_FOCUS : K.MRNA, i, id, this.tmp.x, this.tmp.y, a, len, D.hash01('mj', id, epoch));
+        if (this.lacI >= 0 && lac.operatorBound > 0) {
+          this.group(K.REP_BOUND, this.geneColor(this.lacI), 0, 0);
+          for (let l = 0; l < Math.min(this.lobeCount, lac.operatorBound); l++) {
+            const a = this.operA[l] - Math.PI / 2;
+            this.push(K.REP_BOUND, this.lacI, l, this.operX[l] + Math.cos(a) * 5, this.operY[l] + Math.sin(a) * 5, a, 0, 0);
+          }
+          this.endGroup();
         }
-        this.endGroup();
+      }
+
+      // Transcripts in progress, then mature mRNA (focus gene as long strands, others as short marks). A unit's
+      // transcripts and mRNA are drawn once, by its first gene, as one strand in its genes' colours.
+      this.nStrands = 0;
+      for (let i = 0; i < NGv; i++) {
+        if (this.follower[i] || !genes[i].nascent) continue;
+        for (const c of this.members[i]) {
+          this.group(K.NASCENT, this.geneColor(c), 1, 0);
+          this.nascent(genes[i], i, c, i === fo);
+          this.endGroup();
+        }
+      }
+      this.strandFrom = this.nStrands;                    // focus strands: nascent ones first, then mature
+      for (let i = 0; i < NGv; i++) {
+        const gi = genes[i];
+        if (this.follower[i] || !gi.mRNA) continue;
+        const isF = i === fo;
+        const mem = this.members[i];
+        for (let k = 0; k < mem.length; k++) {
+          const c = mem[k];
+          this.group(isF ? K.MRNA_FOCUS : K.MRNA, this.geneColor(c), 1, 0);
+          for (let j = 0; j < gi.mRNA; j++) {
+            const id = gi.mRNAIds[j];
+            D.pos('m', id, epoch, null, this.tmp2);
+            G.map(this.tmp2.x, 2 * this.tmp2.y - 1, g, this.tmp);
+            const a = D.hash01('ma', id, epoch) * Math.PI * 2;
+            const len = isF ? p.strandLen : (6 + 2 * D.hash01('ml', id, epoch)) * (mem.length > 1 ? 1.6 : 1);
+            const bi = this.push(isF ? K.MRNA_FOCUS : K.MRNA, c, id, this.tmp.x, this.tmp.y, a, len, D.hash01('mj', id, epoch));
+            if (bi >= 0) { this.bs0[bi] = this.seg0[c]; this.bs1[bi] = this.seg1[c]; }
+            if (isF && k === 0 && bi >= 0) { this.strandProg[this.nStrands] = 1; this.strands[this.nStrands++] = bi; }
+          }
+          this.endGroup();
+        }
       }
 
       // Pooled ribosomes: making protein (filled), free (hollow), stalled (filled with a bar).
@@ -405,21 +547,31 @@
       this.group(K.RIB_FREE, 'ribosome', 1, 0); this.inside('ribf', p.ribFree, epoch, K.RIB_FREE, 255); this.endGroup();
       this.group(K.RIB_STALLED, 'ribosome', 3, 0); this.inside('ribs', p.ribStalled, epoch, K.RIB_STALLED, 255); this.endGroup();
 
-      // Focus polysome: ribosomes spread along the focus gene's strands.
+      // Focus polysome: the focus gene's ribosomes spread along its part of the watched strands.
       this.group(K.POLY, 'ribosome', 0, 0); this.polysome(genes[f], f, epoch); this.endGroup();
 
       // Proteins (cytoplasmic); membrane proteins are drawn with the membrane.
-      for (let i = 0; i < NG; i++) {
-        const shape = PAL.shape[GENE_IDS[i]];
-        if (shape === 'membrane') continue;
+      for (let i = 0; i < NGv; i++) {
+        if (this.shapeOf(i) === 'membrane') continue;
         const n = p.protein[i] + p.hollow[i];
         this.geneRange[2 * i] = this.n;
         if (n > 0) {
           this.group(K.PROT, this.geneColor(i), p.hollow[i] ? 1 : 0, p.hollow[i]);
-          this.inside(PKEY[i], n, epoch, K.PROT, i);
+          this.inside(this.pkey[i], n, epoch, K.PROT, i);
           this.endGroup();
         }
         this.geneRange[2 * i + 1] = this.n;
+      }
+      // Free LacI holding allolactose: a dot inside the V (the share of tetramers with inducer bound).
+      if (lac && this.lacI >= 0 && p.protein[this.lacI] > 0) {
+        const share = lac.lacITetramers > 0 ? Math.max(0, Math.min(1, 1 - lac.activeLacI / lac.lacITetramers)) : 0;
+        const nInd = Math.round(share * p.protein[this.lacI]);
+        const r0 = this.geneRange[2 * this.lacI];
+        if (nInd > 0) {
+          this.group(K.INDUCER, 'sugar', 0, 0);
+          for (let k = 0; k < nInd; k++) this.push(K.INDUCER, this.lacI, k, this.bx[r0 + k], this.by[r0 + k], this.bang[r0 + k], 0, this.bph[r0 + k] / 6.283185307179586);
+          this.endGroup();
+        }
       }
 
       this.group(K.ATP, 'atp', 2, 0); this.inside('atp', p.atp, epoch, K.ATP, 255); this.endGroup();
@@ -428,14 +580,14 @@
       this.group(K.LAC_IN, 'sugar', 1, 0); this.inside('lin', p.lacIn, epoch, K.LAC_IN, 255); this.endGroup();
 
       // Membrane proteins: around the perimeter, oriented along the normal.
-      for (let i = 0; i < NG; i++) {
-        if (PAL.shape[GENE_IDS[i]] !== 'membrane') continue;
+      for (let i = 0; i < NGv; i++) {
+        if (this.shapeOf(i) !== 'membrane') continue;
         const n = p.protein[i] + p.hollow[i];
         this.geneRange[2 * i] = this.n;
         if (n > 0) {
           this.group(K.PROT, this.geneColor(i), p.hollow[i] ? 1 : 0, p.hollow[i]);
           for (let k = 0; k < n; k++) {
-            G.perimeter(D.hash01(PKEY[i], k, epoch), g, this.tmp);
+            G.perimeter(D.hash01(this.pkey[i], k, epoch), g, this.tmp);
             this.push(K.PROT, i, k, this.tmp.x, this.tmp.y, Math.atan2(this.tmp.ny, this.tmp.nx), 0, D.hash01('j', k, epoch));
           }
           this.endGroup();
@@ -443,7 +595,7 @@
         this.geneRange[2 * i + 1] = this.n;
       }
 
-      this.built.tick = view.tick; this.built.epoch = epoch; this.built.focus = f;
+      this.built.tick = view.tick; this.built.epoch = epoch; this.built.focus = f; this.built.model = this.model();
       this.built.w = this.cssW; this.built.h = this.cssH; this.built.dosage = view.cell.dosage;
       this.built.length = g.L; this.built.pinch = g.pinch;
       this.hitDirty = true;
@@ -456,13 +608,14 @@
     }
     endGroup() {
       this.gEnd[this.ng] = this.n;
-      if (this.gEnd[this.ng] > this.gStart[this.ng]) this.ng++;
+      if (this.gEnd[this.ng] > this.gStart[this.ng] && this.ng < this.gStart.length - 1) this.ng++;
     }
     push(kind, gene, src, x, y, ang, len, ph) {
       if (this.n >= CAP) return -1;
       const i = this.n++;
       this.bx[i] = x; this.by[i] = y; this.bkind[i] = kind; this.bgene[i] = gene; this.bsrc[i] = src;
       this.bang[i] = ang; this.blen[i] = len;
+      this.bs0[i] = 0; this.bs1[i] = 1;
       this.bph[i] = ph * 6.283185307179586;
       this.bom[i] = 2 + 3 * ((ph * 7.31) % 1);          // 2–5 rad/s
       return i;
@@ -489,11 +642,11 @@
       }
     }
 
-    /** Nucleoid outline and chromosome loop per lobe, sampled into stage px; loci positions. */
+    /** Nucleoid outline and chromosome loop per lobe, sampled into stage px; loci (in display order) and the lac operator. */
     buildNucleoid(view, epoch) {
       const g = this.geom, lobes = G.lobes(view.cell.dosage);
       this.lobeCount = lobes.length;
-      const uv = this.uv, o = this.tmp;
+      const uv = this.uv, o = this.tmp, model = this.model();
       for (let l = 0; l < lobes.length; l++) {
         const lb = lobes[l];
         for (let k = 0; k <= 24; k++) {
@@ -507,66 +660,72 @@
           G.map(uv.u, uv.v, g, o);
           this.dnaPts[l * 130 + 2 * k] = o.x; this.dnaPts[l * 130 + 2 * k + 1] = o.y;
         }
-        for (let i = 0; i < NG; i++) {
-          const T = G.locusT(i), j = l * NG + i;
+        const point = (T, xs, ys, as, j) => {
           G.loopPoint(ctl, T + 0.15, uv); G.map(uv.u, uv.v, g, o);
           const x1 = o.x, y1 = o.y;
           G.loopPoint(ctl, T - 0.15, uv); G.map(uv.u, uv.v, g, o);
           const x0 = o.x, y0 = o.y;
           G.loopPoint(ctl, T, uv); G.map(uv.u, uv.v, g, o);
-          this.locusX[j] = o.x; this.locusY[j] = o.y; this.locusA[j] = Math.atan2(y1 - y0, x1 - x0);
-        }
+          xs[j] = o.x; ys[j] = o.y; as[j] = Math.atan2(y1 - y0, x1 - x0);
+        };
+        for (let i = 0; i < this.nGenes; i++) point(model.locusFrac(this.ids[i]) * G.DNA_POINTS, this.locusX, this.locusY, this.locusA, l * MAXG + i);
+        // The operator sits just before the operon's first gene.
+        if (this.lacLeader >= 0) point((model.locusFrac(this.ids[this.lacLeader]) - 0.055) * G.DNA_POINTS, this.operX, this.operY, this.operA, l);
       }
     }
 
-    /** Transcripts in progress: RNA polymerase rings along the gene, each trailing its growing strand. */
-    nascent(gv, i, isFocus) {
+    /**
+     * Transcripts in progress of unit leader i: RNA polymerase rings along the gene, each trailing its growing
+     * strand. c is the gene whose segment is drawn (the whole strand for a one-gene unit).
+     */
+    nascent(gv, i, c, isFocus) {
       const n = gv.nascent;
+      const s0 = this.seg0[c], s1 = this.seg1[c];
       for (let j = 0; j < n; j++) {
         const l = this.lobeCount > 1 ? j % 2 : 0;
-        const li = l * NG + i;
+        const li = l * MAXG + i;
         const a = this.locusA[li], prog = gv.nascentProgress[j];
+        if (prog <= s0 && s0 > 0) continue;              // the polymerase has not reached this gene yet
         const span = isFocus ? 16 : 10;
         const x = this.locusX[li] + Math.cos(a) * (prog - 0.5) * span;
         const y = this.locusY[li] + Math.sin(a) * (prog - 0.5) * span;
         const side = j % 2 ? 1 : -1;
         const out = a + side * Math.PI / 2;
-        const len = Math.max(2, prog * (isFocus ? this.plan.strandLen : 10));
-        this.push(K.NASCENT, i, j, x, y, out, len, 0.5);
+        const full = isFocus ? this.plan.strandLen : 10 * (this.members[i].length > 1 ? 1.6 : 1);
+        const bi = this.push(K.NASCENT, c, j, x, y, out, full, 0.5);
+        if (bi >= 0) { this.bs0[bi] = s0; this.bs1[bi] = Math.max(s0 + 2 / full, Math.min(s1, prog)); }
+        if (isFocus && s0 === 0 && bi >= 0) { this.strandProg[this.nStrands] = prog; this.strands[this.nStrands++] = bi; }
       }
     }
 
-    /** The focus gene's ribosomes: floor(R/S) per strand, the remainder to strands in hash order. */
+    /** The focus gene's ribosomes: floor(R/S) per strand, the remainder to strands in hash order, along its part of each. */
     polysome(gv, f, epoch) {
       const p = this.plan;
       const R = p.poly;
-      const S = gv.mRNA + gv.nascent;
+      const S = this.nStrands;
       if (R <= 0 || S <= 0) return;
       const each = Math.floor(R / S), extra = R - each * S;
-      // Strands start after the mature-mRNA group of the focus gene; find them in the buffer.
-      const first = this.findKind(K.MRNA_FOCUS, f), nasFirst = this.findKind(K.NASCENT, f);
-      const pt = this.tmp2;
+      const pt = this.tmp2, s0 = this.seg0[f], s1 = this.seg1[f];
       const rot = D.hash01('ps', 0, epoch) * S;
       for (let s = 0; s < S; s++) {
         // The remainder goes to strands chosen by a hash rotation (stable within the epoch).
         const q = each + (((s + S - Math.floor(rot)) % S) < extra ? 1 : 0);
         if (!q) continue;
-        const isM = s < gv.mRNA;
-        const bi = isM ? first + s : nasFirst + (s - gv.mRNA);
+        const bi = this.strands[s];
         if (bi < 0 || bi >= this.n) continue;
+        const isM = this.bkind[bi] === K.MRNA_FOCUS;
         const x = this.bx[bi], y = this.by[bi], a = this.bang[bi], len = this.blen[bi];
+        // On a transcript still being made, only the part the polymerase has passed carries ribosomes.
+        const top = Math.min(s1, this.strandProg[s]);
+        if (top <= s0) continue;
         for (let k = 0; k < q; k++) {
-          const t = (k + 0.5) / q;
+          const t = s0 + (top - s0) * ((k + 0.5) / q);
           if (isM) wavePoint(x, y, a, len, t, pt);
           else { pt.x = x + Math.cos(a) * len * t; pt.y = y + Math.sin(a) * len * t; }
           const idx = this.push(K.POLY, f, s, pt.x, pt.y, a, 0, 0);
           if (idx >= 0) { this.bph[idx] = this.bph[bi]; this.bom[idx] = this.bom[bi]; }
         }
       }
-    }
-    findKind(kind, gene) {
-      for (let i = 0; i < this.n; i++) if (this.bkind[i] === kind && this.bgene[i] === gene) return i;
-      return -1;
     }
 
     // --- per frame ---------------------------------------------------------------
@@ -589,8 +748,9 @@
       const t0 = performance.now();
       const view = app.cell.observe();
       this.fitGeom(view);
+      if (this.cellRef !== app.cell || this.ids.length !== view.genes.length) this.setupGenes(view);
       const b = this.built, f = app.focusIndex();
-      if (b.tick !== view.tick || b.epoch !== view.clock.generation || b.focus !== f || b.w !== this.cssW ||
+      if (b.tick !== view.tick || b.epoch !== view.clock.generation || b.focus !== f || b.w !== this.cssW || b.model !== this.model() ||
           b.h !== this.cssH || b.length !== this.geom.L || b.pinch !== this.geom.pinch) this.rebuild(view);
       if (running && dtSim > 0) this.spawnMarkers(view, dtSim);
       if (running) this.ageMarkers(this.sinceDraw);
@@ -646,6 +806,7 @@
       c.globalAlpha = 1;
       this.drawNucleoid(c, P);
       this.drawGroups(c, P, K.LOCUS, K.LOCUS, 0, tau);
+      this.drawGroups(c, P, K.OPER, K.REP_BOUND, 0, tau);
       this.drawGroups(c, P, K.NASCENT, K.NASCENT, 0, tau);
       this.drawGroups(c, P, K.MRNA, K.MRNA, A, tau);
       // The crowd (pooled ribosomes, other genes' proteins, ATP, amino acids) is dimmed so the watched gene reads.
@@ -655,6 +816,7 @@
       this.drawGroups(c, P, K.ATP, K.LAC_IN, A, tau);
       c.globalAlpha = 1;
       this.drawProteins(c, P, false, A, tau, false);
+      this.drawGroups(c, P, K.INDUCER, K.INDUCER, A, tau);
       // Then the watched gene's mRNA strands on top (with a halo), and its ribosomes, translucent, over them.
       this.drawGroups(c, P, K.MRNA_FOCUS, K.MRNA_FOCUS, A, tau);
       c.globalAlpha = POLY_ALPHA;
@@ -722,7 +884,7 @@
       for (let gi = 0; gi < this.ng; gi++) {
         if (this.gKind[gi] !== K.PROT) continue;
         const gene = this.bgene[this.gStart[gi]];
-        if ((PAL.shape[GENE_IDS[gene]] === 'membrane') !== membrane) continue;
+        if ((this.shapeOf(gene) === 'membrane') !== membrane) continue;
         if (crowd === true && gene === focus) continue;
         if (crowd === false && gene !== focus) continue;
         this.drawGroup(c, P, gi, A, tau);
@@ -733,8 +895,8 @@
     drawGroup(c, P, gi, A, tau, ring) {
       const kind = this.gKind[gi], style = this.gStyle[gi], s0 = this.gStart[gi], s1 = this.gEnd[gi];
       const base = c.globalAlpha;
-      const color = P[this.gColor[gi]];
-      const stroke = style === 1 || kind === K.NASCENT || kind === K.MRNA || kind === K.MRNA_FOCUS;
+      const color = P[this.gColor[gi]] || P.muted;
+      const stroke = style === 1 || kind === K.NASCENT || kind === K.MRNA || kind === K.MRNA_FOCUS || kind === K.OPER;
       c.beginPath();
       for (let i = s0; i < s1; i++) {
         let x = this.bx[i], y = this.by[i];
@@ -756,7 +918,7 @@
       }
       if (stroke) {
         c.strokeStyle = color;
-        c.lineWidth = kind === K.LOCUS ? 3 : kind === K.MRNA_FOCUS || kind === K.MRNA || kind === K.NASCENT ? 2 : 1.3;
+        c.lineWidth = kind === K.LOCUS ? 3 : kind === K.OPER ? 2 : kind === K.MRNA_FOCUS || kind === K.MRNA || kind === K.NASCENT ? 2 : 1.3;
         c.lineCap = 'round'; c.lineJoin = 'round';
         c.stroke();
       } else {
@@ -779,7 +941,7 @@
       }
       if (kind === K.NASCENT) {                            // RNA polymerase rings at each transcript's base
         c.beginPath();
-        for (let i = s0; i < s1; i++) circle(c, this.bx[i], this.by[i], SZ.rnap);
+        for (let i = s0; i < s1; i++) if (this.bs0[i] === 0) circle(c, this.bx[i], this.by[i], SZ.rnap);
         c.fillStyle = P.inside; c.fill();
         c.strokeStyle = P.rnap; c.lineWidth = 1.3; c.stroke();
       }
@@ -795,20 +957,35 @@
           mark(c, x, y, a, 7);
           break;
         }
-        case K.NASCENT: {
-          const a = this.bang[i], l = this.blen[i];
-          c.moveTo(x, y); c.lineTo(x + Math.cos(a) * l, y + Math.sin(a) * l);
+        case K.OPER: {                                      // a small box across the DNA
+          const a = this.bang[i];
+          rect(c, x, y, a, 6, 7);
           break;
         }
-        case K.MRNA_FOCUS: wavy(c, x, y, this.bang[i], this.blen[i]); break;
-        case K.MRNA: mark(c, x, y, this.bang[i], this.blen[i]); break;
+        case K.REP_BOUND: vee(c, x, y, this.bang[i] + Math.PI, SZ.vee + 2); break;
+        case K.INDUCER: circle(c, x, y, 1.6); break;
+        case K.NASCENT: {
+          const a = this.bang[i], l = this.blen[i], s0 = this.bs0[i], s1 = this.bs1[i];
+          c.moveTo(x + Math.cos(a) * l * s0, y + Math.sin(a) * l * s0); c.lineTo(x + Math.cos(a) * l * s1, y + Math.sin(a) * l * s1);
+          break;
+        }
+        case K.MRNA_FOCUS: wavy(c, x, y, this.bang[i], this.blen[i], this.bs0[i], this.bs1[i]); break;
+        case K.MRNA: {
+          const s0 = this.bs0[i], s1 = this.bs1[i];
+          if (s0 === 0 && s1 === 1) { mark(c, x, y, this.bang[i], this.blen[i]); break; }
+          const a = this.bang[i], l = this.blen[i], ca = Math.cos(a), sa = Math.sin(a);
+          c.moveTo(x + ca * l * (s0 - 0.5), y + sa * l * (s0 - 0.5)); c.lineTo(x + ca * l * (s1 - 0.5), y + sa * l * (s1 - 0.5));
+          break;
+        }
         case K.RIB: case K.RIB_FREE: case K.RIB_STALLED: ribo(c, x, y, SZ.rib); break;
         case K.POLY: ribo(c, x, y, SZ.poly); break;
         case K.PROT: {
-          const gene = this.bgene[i], shape = PAL.shape[GENE_IDS[gene]];
+          const shape = this.shapeOf(this.bgene[i]);
           if (shape === 'membrane') rect(c, x, y, this.bang[i], 9, 5);
           else if (shape === 'tetramer') tetra(c, x, y, SZ.tetra);
           else if (shape === 'bar') rect(c, x, y, this.bang[i], 8, 3);
+          else if (shape === 'repressor') vee(c, x, y, this.bang[i], SZ.vee);
+          else if (shape === 'trimer') trimer(c, x, y, SZ.trimer);
           else circle(c, x, y, SZ.prot);
           break;
         }
@@ -832,7 +1009,7 @@
       rates[0] = fl.glucoseIn; rates[1] = fl.lactoseIn; rates[2] = fl.aaImported; rates[3] = fl.fermentationProductsOut;
       // Proteins cut up by proteases (R-E10): the visible gene with the most degradation, from its glyphs.
       let cut = -1, cutRate = 0;
-      for (let i = 0; i < NG; i++) {
+      for (let i = 0; i < this.nGenes; i++) {
         const r = view.genes[i].degraded_perS;
         if (r > cutRate && !(this.background && this.background[i])) { cutRate = r; cut = i; }
       }
@@ -849,7 +1026,7 @@
     spawn(k) {
       const g = this.geom, o = this.tmp;
       const e = this.emitCount[k]++;
-      const gene = k === CUT ? this.cutGene : FLUX_GENE[k];
+      const gene = k === CUT ? this.cutGene : this.fluxGene[k];
       let x, y, nx, ny;
       const r0 = gene >= 0 ? this.geneRange[2 * gene] : 0, r1 = gene >= 0 ? this.geneRange[2 * gene + 1] : 0;
       if (gene >= 0 && r1 > r0) {
@@ -900,7 +1077,7 @@
           }
           if (!any) continue;
           c.globalAlpha = 1 - band / 3;
-          if (k === CUT) { c.strokeStyle = P['g-' + GENE_IDS[this.cutGene]] || P.muted; c.lineWidth = 1.4; c.stroke(); }
+          if (k === CUT) { c.strokeStyle = (this.cutGene >= 0 && P[this.geneColor(this.cutGene)]) || P.muted; c.lineWidth = 1.4; c.stroke(); }
           else if (k === 3) { c.fillStyle = P.products; c.fill(); }
           else if (k === 2) { c.fillStyle = P.aa; c.fill(); }
           else { c.strokeStyle = P.sugar; c.lineWidth = 1.4; c.stroke(); }
@@ -927,6 +1104,37 @@
       els.cmBadge.hidden = !(view.drugs.chloramphenicol > 0);
       this.updateLegend();
       this.updateOutsideScale();
+      this.updateLacRegion(view);
+    }
+
+    /**
+     * The lac region panel (m2-lac): the design's parts as a DNA strip, LacI on the operator while
+     * any copy is bound, CRP–cAMP on the CRP site while cAMP is high. Rebuilt only when that changes.
+     */
+    updateLacRegion(view) {
+      const el = this.els.lacInset;
+      if (!el) return;
+      const lac = view.lac, show = !!lac && this.lacI >= 0 && !this.isBackground('lacZ');
+      if (el.hidden === show) el.hidden = !show;
+      document.body.toggleAttribute('data-lac', show);
+      if (!show) { if (this.topReserve) this.resize(); return; }
+      const d = lac.design;
+      // Before the first tick the engine has not yet read the medium (cAMP starts at 1): draw CRP from the glucose then.
+      const crp = view.tick > 0 ? lac.cAMP >= 0.5 : !(view.env && view.env.glucose_mM > 0);
+      const st = { bound: lac.operatorBound > 0, crp, inducer: lac.inducer_uM >= lac.inducerHalf_uM };
+      const key = JSON.stringify(d) + (st.bound ? 1 : 0) + (st.crp ? 1 : 0) + (st.inducer ? 1 : 0) + (PAL.isDark() ? 'd' : 'l');
+      if (key === this.lacKey) return;
+      this.lacKey = key;
+      const DV = this.app.BTC.DesignerView;
+      if (!DV) return;
+      const R = C.lacRegion;
+      el.innerHTML = DV.regionSvg(d, st, { words: R, title: R.title });
+      const parts = [
+        d.lac.operator ? (st.bound ? R.bound : R.free) : R.none,
+        d.lac.crpSite ? (st.crp ? R.crpOn : R.crpOff) : R.noSite,
+      ];
+      el.setAttribute('aria-label', F.fill(R.label, { parts: parts.join('; ') }));
+      if (this.insetReserve() !== this.topReserve) this.resize();
     }
 
     updateLegend() {
@@ -957,8 +1165,8 @@
     /** The canvas label: narrator sentence plus the focus gene's counts (updated on narrator key change). */
     setLabel(sentence, key) {
       const app = this.app, view = app.cell.observe(), gv = view.genes[app.focusIndex()];
-      const words = C.geneWords(gv.id, app.labConfig.showNames);
-      const k = key + '|' + gv.id;
+      const words = this.words(gv.id);
+      const k = key + '|' + gv.id + '|' + words.name;
       if (k === this.lastLabelKey) return;
       this.lastLabelKey = k;
       this.canvas.setAttribute('aria-label', F.fill(C.cell.canvasLabel, {
@@ -994,8 +1202,10 @@
     updateFocusBar(view) {
       if (!this.fb) return;
       const app = this.app, id = app.focusGene, gv = view.geneById[id];
-      const words = C.geneWords(id, app.labConfig.showNames);
-      this.fb.chip.style.background = 'var(--g-' + id + ')';
+      if (!gv) return;
+      const words = this.words(id);
+      const bg = 'var(--' + this.model().color(id) + ')';
+      if (this.fb.chip.style.background !== bg) this.fb.chip.style.background = bg;
       LY.setText(this.fb.name, words.name);
       LY.setText(this.fb.sym, words.symbol);
       LY.setText(this.fb.countsM, F.fill(C.focus.counts, { m: F.count(gv.mRNA), n: F.count(gv.nascent) }));
@@ -1016,17 +1226,15 @@
         title: C.focus.pickerTitle,
         build: (body, close) => {
           body.appendChild(h('p', { class: 'sheet-note', text: C.focus.pickerNote }));
-          const view = app.cell.observe();
-          this.updateBackground();
-          for (const id of GENE_IDS) {
-            if (this.isBackground(id)) continue;
-            const w = C.geneWords(id, app.labConfig.showNames);
-            const st = C.geneState[view.geneById[id].geneState];
+          const view = app.cell.observe(), m = this.model();
+          for (const id of m.visible) {
+            const w = this.words(id);
+            const st = C.geneState[view.geneById[id].geneState] || '';
             body.appendChild(h('button', {
               class: 'btn row-btn picker-row' + (id === app.focusGene ? ' is-current' : ''), type: 'button', 'data-gene': id,
               'aria-current': id === app.focusGene ? 'true' : null,
               onclick: () => { app.setFocus(id); close(); },
-            }, [h('span', { class: 'gene-chip', style: { background: 'var(--g-' + id + ')' } }),
+            }, [h('span', { class: 'gene-chip', style: { background: 'var(--' + m.color(id) + ')' } }),
               h('span', { class: 'picker-text' }, [h('span', { class: 'picker-name', text: w.name }),
                 h('span', { class: 'picker-state' }, [h('span', { class: 'sym', text: w.symbol }), w.symbol ? ' · ' : '', st])])]));
           }
@@ -1048,32 +1256,41 @@
       } else {
         text = this.describe(i);
         const kind = this.bkind[i], gene = this.bgene[i];
-        if ((kind === K.LOCUS || kind === K.NASCENT || kind === K.MRNA || kind === K.MRNA_FOCUS) && gene < NG) {
-          this.app.setFocus(GENE_IDS[gene]);
+        if ((kind === K.LOCUS || kind === K.NASCENT || kind === K.MRNA || kind === K.MRNA_FOCUS) && gene < this.nGenes && !this.isBackground(this.ids[gene])) {
+          this.app.setFocus(this.ids[gene]);
         }
       }
       this.showChip(text, x, y);
     }
 
     describe(i) {
-      const kind = this.bkind[i], gene = this.bgene[i], p = this.plan, app = this.app;
-      const id = gene < NG ? GENE_IDS[gene] : null;
-      const w = id ? C.geneWords(id, app.labConfig.showNames) : null;
-      const noun = w ? (w.plural ? w.noun : w.noun) : '';
+      const kind = this.bkind[i], gene = this.bgene[i], p = this.plan;
+      const id = gene < this.nGenes ? this.ids[gene] : null;
+      const w = id ? this.words(id) : null;
+      const noun = w ? w.noun : '';
       const N = (x) => F.count(x);
+      const unit = id ? this.members[this.leaderOf[gene]] : null;
+      const multi = !!unit && unit.length > 1;
       switch (kind) {
         case K.GLC_OUT: return F.fill(C.chip.glcOut, { N: N(p.glcOutN) });
         case K.LAC_OUT: return F.fill(C.chip.lacOut, { N: N(p.lacOutN) });
         case K.AA_OUT: return F.fill(C.chip.aaOut, { N: N(p.aaOutN) });
         case K.LOCUS: return F.fill(C.chip.locus, { name: w.name });
+        case K.OPER: return C.chip.operator;
+        case K.REP_BOUND: return C.chip.repressorBound;
+        case K.INDUCER: return C.chip.repressorInducer;
         case K.NASCENT: return F.fill(C.chip.nascent, { noun });
-        case K.MRNA: case K.MRNA_FOCUS: return F.fill(C.chip.mRNA, { noun, id: this.bsrc[i] });
+        case K.MRNA: case K.MRNA_FOCUS:
+          if (multi) return F.fill(C.chip.tuMRNA, { names: unit.map((c) => this.words(this.ids[c]).symbol || this.words(this.ids[c]).name).join(', '), id: this.bsrc[i] });
+          return F.fill(C.chip.mRNA, { noun, id: this.bsrc[i] });
         case K.RIB: return F.fill(C.chip.ribosome, { N: N(p.ribN) });
         case K.RIB_FREE: return F.fill(C.chip.ribosomeFree, { N: N(p.ribN) });
         case K.RIB_STALLED: return F.fill(C.chip.ribosomeStalled, { N: N(p.ribN) });
         case K.POLY: return F.fill(C.chip.polysome, { noun, N: N(p.polyN) });
         case K.PROT: {
+          if (gene === this.lacI && this.app.cell.observe().lac) return C.chip.repressor;
           const name = F.capital(w.protein);
+          if (this.isBackground(id)) return F.fill(C.chip.protein, { name: F.capital(C.key.glyphs.background), N: N(p.P) });
           return F.fill(p.hollow[gene] ? C.chip.proteinHollow : C.chip.protein, { name: name + ' protein', N: N(p.P) });
         }
         case K.ATP: return F.fill(C.chip.atp, { N: N(p.atpN) });
@@ -1105,26 +1322,41 @@
       const K2 = C.key.glyphs;
       const rows = [];
       const add = (draw, label, note) => rows.push(h('li', { class: 'key-row' }, [keyGlyph(draw, P), h('span', { class: 'key-label', text: label }), h('span', { class: 'key-n num', text: note || '' })]));
-      const view = app.cell.observe();
+      const view = app.cell.observe(), m = this.model();
       this.updateBackground();
-      for (let i = 0; i < NG; i++) {
-        if (this.background[i]) continue;
-        const id = GENE_IDS[i], w = C.geneWords(id, app.labConfig.showNames), col = P['g-' + id], shape = PAL.shape[id];
+      const lacDrawn = !!view.lac && this.lacI >= 0;
+      for (const id of m.visible) {
+        const i = this.idx[id];
+        if (i === undefined) continue;
+        const w = this.words(id), col = P[m.color(id)], shape = this.shapeOf(i);
+        if (lacDrawn && i === this.lacI) {
+          add((c) => { c.beginPath(); vee(c, 12, 12, -Math.PI / 2, SZ.vee + 2); c.fillStyle = col; c.fill(); }, K2.repressor, N(1));
+          add((c) => { c.beginPath(); vee(c, 12, 12, -Math.PI / 2, SZ.vee + 2); c.fillStyle = col; c.fill(); c.beginPath(); circle(c, 12, 12, 1.8); c.fillStyle = P.sugar; c.fill(); }, K2.repressorInducer, N(1));
+          continue;
+        }
         add((c) => {
           c.beginPath();
           if (shape === 'membrane') rect(c, 12, 12, -Math.PI / 2, 9, 5);
           else if (shape === 'tetramer') tetra(c, 12, 12, SZ.tetra);
           else if (shape === 'bar') rect(c, 12, 12, 0.6, 8, 3);
+          else if (shape === 'repressor') vee(c, 12, 12, -Math.PI / 2, SZ.vee + 2);
+          else if (shape === 'trimer') trimer(c, 12, 12, SZ.trimer);
           else circle(c, 12, 12, SZ.prot);
           c.fillStyle = col; c.fill();
         }, F.fill(K2.protein, { name: F.capital(w.protein) }), N(p.P));
       }
       if (this.background.some(Boolean)) add((c) => { c.beginPath(); circle(c, 12, 12, SZ.prot); c.fillStyle = P.muted; c.fill(); }, K2.background, N(p.P));
-      add((c) => { c.beginPath(); circle(c, 12, 12, SZ.prot); c.fillStyle = P['g-' + app.focusGene]; c.fill(); c.beginPath(); circle(c, 12, 12, 5.5); c.strokeStyle = P.accent; c.lineWidth = 1.5; c.stroke(); }, K2.proteinFocus, '');
+      const fcol = P[m.color(app.focusGene)] || P.muted;
+      add((c) => { c.beginPath(); circle(c, 12, 12, SZ.prot); c.fillStyle = fcol; c.fill(); c.beginPath(); circle(c, 12, 12, 5.5); c.strokeStyle = P.accent; c.lineWidth = 1.5; c.stroke(); }, K2.proteinFocus, '');
       add((c) => { c.beginPath(); circle(c, 12, 12, SZ.prot); c.strokeStyle = P.muted; c.lineWidth = 1.3; c.stroke(); }, K2.hollow, '');
-      add((c) => { c.beginPath(); wavy(c, 12, 12, 0, 18); c.strokeStyle = P['g-' + app.focusGene]; c.lineWidth = 2; c.stroke(); }, K2.mRNAFocus, N(1));
-      add((c) => { c.beginPath(); mark(c, 12, 12, 0.7, 8); c.strokeStyle = P['g-gly']; c.lineWidth = 2; c.lineCap = 'round'; c.stroke(); }, K2.mRNA, N(1));
-      add((c) => { c.beginPath(); c.moveTo(8, 16); c.lineTo(18, 6); c.strokeStyle = P['g-gly']; c.lineWidth = 2; c.stroke(); c.beginPath(); circle(c, 8, 16, SZ.rnap); c.fillStyle = P.inside; c.fill(); c.strokeStyle = P.rnap; c.lineWidth = 1.3; c.stroke(); }, K2.nascent, N(1));
+      add((c) => { c.beginPath(); wavy(c, 12, 12, 0, 18); c.strokeStyle = fcol; c.lineWidth = 2; c.stroke(); }, K2.mRNAFocus, N(1));
+      add((c) => { c.beginPath(); mark(c, 12, 12, 0.7, 8); c.strokeStyle = P.muted; c.lineWidth = 2; c.lineCap = 'round'; c.stroke(); }, K2.mRNA, N(1));
+      if (lacDrawn) {
+        const segs = ['lacZ', 'lacY', 'lacA'].map((id) => P[m.color(id)] || P.muted);
+        add((c) => { const f = [0, 0.62, 0.87, 1]; for (let k = 0; k < 3; k++) { c.beginPath(); wavy(c, 12, 12, 0, 20, f[k], f[k + 1]); c.strokeStyle = segs[k]; c.lineWidth = 2; c.stroke(); } }, K2.tuMRNA, N(1));
+        add((c) => { c.beginPath(); c.moveTo(2, 12); c.lineTo(22, 12); c.strokeStyle = P.dna; c.lineWidth = 2.6; c.stroke(); c.beginPath(); rect(c, 12, 12, 0, 6, 7); c.strokeStyle = P.ink; c.lineWidth = 2; c.stroke(); }, K2.operator, '');
+      }
+      add((c) => { c.beginPath(); c.moveTo(8, 16); c.lineTo(18, 6); c.strokeStyle = P.muted; c.lineWidth = 2; c.stroke(); c.beginPath(); circle(c, 8, 16, SZ.rnap); c.fillStyle = P.inside; c.fill(); c.strokeStyle = P.rnap; c.lineWidth = 1.3; c.stroke(); }, K2.nascent, N(1));
       add((c) => { c.beginPath(); ribo(c, 12, 12, SZ.poly); c.fillStyle = P.ribosome; c.fill(); }, K2.polysome, N(p.polyN));
       add((c) => { c.beginPath(); ribo(c, 12, 12, SZ.rib); c.fillStyle = P.ribosome; c.fill(); }, K2.rib, N(p.ribN));
       add((c) => { c.beginPath(); ribo(c, 12, 12, SZ.rib); c.strokeStyle = P.ribosome; c.lineWidth = 1.3; c.stroke(); }, K2.ribFree, N(p.ribN));
@@ -1143,16 +1375,17 @@
       add((c) => { c.beginPath(); circle(c, 12, 12, 2.4); c.fillStyle = P.products; c.fill(); }, K2.fluxOut, M(3));
       // Proteins cut up (level 1.4): shown only when a gene's protein is being broken down.
       if (this.cutGene >= 0) {
-        const id = GENE_IDS[this.cutGene], w = C.geneWords(id, app.labConfig.showNames);
-        add((c) => { c.beginPath(); broken(c, 12, 12, -Math.PI / 2, 12, 5, 0.6); c.strokeStyle = P['g-' + id]; c.lineWidth = 1.4; c.stroke(); },
+        const id = this.ids[this.cutGene], w = this.words(id);
+        add((c) => { c.beginPath(); broken(c, 12, 12, -Math.PI / 2, 12, 5, 0.6); c.strokeStyle = P[m.color(id)] || P.muted; c.lineWidth = 1.4; c.stroke(); },
           F.fill(K2.fluxCut, { name: w.short || F.capital(w.protein) }), M(CUT));
       }
-      void view;
       LY.openSheet({
         title: C.key.title, className: 'key-sheet',
         build: (body) => {
           body.appendChild(h('ul', { class: 'key-list' }, rows));
-          body.appendChild(h('ul', { class: 'key-notes' }, C.key.notes.map((t) => h('li', { text: t }))));
+          const notes = C.key.notes.slice();
+          if (lacDrawn) notes.push(F.capital(K2.notDrawn) + '.');
+          body.appendChild(h('ul', { class: 'key-notes' }, notes.map((t) => h('li', { text: t }))));
         },
       });
     }
@@ -1163,29 +1396,29 @@
       if (this.geom) {
         const view = this.app.cell.observe();
         this.fitGeom(view);
-        plan(view, this.geom, { focus: this.app.focusIndex(), strandNt: this.strandNt }, this.plan);
+        if (this.cellRef !== this.app.cell || this.ids.length !== view.genes.length) this.setupGenes(view);
+        plan(view, this.geom, { focus: this.app.focusIndex(), strandNt: this.strandNt, follower: this.follower, lacI: this.lacI }, this.plan);
       }
       const p = this.plan, out = { mRNA: {}, nascent: {}, protein: {}, scales: {} };
-      for (let i = 0; i < NG; i++) {
-        out.mRNA[GENE_IDS[i]] = p.mRNA[i];
-        out.nascent[GENE_IDS[i]] = p.nascent[i];
-        out.protein[GENE_IDS[i]] = p.protein[i] + p.hollow[i];
+      for (let i = 0; i < this.nGenes; i++) {
+        out.mRNA[this.ids[i]] = p.mRNA[i];
+        out.nascent[this.ids[i]] = p.nascent[i];
+        out.protein[this.ids[i]] = p.protein[i] + p.hollow[i];
       }
       Object.assign(out, {
         ATP: p.atp, ADP: p.adp, ribosomes: p.ribFilled, ribosomesFree: p.ribFree, ribosomesStalled: p.ribStalled,
         polysome: p.poly, aminoAcids: p.aa, lactoseInside: p.lacIn, glucoseOutside: p.glcOut + p.glcOutHollow,
         lactoseOutside: p.lacOut + p.lacOutHollow, aminoAcidsOutside: p.aaOut + p.aaOutHollow, total: p.total, buffer: this.n,
+        genes: this.ids.slice(), loci: this.ids.map((id) => this.model().locusFrac(id)), colors: this.ids.map((id) => this.model().color(id)),
       });
       out.scales = { P: p.P, polysome: p.polyN, ribosomes: p.ribN, ATP: p.atpN, aminoAcids: p.aaN, lactose: p.lacN };
       return out;
     }
   }
 
-  const PKEY = GENE_IDS.map((id) => 'p:' + id);
   const PAUSED_PENDING = C.cell.pausedBadge + ' · ' + C.cell.pendingNote;
   const FLUX_RATE = new Float64Array(NF);
   const FX_KEY = ['fx0', 'fx1', 'fx2', 'fx3', 'fx4'], FP_KEY = ['fp0', 'fp1', 'fp2', 'fp3', 'fp4'];
-  const FLUX_GENE = [0, 4, 3, -1];              // glucose through PtsG, lactose through LacY, amino acids through the importers
 
   /** Mixes two #rrggbb colours: t = 0 gives a, 1 gives b. */
   function mix(a, b, t) {

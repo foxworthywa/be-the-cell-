@@ -21,12 +21,12 @@ function sample(n) {
     const v = def.variant(vs), k = 'hl' + v.halfLife_min + '/x' + v.targetLevel;
     const g = groups[k] || (groups[k] = []);
     if (g.length < n) g.push(vs);
-    if (Object.keys(groups).length === 6 && Object.values(groups).every((x) => x.length >= n)) break;
+    if (Object.keys(groups).length === 5 && Object.values(groups).every((x) => x.length >= n)) break;
   }
   return groups;
 }
 
-test('L-3: 6 variants (half-life 3/4/5 min × ×1/×2); the band is set around the calibrated steady count; kdeg from the half-life', () => {
+test('L-3: 5 variants (half-life 3/4/5 min × ×1/×2, without half-life 5 min at ×2); the band is set around the calibrated steady count; kdeg from the half-life', () => {
   const seen = new Set();
   for (let s = 0; s < 500; s++) {
     const vs = K.variantSeed(s, def.id, 0);
@@ -39,11 +39,13 @@ test('L-3: 6 variants (half-life 3/4/5 min × ×1/×2); the band is set around t
     const c = new Cell(def.config(v, 'task'));
     assert.ok(Math.abs(c.gene('lacY').kdeg - Math.LN2 / (v.halfLife_min * 60)) < 1e-12 || c.config.genes.lacY.kdeg_perS > 0);
   }
-  assert.equal(seen.size, 6);
+  assert.equal(seen.size, 5);
+  assert.ok(!seen.has('5/2'), 'half-life 5 min at ×2 was removed (content version 2)');
+  assert.equal(def.version, 2);
 });
 
-test('L-4/L-5: every solution meets its expectation on every variant (3 seeds each; at least 2 of 3, and 85% of the 18)', (t) => {
-  const groups = sample(3);
+test('L-4/L-5: every solution meets its expectation on every variant (4 seeds each; at least 2 of 4, and 85% of the 20)', (t) => {
+  const groups = sample(4);
   const lines = [];
   for (const name of Object.keys(def.solutions)) {
     let met = 0, n = 0;
@@ -54,10 +56,10 @@ test('L-4/L-5: every solution meets its expectation on every variant (3 seeds ea
         const bad = RUN.game.checkExpect(def.solutions[name].expect, p.result);
         if (!bad.length) ok++; else lines.push(name + ' ' + k + ' seed ' + vs + ': ' + bad.join('; '));
       }
-      assert.ok(ok >= 2, `${name} on ${k}: met its expectation on ${ok} of 3 seeds`);
+      assert.ok(ok >= 2, `${name} on ${k}: met its expectation on ${ok} of 4 seeds`);
       met += ok; n += groups[k].length;
     }
-    // The 40-seed calibration (below) is the real guard on the rates; a sample of 18 allows two misses.
+    // The 40-seed calibration (below) is the real guard on the rates; a sample of 20 allows three misses.
     assert.ok(met / n >= 0.85, `${name}: ${met} of ${n}`);
   }
   t.diagnostic(lines.length ? 'misses (noise): ' + lines.join(' | ') : 'no misses');
@@ -138,7 +140,7 @@ test('the level narrator rules are true whenever they speak (rising, dropping, b
     ['half', (c) => { if (c.tick === 0) c.command({ type: 'setPromoter', gene: 'lacY', level: 0.5 }); }],
     ['down', (c) => { if (c.tick === 0) c.command({ type: 'setPromoter', gene: 'lacY', level: 4 }); if (c.tick === 20 * 60) c.command({ type: 'setPromoter', gene: 'lacY', level: 1 }); }],
   ];
-  for (const vs of [groups['hl3/x1'][0], groups['hl5/x2'][0]]) {
+  for (const vs of [groups['hl3/x1'][0], groups['hl5/x1'][0], groups['hl4/x2'][0]]) {
     for (const [name, script] of scenarios) {
       const r = new RUN.LevelRunner({ def, variantSeed: vs, attempt: 1 }).start();
       const c = r.run.cell, v = r.variant;

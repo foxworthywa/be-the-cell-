@@ -1,6 +1,6 @@
-// Browser checks for the levels (LEVELS.md §12.2, LV-1, LV-4, LV-5, LV-7, LV-8, LV-9, and the
-// published codes page), called by tools/ui-check.js. Levels 1.1 and 1.7 (LV-3, LV-6) and the
-// Prologue (LV-2) get their checks with their own build steps.
+// Browser checks for the levels (LEVELS.md §12.2, LV-1, LV-3, LV-4, LV-5, LV-6, LV-7, LV-8, LV-9,
+// and the published codes page), called by tools/ui-check.js. The Prologue (LV-2) gets its
+// checks with its own build step.
 //
 // Every level screen is checked at 360 × 740 (touch) and most at 1280 × 800 (no touch): no
 // console errors, no request off the origin, no horizontal scroll, the document does not
@@ -85,7 +85,8 @@ async function run(browser, port, OUT, check) {
     const probs = [];
     const shot = shotter(s, 'home', probs);
     const rows = await s.page.evaluate(() => Array.from(document.querySelectorAll('.level-row')).map((b) => b.getAttribute('data-level')));
-    check('LV-1 home lists the Prologue, 1.2 and 1.4 in order', ['P', '1.2', '1.4'].every((id) => rows.indexOf(id) >= 0) && rows.indexOf('1.2') < rows.indexOf('1.4'), rows.join(', '));
+    const order = ['P', '1.1', '1.2', '1.4', '1.7'];
+    check('LV-1 home lists the Prologue, 1.1, 1.2, 1.4 and 1.7 in order', order.every((id) => rows.indexOf(id) >= 0) && order.every((id, k) => k === 0 || rows.indexOf(order[k - 1]) < rows.indexOf(id)), rows.join(', '));
     await shot('home');
     await s.page.locator('[data-action="lab"]').click();
     await paint(s.page);
@@ -289,6 +290,172 @@ async function run(browser, port, OUT, check) {
     const dec = await page.evaluate((c) => window.__btc.BTC.code.decode(c), code);
     check('LV-5 ' + s.tag + ' complete with a valid code', !!dec.ok && dec.level === '14', code);
     finish(s, 'LV-5', probs);
+    await s.context.close();
+  }
+
+  // --- LV-3: level 1.1 ------------------------------------------------------------------------------
+  const CAND = ['ptsG', 'aaImp', 'lacY', 'lacZ', 'fliC', 'araE'];
+  for (const vp of [[360, 740], [1280, 800]]) {
+    const touch = vp[0] < 1000;
+    const s = await openLevel(browser, port, vp, '?test=1&seed=1&level=1.1', { touch });
+    const page = s.page, probs = [];
+    const shot = shotter(s, '1.1', probs);
+    await shot('story');
+    while ((await L(page, 'phase')) === 'intro') await L(page, 'next');
+    await shot('task');
+    await L(page, 'next');
+    await shot('predict-p1');
+    await L(page, 'answer', 'p1', 'ok');
+    await L(page, 'answer', 'p2', 'ok');
+    if (touch) await page.locator('[data-tab="genes"]:visible').first().click();
+    // Six cards lettered A–F in display order, all "Unknown", and no gene's name anywhere in the pane.
+    const cards = await page.evaluate((cand) => {
+      const els = Array.from(document.querySelectorAll('#pane-genes .gene-card'));
+      const text = document.getElementById('pane-genes').textContent;
+      const names = cand.map((id) => window.__btc.BTC.content.genes[id].name).concat(['LacY', 'LacZ', 'PtsG']);
+      return { letters: els.map((e) => e.getAttribute('data-letter')).join(''), unknown: els.filter((e) => /Unknown/.test(e.textContent)).length,
+        leaks: names.filter((n) => text.includes(n)) };
+    }, CAND);
+    check('LV-3 ' + s.tag + ' six candidates, lettered A–F, jobs Unknown, no names shown', cards.letters === 'ABCDEF' && cards.unknown === 6 && cards.leaks.length === 0, JSON.stringify(cards));
+    await shot('genes-hidden');
+    await page.locator('[data-gene="ptsG"] .seg[data-key="2"]').click();
+    if (touch) await page.locator('[data-tab="cell"]:visible').first().click();
+    await L(page, 'runTicks', 240);
+    const hud = await page.evaluate(() => ({ h: Math.round(document.getElementById('hud').getBoundingClientRect().height), stage: Math.round(document.querySelector('#stage').getBoundingClientRect().height),
+      counter: document.querySelector('.hud-counter').textContent }));
+    check('LV-3 ' + s.tag + ' run: 44 px HUD with the experiment counter; canvas ≥ 220 px', hud.h === 44 && /1 \/ 3|Experiments 1/.test(hud.counter) && (!touch || hud.stage >= 220), JSON.stringify(hud));
+    await shot('run');
+    for (let i = 0; i < 200 && !(await R(page, '!!window.__btc.app.test.level.runner().run.monitor.save().revealed.ptsG')); i++) await L(page, 'runTicks', 10);
+    // The narrator's hold is real time: let it pass, then one more tick.
+    await page.waitForTimeout(1700);
+    await L(page, 'runTicks', 1);
+    await page.waitForTimeout(400);
+    const rev = await page.evaluate(() => {
+      const card = document.querySelector('[data-gene="ptsG"]');
+      const toast = document.getElementById('toast');
+      return { key: window.__btc.app.test.shownKey(), narr: document.getElementById('narrator-text').textContent,
+        toast: toast && !toast.hidden ? toast.textContent : '', card: card ? card.textContent : '' };
+    });
+    const named = await R(page, "window.__btc.BTC.content.genes.ptsG.name");
+    check('LV-3 ' + s.tag + ' the transporter\'s job is seen: its narrator line, a toast with its letter, and its name on the card',
+      rev.key === 'l11.revealGlucose' && /glucose transporter/i.test(rev.narr) && /is now named/.test(rev.toast) && (!touch || true), JSON.stringify(rev));
+    if (touch) {
+      await page.locator('[data-tab="genes"]:visible').first().click();
+      const card = await page.evaluate(() => document.querySelector('#pane-genes [data-gene="ptsG"]').textContent);
+      check('LV-3 ' + s.tag + ' the revealed card carries the name and says why', card.includes(named) && /Named after what its protein did/.test(card), card.slice(0, 160));
+      await shot('genes-revealed');
+      await page.locator('[data-tab="cell"]:visible').first().click();
+    }
+    await shot('reveal');
+    await L(page, 'runToEnd');
+    await shot('goal');
+    await L(page, 'next');
+    while (await R(page, '!!window.__btc.app.test.level.runner().beat')) await L(page, 'next');
+    await shot('result');
+    await L(page, 'next');
+    await L(page, 'answer', 'l11.d1', 1);
+    await shot('debrief-wrong');
+    await L(page, 'answer', 'l11.d1', 'ok'); await L(page, 'next');
+    await L(page, 'answer', 'l11.d2', 'ok'); await L(page, 'next');
+    await shot('echo');
+    await L(page, 'next'); await L(page, 'next');
+    await shot('complete');
+    const lines = await page.evaluate(() => document.querySelector('.sheet-body').textContent);
+    const code = await L(page, 'code');
+    const dec = await page.evaluate((c) => window.__btc.BTC.code.decode(c), code);
+    check('LV-3 ' + s.tag + ' complete: every candidate named with its letter, and a valid code', !!dec.ok && dec.level === '11' && dec.G === 1 && /A[:\s·–-]/.test(lines) && lines.includes(named), code);
+    finish(s, 'LV-3', probs);
+    await s.context.close();
+  }
+
+  // --- LV-6: level 1.7 ------------------------------------------------------------------------------
+  for (const vp of [[360, 740], [375, 553], [1280, 800]]) {
+    const touch = vp[0] < 1000, full = vp[1] !== 553;
+    const s = await openLevel(browser, port, vp, '?test=1&seed=1&level=1.7', { touch });
+    const page = s.page, probs = [];
+    const shot = shotter(s, '1.7', probs);
+    if (full) await shot('story');
+    while ((await L(page, 'phase')) === 'intro') await L(page, 'next');
+    if (full) await shot('task');
+    await L(page, 'next');
+    const rows = await R(page, 'window.__btc.app.test.level.runner().variant.rows');
+    const tt0 = await page.evaluate(() => ({ cards: document.querySelectorAll('.tt-card').length, expert: document.querySelectorAll('.tt-card.is-expert').length,
+      lock: document.querySelector('.lv-sticky [data-primary]').disabled }));
+    await shot('predict-table');
+    const ans = { wt: { glc: 0, lac: 1 }, dlacI: { glc: 1, lac: 1 }, Oc: { glc: 1, lac: 1 }, Is: { glc: 0, lac: 0 } };
+    for (const r of rows) for (const c of ['glc', 'lac']) await page.locator('.tt-card[data-row="' + r + '"] [data-col="' + c + '"][data-value="' + ans[r][c] + '"]').click();
+    const lockOk = await page.evaluate(() => !document.querySelector('.lv-sticky [data-primary]').disabled);
+    check('LV-6 ' + s.tag + ' truth table: three Core strains and one Expert, Lock in only once the Core cells are set', tt0.cards === 4 && tt0.expert === 1 && tt0.lock && lockOk, JSON.stringify(tt0));
+    if (full) await shot('predict-table-filled');
+    await page.locator('.lv-sticky [data-primary]').click();
+    await L(page, 'answer', 'crp', 'ok');
+    const d0 = await page.evaluate(() => ({ phase: window.__btc.app.test.level.phase(), summary: (document.querySelector('.dz-summary') || {}).textContent || '',
+      parts: document.querySelectorAll('[data-part]').length }));
+    await shot('design');
+    await page.locator('[data-part="lac.promoter"]').click();
+    if (full) await shot('design-open');
+    await page.locator('.dz-option[data-value="1"]').click();
+    await page.locator('[data-part="lac.operator"]').click();
+    await page.locator('.dz-option[data-value="true"]').click();
+    await page.locator('[data-part="lacI.allele"]').click();
+    await page.locator('.dz-option[data-value="wt"]').click();
+    await page.locator('[data-part="lac.crpSite"]').click();
+    await page.locator('.dz-option[data-value="true"]').click();
+    const d1 = await page.evaluate(() => (document.querySelector('.dz-summary') || {}).textContent || '');
+    await page.locator('[data-action="design-run"]').click();
+    if (full) await shot('design-confirm');
+    await page.locator('[data-action="design-confirm"]').click();
+    const design = await R(page, 'window.__btc.cell.observe().lac.design');
+    check('LV-6 ' + s.tag + ' designer: starts as the Commander\'s design, edits show in the summary, Run confirms, the cell runs the design',
+      d0.phase === 'design' && d0.parts === 5 && /operator absent/.test(d0.summary) && /operator present/.test(d1) && /CRP site present/.test(d1) &&
+      design.lac.operator === true && design.lacI.allele === 'wt' && design.lac.promoter === 1, JSON.stringify({ d0, d1, design }));
+    if (full) await shot('on-run');
+    while (await R(page, '!!window.__btc.app.test.level.runner().beat')) await L(page, 'next');
+    await L(page, 'runTicks', 120);
+    const run = await page.evaluate(() => ({
+      h: Math.round(document.getElementById('hud').getBoundingClientRect().height), stage: Math.round(document.querySelector('#stage').getBoundingClientRect().height),
+      counter: document.querySelector('.hud-counter').textContent, action: !!document.querySelector('.hud-action:not([hidden])'),
+      inset: !!document.querySelector('#lac-inset:not([hidden]) svg'),
+    }));
+    // Under 400 px the "No controls" chip gives its place to "To the end" (LEVELS §16).
+    check('LV-6 ' + s.tag + ' run: 44 px HUD, "No controls" (wide), Run to the end, the lac region drawn; canvas ≥ 220 px',
+      run.h === 44 && (vp[0] < 400 || /No controls/.test(run.counter)) && run.action && run.inset && (!touch || run.stage >= 220), JSON.stringify(run));
+    await shot('run');
+    if (touch && full) {
+      await page.locator('[data-tab="genes"]:visible').first().click();
+      const ro = await page.evaluate(() => ({ cards: document.querySelectorAll('#pane-genes .gene-card').length, segs: document.querySelectorAll('#pane-genes .seg:not([disabled])').length }));
+      check('LV-6 ' + s.tag + ' Genes: the four lac genes, read-only', ro.cards === 4 && ro.segs === 0, JSON.stringify(ro));
+      await shot('genes');
+      await page.locator('[data-tab="graphs"]:visible').first().click();
+      await shot('graphs-bands');
+      await page.locator('[data-tab="cell"]:visible').first().click();
+    }
+    if (!full) { finish(s, 'LV-6', probs); await s.context.close(); continue; }
+    await page.locator('.hud-action').click();
+    await page.waitForFunction(() => !window.__btc.app.ff, null, { timeout: 60000 });
+    const end = await page.evaluate(() => ({ goal: window.__btc.app.test.level.runner().goal, hud: document.querySelector('.hud-goal-text').textContent,
+      tick: window.__btc.cell.tick }));
+    await shot('run-end');
+    await L(page, 'next');
+    while (await R(page, '!!window.__btc.app.test.level.runner().beat')) await L(page, 'next');
+    await page.waitForFunction(() => document.querySelectorAll('.lv-eff.lv-sub').length === 3, null, { timeout: 30000 });
+    const res = await page.evaluate(() => ({ bars: Array.from(document.querySelectorAll('.lv-eff.lv-sub')).map((b) => b.getAttribute('data-bar')).join(','),
+      chart: !!document.querySelector('.lv-sketch-chart canvas') }));
+    check('LV-6 ' + s.tag + ' Run to the end reaches the end; the result shows growth, waste and lag against par, and the chart',
+      end.goal && /Continue/.test(end.hud) && res.bars === 'growth,waste,lag' && res.chart, JSON.stringify({ end, res }));
+    await shot('result');
+    await L(page, 'next');
+    await L(page, 'answer', 'l17.d1', 2);
+    await shot('debrief-wrong');
+    await L(page, 'answer', 'l17.d1', 'ok'); await L(page, 'next');
+    await L(page, 'answer', 'l17.d2', 'ok'); await L(page, 'next');
+    await shot('echo');
+    await L(page, 'next'); await L(page, 'next');
+    await shot('complete');
+    const code = await L(page, 'code');
+    const dec = await page.evaluate((c) => window.__btc.BTC.code.decode(c), code);
+    check('LV-6 ' + s.tag + ' complete with a valid code', !!dec.ok && dec.level === '17' && dec.G === 1, code);
+    finish(s, 'LV-6', probs);
     await s.context.close();
   }
 

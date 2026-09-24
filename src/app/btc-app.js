@@ -1,4 +1,4 @@
-// @deps btc-content btc-palette btc-format btc-prefs btc-layout btc-loop btc-controls btc-cellview btc-status btc-genes-panel btc-medium-panel btc-graphs-panel btc-narrator-ui btc-pwa btc-home btc-hud btc-sketch btc-prologue btc-level-ui
+// @deps btc-content btc-palette btc-format btc-prefs btc-layout btc-loop btc-controls btc-cellview btc-status btc-genes-panel btc-medium-panel btc-graphs-panel btc-narrator-ui btc-pwa btc-home btc-hud btc-sketch btc-designer btc-prologue btc-level-ui
 /*
  * Be the Cell: bootstrap and wiring (LAB_UI §10.3–10.4), and the router
  * (LEVELS §9 item 1): screens home, lab and level. The lab mounts as in M1;
@@ -44,8 +44,8 @@
     speedOptions: null, defaultSpeed: 60, startPaused: true, tabs: ['cell', 'genes', 'medium', 'graphs'],
     graphGenes: null, bands: null, yBand: null, hud: false, focusGene: null,
     // Level extensions (LEVELS.md, "Changes after engine 1.1"): which plots, in which order; the graph
-    // window (s) a level opens with; the tab it opens on.
-    plots: null, graphWindow: null, initialTab: null,
+    // window (s) a level opens with; the tab it opens on; a line under the medium rows.
+    plots: null, graphWindow: null, initialTab: null, mediumNote: null,
   });
   function localDate() {
     const d = new Date();
@@ -66,6 +66,7 @@
     const $ = (id) => document.getElementById(id);
     const params = PR.parseParams(location.search);
     const ui = PR.loadUI();
+    const GENE_ALL = C.ALL_GENE_IDS;
     if (params.speed) ui.speed = params.speed;
     if (params.tab) ui.tab = params.tab;
     if (params.theme) ui.theme = params.theme;
@@ -93,6 +94,8 @@
       markers: { n: 0, tick: new Int32Array(MARKER_CAP), kind: new Uint8Array(MARKER_CAP), prio: new Uint8Array(MARKER_CAP), label: new Array(MARKER_CAP).fill('') },
       bandList: [],
       bandModel: { n: 0, t0: new Float64Array(BAND_CAP), t1: new Float64Array(BAND_CAP), color: new Array(BAND_CAP).fill('drug-rif'), label: new Array(BAND_CAP).fill('') },
+      // How this screen shows the cell's genes: order, letters, colours, names (BTC.content.geneModel).
+      geneModel: null,
       narrKey: '', narrTick: -1, lastTick: -1,
       sinceSlow: 1, sinceSave: 0, resumeOnShow: false, paintQueued: false,
     };
@@ -123,6 +126,13 @@
       crypto.getRandomValues(a);      // the only randomness in the app: a new cell's seed
       return a[0];
     }
+    /** The gene model for this cell and screen (hidden names, display order, colours; LEVELS §5.5.1). */
+    function refreshGeneModel() {
+      const ids = app.cell ? app.cell.observe().genes.map((g) => g.id) : C.GENE_IDS.slice();
+      app.geneModel = C.geneModel(ids, app.labConfig);
+      focusIdx = Math.max(0, ids.indexOf(app.focusGene));
+    }
+    app.refreshGeneModel = refreshGeneModel;
     function attach(cell) {
       app.cell = cell;
       app.gen0 = cell.observe().clock.generation;
@@ -133,7 +143,8 @@
       app.recRecent = new BTC.Recorder({ every: 5, capacity: RECENT_CAP, channels, mode: 'ring' });
       app.recRecent.sample(cell);
       cell.attachRecorder(app.recRecent);
-      app.mem = BTC.narrate.createMemory({ phrases: C.narratorPhrases(), showNames: app.labConfig.showNames, dt: cell.dt });
+      refreshGeneModel();
+      app.mem = BTC.narrate.createMemory({ phrases: C.narratorPhrases(app.geneModel), showNames: app.labConfig.showNames, dt: cell.dt });
       app.facts = BTC.observe.createFacts();
       app.pending.clear();
       restorePending(cell);
@@ -169,6 +180,7 @@
     app.reducedMotion = () => ui.reducedMotion === 'on' ||
       (ui.reducedMotion === 'auto' && typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches);
     let focusIdx = C.GENE_IDS.indexOf(app.focusGene);
+    /** The focus gene's index in the cell's own gene list. */
     app.focusIndex = () => focusIdx;
     app.savePrefs = () => PR.saveUI(ui);     // the lab's preferences; a level's own settings are not saved
 
@@ -190,7 +202,7 @@
     }
     app.pause = () => { app.loop.stop(); afterRunChange(); app.logEvent('pause', {}); };
     app.resume = () => {
-      if (!app.canRun()) return;
+      if (!app.canRun() || app.ff) return;
       app.loop.start(); afterRunChange(); app.logEvent('resume', {});
     };
     /** Time may run: always in the lab; in a level only while its run (or demo, epilogue, or live Prologue scene) is on. */
@@ -211,7 +223,8 @@
 
     app.setFocus = (id) => {
       if (id === app.focusGene || !app.geneVisible(id)) return;
-      app.focusGene = id; focusIdx = C.GENE_IDS.indexOf(id); app.ui.focusGene = id;
+      app.focusGene = id; app.ui.focusGene = id;
+      focusIdx = Math.max(0, app.geneModel ? app.geneModel.ids.indexOf(id) : C.GENE_IDS.indexOf(id));
       const gg = app.ui.graphGenes;
       if (gg.indexOf(id) < 0) { if (gg.length >= 3) gg.shift(); gg.push(id); }
       app.logEvent('focus', { gene: id });
@@ -261,7 +274,12 @@
       return r;
     };
 
-    const STRAIN_GENES = BTC.catalog.STRAINS['m1-lab'].genes;
+    /** The default promoter level of a gene in the current cell's strain (the dial's default mark). */
+    const defaultLevelOf = (id) => {
+      const strain = (app.cell && app.cell.config && app.cell.config.strain) || 'm1-lab';
+      const g = (BTC.catalog.STRAINS[strain] || BTC.catalog.STRAINS['m1-lab']).genes.find((x) => x.id === id);
+      return g ? g.defaultLevel : 0;
+    };
     const levelKey = (level) => (level === 'off' ? 'off' : level === null || level === undefined ? null : String(level));
 
     /** A promoter control for the gene getGene() returns (a card's own gene, or the focus gene). */
@@ -279,9 +297,9 @@
       });
       app.registry.push({
         ctrl, key: getGene, where, locked: () => app.geneControlMode(getGene()) === 'locked',
-        read: (view) => levelKey(view.geneById[getGene()].level),
+        read: (view) => (view.geneById[getGene()] ? levelKey(view.geneById[getGene()].level) : null),
         defaultKey: () => {
-          const lv = STRAIN_GENES[C.GENE_IDS.indexOf(getGene())].defaultLevel;
+          const lv = defaultLevelOf(getGene());
           return levelKey(lv === 0 ? 'off' : lv);
         },
       });
@@ -330,7 +348,9 @@
     function commandLabel(ev) {
       const G = C.graphs.marker, lv = C.graphs.markerLevels, r = ev.resolved, a = ev.args || {};
       if (ev.cmdType === 'setPromoter') {
-        return F.fill(G.promoter, { symbol: C.genes[a.gene] ? C.genes[a.gene].symbol : a.gene, level: r.level === null ? '' : lv[r.level] });
+        // With names hidden (1.1) a command is marked with the gene's letter until its job has been seen.
+        const tag = app.geneModel && app.geneModel.ids.indexOf(a.gene) >= 0 ? app.geneModel.words(a.gene).tag : C.genes[a.gene] ? C.genes[a.gene].symbol : a.gene;
+        return F.fill(G.promoter, { symbol: tag, level: r.level === null ? '' : lv[r.level] });
       }
       if (ev.cmdType === 'setMedium') {
         for (const f of ['glucose', 'lactose', 'aminoAcids']) {
@@ -356,7 +376,17 @@
     app.bandsFor = (tick) => {
       const bm = app.bandModel, dt = app.cell.dt;
       bm.n = 0;
+      // A level's schedule (1.7's sugar phases, labConfig.bands): the phases that have started, up to now; future ones are not drawn.
+      const lb = app.labConfig.bands;
+      if (Array.isArray(lb)) {
+        for (const b of lb) {
+          if (bm.n >= BAND_CAP || b.t0 > tick) continue;
+          bm.t0[bm.n] = b.t0 * dt; bm.t1[bm.n] = Math.min(b.t1, tick) * dt; bm.color[bm.n] = b.token || 'accent'; bm.label[bm.n] = b.label || '';
+          bm.n++;
+        }
+      }
       for (const b of app.bandList) {
+        if (bm.n >= BAND_CAP) break;
         bm.t0[bm.n] = b.t0 * dt; bm.t1[bm.n] = (b.t1 < 0 ? tick : b.t1) * dt;
         bm.color[bm.n] = b.drug === 'rifampicin' ? 'drug-rif' : 'drug-cm';
         bm.label[bm.n] = C.graphs.marker.bandLabel[b.drug] || '';
@@ -374,7 +404,10 @@
           case 'command_applied':
             app.pending.resolve(ev);
             controls = true;
-            addMarker(ev.tick, MK_COMMAND, commandLabel(ev), ev.cmdType === 'setMedium' && ev.args && ev.args.glucose_mM !== undefined ? 4 : PRIO[ev.cmdType] || 1);
+            // A level's phase change (1.7) is drawn as the edge of its band, labelled with the phase: no marker on top.
+            if (!(ev.cmdType === 'setMedium' && Array.isArray(app.labConfig.bands) && app.labConfig.bands.some((b) => b.t0 === ev.tick))) {
+              addMarker(ev.tick, MK_COMMAND, commandLabel(ev), ev.cmdType === 'setMedium' && ev.args && ev.args.glucose_mM !== undefined ? 4 : PRIO[ev.cmdType] || 1);
+            }
             if (ev.cmdType === 'setDrug') drugBand(ev);
             break;
           case 'command_rejected': {
@@ -667,7 +700,8 @@
       app.labConfig = LAB_CONFIG;
       app.levelRules = null;
       app.ui = ui;
-      app.focusGene = ui.focusGene; focusIdx = C.GENE_IDS.indexOf(app.focusGene);
+      app.focusGene = ui.focusGene;
+      refreshGeneModel();
       app.loop.setSpeed(ui.speed);
       views.status.setLevel(null);
       setScreen('lab');
@@ -726,14 +760,38 @@
 
     function openLevel(def, runner) {
       app.mode = 'level';
-      app.level = { def, runner, live: false, lastEnd: null, sinceHud: 1, dirtyAt: null };
+      app.level = { def, runner, live: false, lastEnd: null, sinceHud: 1, dirtyAt: null, lcKey: null };
       setScreen('level');
       views.levelUI.bind(runner);
       views.status.setLevel(views.levelUI.title());
       saveLevelNow();
       views.levelUI.sync();
+      startParIdle();
+    }
+    /**
+     * 1.7's par run (the reference design on the student's schedule and seed) is worked out in idle
+     * frames, at most 4 ms each, from the moment the level opens (LEVELS §7.7.4).
+     */
+    function startParIdle() {
+      const L = app.level;
+      if (!L || !L.runner.hasPar() || L.runner.par.done || L.parRaf) return;
+      const frame = () => {
+        const M = app.level;
+        if (!M || M !== L) return;
+        L.parRaf = 0;
+        try { L.runner.parStep(4); } catch (e) { app.onError(e); return; }
+        if (L.runner.par.done) {
+          saveLevelNow();
+          if (L.runner.phase === 'result') views.levelUI.sync();
+          return;
+        }
+        L.parRaf = requestAnimationFrame(frame);
+      };
+      L.parRaf = requestAnimationFrame(frame);
     }
     function closeLevel() {
+      stopRunToEnd();
+      if (app.level && app.level.parRaf) cancelAnimationFrame(app.level.parRaf);
       views.levelUI.unbind();
       views.prologue.reset();
       app.level = null;
@@ -809,24 +867,55 @@
       app.loop.stop();
       const lc = levelConfig(r.labConfig());
       app.labConfig = lc;
+      if (app.level) app.level.lcKey = JSON.stringify(lc);
       app.levelRules = r.narratorRules();
       app.pending = new BTC.controls.Pending();
       attach(cell);
       app.config = cell.config;
-      const visible = C.GENE_IDS.filter((id) => app.geneVisible(id));
+      const visible = app.geneModel.visible;
       const focus = lc.focusGene && visible.indexOf(lc.focusGene) >= 0 ? lc.focusGene : visible[0] || 'fliC';
       app.ui = Object.assign({}, ui, {
-        speed: lc.defaultSpeed || 60, tab: lc.initialTab || 'cell', focusGene: focus, window: lc.graphWindow || 600,
+        speed: lc.defaultSpeed || 60, tab: lc.initialTab || 'cell', focusGene: focus,
+        window: lc.graphWindow !== null && lc.graphWindow !== undefined ? lc.graphWindow : 600,
         graphGenes: (lc.graphGenes || [focus]).filter((id) => visible.indexOf(id) >= 0).slice(0, 3),
         logScales: Object.assign({}, PR.DEFAULTS.logScales),
       });
       if (!app.ui.graphGenes.length) app.ui.graphGenes = [focus];
-      app.focusGene = focus; focusIdx = C.GENE_IDS.indexOf(focus);
+      app.focusGene = focus; focusIdx = Math.max(0, app.geneModel.ids.indexOf(focus));
       app.loop.setSpeed(app.ui.speed);
       remountPanels();
       resetNarrator();
       logSpeed();
       if (lc.startPaused === false && app.canRun()) app.resume();
+      app.requestPaint();
+    }
+
+    /**
+     * A level's labConfig can change while its cell stays (1.1 names a gene once its protein's job is
+     * seen; a phase may lock a dial): the panels are rebuilt and the narrator gets the new names.
+     */
+    function refreshLevelConfig(r) {
+      const L = app.level;
+      if (!L || L.live || !r.run || app.cell !== r.run.cell) return;
+      const lc = levelConfig(r.labConfig());
+      const key = JSON.stringify(lc);
+      if (key === L.lcKey) return;
+      const before = app.labConfig.revealed || {};
+      L.lcKey = key;
+      app.labConfig = lc;
+      refreshGeneModel();
+      app.mem.phrases = C.narratorPhrases(app.geneModel);
+      app.mem.showNames = lc.showNames !== false;
+      app.mem.cache = {};
+      remountPanels();
+      views.cellView.dirty = true;
+      // A newly named gene gets a toast, with its letter and its name (not at the end, when all are named at once).
+      const fresh = Object.keys(lc.revealed || {}).filter((id) => !before[id]);
+      if (fresh.length === 1 && r.phase !== 'complete') {
+        const id = fresh[0];
+        LY.toast(F.fill(C.game.reveal, { letter: app.geneModel.letter(id), name: C.genes[id].name }));
+        app.logEvent('reveal', { gene: id, letter: app.geneModel.letter(id) });
+      }
       app.requestPaint();
     }
 
@@ -862,6 +951,7 @@
       const cell = r.run ? r.run.cell : null;
       if (!cell) { showSurface('none'); return; }
       if (app.cell !== cell) attachLevelCell(r, cell);
+      else refreshLevelConfig(r);
       showSurface('app');
       updateHud(true);
       views.status.update(app.cell.observe(), app.facts);
@@ -879,6 +969,7 @@
     }
 
     function hudMode(r) {
+      if (app.ff) return 'fast';
       if (r.phase === 'run' && r.run && r.run.endReason && r.goal) return 'met';
       if (r.phase === 'epilogue' && r.epilogue.done) return 'continue';
       if (r.phase === 'demo' && r.demo.done) return 'continue';
@@ -887,8 +978,58 @@
     function updateHud() {
       const L = app.level;
       if (!L || !app.labConfig.hud) return;
-      views.hud.update(L.runner.hud(), window.innerWidth, hudMode(L.runner));
+      const r = L.runner;
+      const model = r.hud();
+      // "Run to the end" (1.7) is offered only while the run can go on; while it runs, it shows its progress.
+      if (model && model.action && !(r.phase === 'run' && !r.halted() && !r.beat)) model.action = null;
+      if (model && model.action && app.ff) model.action = Object.assign({}, model.action, { progress: app.ff.pct });
+      views.hud.update(model, window.innerWidth, hudMode(r));
     }
+
+    /**
+     * "Run to the end" (LEVELS §7.7.2): the rest of the run in chunks of at most 8 ms of engine time
+     * per frame, with its progress in the HUD; the cell view and graphs are painted at the end. A
+     * second tap stops it where it is (paused).
+     */
+    function stopRunToEnd() {
+      if (!app.ff) return;
+      if (app.ff.raf) cancelAnimationFrame(app.ff.raf);
+      app.ff = null;
+      document.body.removeAttribute('data-ff');
+    }
+    app.runToEnd = () => {
+      const L = app.level, r = L && L.runner;
+      if (app.ff) { stopRunToEnd(); resetNarrator(); app.render(0, true, true, 0); updateHud(); return; }
+      if (!r || r.phase !== 'run' || !app.canRun() || r.beat) return;
+      app.loop.stop();
+      const total = r.def.par && r.def.par.ticks ? r.def.par.ticks(r.variant) : null;
+      app.ff = { raf: 0, pct: 0 };
+      document.body.setAttribute('data-ff', '');
+      app.logEvent('speed', { s: 'end' });
+      const frame = () => {
+        if (!app.ff) return;
+        app.ff.raf = 0;
+        const t0 = performance.now();
+        try {
+          let n = 0;
+          while (!app.shouldHalt()) { app.cell.step(); if ((++n & 31) === 0 && performance.now() - t0 >= 8) break; }
+          app.onEvents(app.cell.takeEvents());
+        } catch (err) { stopRunToEnd(); app.onError(err); return; }
+        app.ff.pct = total ? Math.min(100, Math.floor((100 * app.cell.tick) / total)) : 0;
+        if (app.shouldHalt()) {
+          stopRunToEnd();
+          // The narrator's held line is hours old by now: let it read the cell afresh.
+          resetNarrator();
+          app.render(0, true, true, 0);
+          updateHud();
+          return;
+        }
+        updateHud();
+        app.ff.raf = requestAnimationFrame(frame);
+      };
+      updateHud();
+      app.ff.raf = requestAnimationFrame(frame);
+    };
     /** The goal chip: the task card, or Continue once the run (or the epilogue) is over. */
     function hudGoalTap() {
       const r = app.level && app.level.runner;
@@ -910,11 +1051,12 @@
       if (r.def.epilogue && r.def.epilogue.speed) app.setSpeed(r.def.epilogue.speed);
       app.resume();
     };
-    /** Per frame in a level: the end of a run, the HUD (≤ 4 Hz), the debounced autosave. */
+    /** Per frame in a level: the end of a run, the HUD (≤ 4 Hz), the debounced autosave, a changed labConfig (1.1's reveals). */
     function levelFrame(dtReal, force) {
       const L = app.level;
       if (!L) return;
       const r = L.runner;
+      if (force || L.sinceHud + dtReal >= 0.25) refreshLevelConfig(r);
       if (r.phase === 'run' && r.run && r.run.endReason && L.lastEnd !== r.run.endTick + ':' + r.runs) {
         L.lastEnd = r.run.endTick + ':' + r.runs;
         if (app.loop.running) app.loop.stop();
@@ -974,7 +1116,7 @@
     views.home = new BTC.HomeView(app);
     views.prologue = new BTC.PrologueView(app);
     views.levelUI = new BTC.LevelUI(app);
-    views.hud = new BTC.Hud({ onGoal: () => hudGoalTap() });
+    views.hud = new BTC.Hud({ onGoal: () => hudGoalTap(), onAction: (id) => { if (id === 'runToEnd') app.runToEnd(); } });
     views.cellView = new BTC.CellView(app);
     views.genes = new BTC.GenesPanel(app);
     views.medium = new BTC.MediumPanel(app);
@@ -986,6 +1128,7 @@
       stage: $('stage'), canvas: $('cell-canvas'), focus: $('focusbar'), legend: $('legend'),
       legendFull: $('legend-full'), legendShort: $('legend-short'), scaleBar: $('scalebar'), outsideScale: $('outside-scale'),
       pausedBadge: $('paused-badge'), pausedText: $('paused-text'), rifBadge: $('badge-rif'), cmBadge: $('badge-cm'), chip: $('tap-chip'),
+      lacInset: $('lac-inset'),
     });
     views.genes.mount($('pane-genes'));
     views.medium.mount($('pane-medium'));
@@ -1118,7 +1261,18 @@
           },
           /** 1.4: taps "Switch LacY off" in the epilogue. */
           startEpilogue() { app.startEpilogue(); return R().epilogue.started; },
+          /** 1.7: sets the design (in the design phase) as if edited; run() confirms it and moves to the run. */
           design(obj) { const ok = R().setDesign(obj); views.levelUI.after(); return ok; },
+          runDesign() { views.levelUI.runDesign(); return R().phase; },
+          /** 1.7: taps "Run to the end" and waits until the run has ended. */
+          fastForward() {
+            return new Promise((resolve) => {
+              app.runToEnd();
+              const poll = () => (app.ff ? requestAnimationFrame(poll) : resolve(app.cell.tick));
+              poll();
+            });
+          },
+          par: () => { const r = R(); return r && r.hasPar() ? { done: r.par.done, result: r.parResult() } : null; },
           runTicks: (n) => { const t = stepN(n); updateHud(); return t; },
           runToEnd() { let guard = 0; while (!app.shouldHalt() && guard++ < 1000) stepN(500); updateHud(); return app.cell.tick; },
           /** The sheet's main button: the next line, screen or phase. */

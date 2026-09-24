@@ -135,6 +135,8 @@ body[data-layout="compact"] .gauge { width: 56px; }
 body:not([data-layout="compact"]) .status { display: flex; column-gap: 14px; min-height: 56px; }
 /* Levels: the Levels button at the left end of the status strip; the level title in wide (LEVELS §4.5). */
 .status.has-levels { grid-template-columns: 44px 46px minmax(0, 1fr) auto; column-gap: 8px; }
+body[data-layout="compact"] .status.has-levels .speed-chip { padding: 3px 8px; }
+body[data-layout="compact"] .status.has-levels .st-clock.is-long { font-size: 14px; }
 .btn.levels-btn {
   min-width: 44px; min-height: 44px; padding: 0 2px; border-color: transparent; background: none; color: var(--ink);
   display: inline-flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; font-size: 12px; font-weight: 600; line-height: 1;
@@ -323,6 +325,8 @@ body[data-layout="stack"] .card-list { grid-template-columns: repeat(auto-fill, 
   background: var(--panel); color: var(--ink); font-weight: 600;
 }
 .btn.primary { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
+/* A button that cannot act yet (Lock in before every Core cell is set) says so by its look. */
+.btn:disabled { opacity: .45; cursor: default; }
 .icon-btn { width: 44px; min-height: 44px; padding: 0; font-size: 18px; border-color: transparent; background: none; }
 .ctl-list { display: flex; flex-direction: column; gap: 14px; background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius-panel); padding: 12px; margin-bottom: 18px; }
 .ctl-row { display: flex; flex-direction: column; gap: 6px; }
@@ -633,6 +637,86 @@ body[data-layout="compact"] .lv-full { height: calc(100vh - 12px - var(--safe-t)
 .lv-copy-status { font-size: 14px !important; min-height: 1.4em; color: var(--ink); }
 .lv-keep { font-size: 14px !important; font-weight: 600; }
 
+/* ---- level 1.1: hidden names and reveals (LEVELS §5.5.1) ---- */
+.card-named { font-size: 13px; color: var(--muted); margin: -4px 0 6px 22px; line-height: 1.3; }
+.medium-note { color: var(--ink) !important; }
+.lv-named { margin: 0; padding-left: 20px; display: flex; flex-direction: column; gap: 4px; }
+.lv-named li { font-size: 15px; }
+
+/* ---- level 1.7: HUD action, lac region, truth table, DNA editor (LEVELS §5.4.4, §5.10, §7.7.2) ---- */
+.hud-goal-lines { display: flex; flex-direction: column; justify-content: center; min-width: 0; line-height: 1.2; }
+.hud-goal-sub { font-size: 12px; font-weight: 500; color: var(--muted); overflow: hidden; text-overflow: ellipsis; }
+.btn.hud-action {
+  flex: none; align-self: center; min-height: 44px; min-width: 44px; padding: 0 12px; font-size: 14px; white-space: nowrap;
+  border-color: var(--accent); color: var(--accent); background: var(--panel);
+}
+.btn.hud-action.is-running { background: var(--accent-pale); color: var(--ink); }
+@media (max-width: 399px) { .btn.hud-action { padding: 0 8px; font-size: 13px; } }
+.lac-inset {
+  position: absolute; top: 6px; left: 6px; right: 6px; max-width: 420px; margin: 0 auto; pointer-events: none;
+  background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 1px 4px; opacity: .94;
+}
+body[data-lac] .outside-scale { top: auto; bottom: 34px; }
+/* On a short phone the lac panel leaves little stage: the outside scale stays in the Key sheet. */
+body[data-lac][data-short] .outside-scale { display: none; }
+.dz-svg { display: block; width: 100%; height: auto; }
+.dz-title { font: 600 11px var(--font); fill: var(--muted); }
+.dz-lab { font: 11px var(--font); fill: var(--ink); }
+.dz-in { font: 700 10px var(--font); fill: var(--panel); }
+.dz-lab.is-muted, .dz-in.is-muted { fill: var(--muted); }
+.tt-grid { display: grid; gap: 10px; grid-template-columns: minmax(0, 1fr); }
+/* One strain per row at every width, so the drawing stays large enough to read; it stops growing at 448 px. */
+.tt-card .tt-dna { max-width: 448px; }
+.tt-card { border: 1px solid var(--line); border-radius: 12px; padding: 8px 10px 10px; display: flex; flex-direction: column; gap: 6px; background: var(--panel); }
+.tt-card.is-expert { border-style: dashed; }
+.tt-head { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
+.tt-name { font-weight: 650; font-size: 15px; }
+.tt-tag { font-size: 12px; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: .06em; }
+.tt-dna { border-radius: 8px; background: var(--inside); padding: 0 4px; }
+.tt-row { display: grid; grid-template-columns: 88px minmax(0, 1fr); align-items: center; gap: 8px; }
+.tt-col { font-size: 14px; color: var(--muted); line-height: 1.25; }
+.tt-seg .seg { min-height: 48px; font-size: 14px; padding: 2px 6px; }
+.tt-review { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+.tt-review li { display: flex; flex-direction: column; gap: 2px; }
+.tt-cells { display: flex; flex-direction: column; gap: 1px; padding-left: 10px; font-size: 14px; }
+.tt-cell.is-right .lv-mark { color: var(--good); }
+.tt-cell.is-wrong .lv-mark { color: var(--bad); }
+.lv-design .sheet-body { gap: 10px; }
+body:not([data-layout="compact"]) .sheet.lv-design { width: min(760px, 94vw); }
+.dz-preview { border: 1px solid var(--line); border-radius: 10px; padding: 2px 6px; background: var(--inside); }
+.dz-preview .dz-svg { max-width: 460px; margin: 0 auto; }
+.dz-strip { display: flex; flex-direction: column; gap: 6px; }
+.dz-parts { display: flex; flex-wrap: wrap; gap: 8px; }
+body:not([data-layout="compact"]) .dz-parts { flex-wrap: nowrap; }
+.btn.dz-part { flex: 1 1 132px; min-height: 52px; display: flex; align-items: center; gap: 10px; padding: 6px 10px; text-align: left; font-weight: 500; }
+.btn.dz-part.is-open { border-color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent); }
+.btn.dz-part:disabled { opacity: .5; cursor: default; }
+.dz-part-text { display: flex; flex-direction: column; line-height: 1.2; min-width: 0; }
+.dz-part-name { font-size: 13px; color: var(--muted); font-weight: 600; }
+.dz-part-value { font-size: 16px; font-weight: 650; }
+.dz-part.is-absent .dz-part-value { color: var(--muted); }
+.dz-icon { flex: none; display: inline-block; box-sizing: border-box; }
+.dz-lacI-promoter, .dz-lac-promoter { width: 14px; height: 14px; border-left: 3px solid var(--ink); border-top: 3px solid var(--ink); margin: 6px 4px 0 2px; }
+.dz-lacI-allele { width: 24px; height: 14px; border-radius: 3px; background: var(--g-lacI); }
+.dz-lacI-allele.is-absent { background: none; border: 2px dashed var(--muted); }
+.dz-lac-crpSite { width: 13px; height: 13px; border: 2.5px solid var(--accent); transform: rotate(45deg); margin: 0 5px; }
+.dz-lac-operator { width: 16px; height: 14px; border: 2.5px solid var(--ink); margin: 0 2px; }
+.dz-lac-crpSite.is-absent, .dz-lac-operator.is-absent { border-style: dashed; border-color: var(--muted); }
+.dz-genes { flex: 1 1 100%; display: flex; gap: 3px; min-height: 36px; align-items: stretch; }
+.dz-gene { display: flex; align-items: center; justify-content: center; border-radius: 6px; color: var(--panel); font-size: 13px; font-weight: 700; font-style: italic; }
+.dz-gene:nth-child(1) { flex: 5 1 0; } .dz-gene:nth-child(2) { flex: 2.2 1 0; } .dz-gene:nth-child(3) { flex: 1.4 1 0; }
+.dz-options { display: flex; flex-direction: column; gap: 6px; padding: 8px; border-radius: 10px; background: var(--bg); border: 1px solid var(--line); }
+.dz-desc { font-size: 14px !important; line-height: 1.35; }
+.btn.dz-option { min-height: 52px; display: flex; align-items: center; gap: 10px; text-align: left; font-weight: 500; }
+.btn.dz-option.is-on { border-color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent); font-weight: 650; }
+.dz-check { width: 18px; color: var(--accent); font-weight: 700; flex: none; }
+.dz-summary { font-size: 15px !important; font-weight: 600; line-height: 1.4; }
+.dz-actions { flex-wrap: wrap; }
+.dz-run-note, .dz-confirm { flex: 1 1 100%; margin: 0; font-size: 14px !important; color: var(--muted); }
+.dz-confirm { color: var(--ink); font-weight: 650; font-size: 16px !important; }
+.lv-sub { margin-top: 2px; }
+.lv-working { font-weight: 600; }
+
 @media (hover: hover) {
   .btn:hover, .chip:hover, .speed-chip:hover { border-color: var(--muted); }
 }
@@ -661,8 +745,10 @@ body[data-reduced-motion] * { transition-duration: 0s !important; animation: non
 <script src="src/game/btc-level-kit.js"></script>
 <script src="src/game/btc-misconceptions.js"></script>
 <script src="src/levels/btc-level-constants.js"></script>
+<script src="src/levels/btc-level-1-1.js"></script>
 <script src="src/levels/btc-level-1-2.js"></script>
 <script src="src/levels/btc-level-1-4.js"></script>
+<script src="src/levels/btc-level-1-7.js"></script>
 <script src="src/levels/btc-level-p.js"></script>
 <script src="src/game/btc-levels.js"></script>
 <script src="src/game/btc-score.js"></script>
@@ -689,6 +775,7 @@ body[data-reduced-motion] * { transition-duration: 0s !important; animation: non
 <script src="src/app/btc-home.js"></script>
 <script src="src/app/btc-hud.js"></script>
 <script src="src/app/btc-sketch.js"></script>
+<script src="src/app/btc-designer.js"></script>
 <script src="src/app/btc-prologue.js"></script>
 <script src="src/app/btc-level-ui.js"></script>
 <script src="src/app/btc-app.js"></script>
@@ -709,6 +796,7 @@ body[data-reduced-motion] * { transition-duration: 0s !important; animation: non
       <div id="paused-badge" class="paused-badge"><span id="paused-text"></span></div>
       <div id="scalebar" class="scalebar"><span class="label" data-text="cell.scaleBar"></span><span class="bar"></span></div>
       <div id="outside-scale" class="outside-scale num" hidden></div>
+      <div id="lac-inset" class="lac-inset" role="img" hidden></div>
       <div id="tap-chip" class="tap-chip" role="status" hidden></div>
     </div>
     <div id="focusbar" class="focusbar"></div>

@@ -281,10 +281,13 @@
       for (let b = 0; b < m.bands.n; b++) {
         const a = Math.max(x0, tx(m.bands.t0[b])), e = Math.min(x1, tx(m.bands.t1[b]));
         if (e <= a) continue;
-        const col = P[m.bands.color[b]];
+        const col = P[m.bands.color[b]] || P.accent;
         c.globalAlpha = 0.1; c.fillStyle = col; c.fillRect(a, y0, e - a, y1 - y0); c.globalAlpha = 1;
+        // Adjacent bands (1.7's phases) are told apart by a thin line at each start.
+        if (tx(m.bands.t0[b]) > x0) { c.globalAlpha = 0.35; c.fillStyle = col; c.fillRect(Math.round(a), y0, 1, y1 - y0); c.globalAlpha = 1; }
         const lab = m.bands.label ? m.bands.label[b] : '';
-        if (lab && tx(m.bands.t0[b]) >= x0 && a + 3 + c.measureText(lab).width <= x1) { c.fillStyle = col; c.fillText(lab, a + 3, y0 + 2); }
+        // A label only where it fits inside its own band (1.7's sugar phases lie side by side).
+        if (lab && tx(m.bands.t0[b]) >= x0 && a + 3 + c.measureText(lab).width <= Math.min(x1, e - 2)) { c.fillStyle = col; c.fillText(lab, a + 3, y0 + 2); }
       }
       if (this.opts.band) {
         const yb = ty(this.opts.band.below);
@@ -314,8 +317,8 @@
         c.fillText(tickLabel(t), x0 - 5, y);
       }
 
-      // x axis: sim time (a plot may ask for its own step, e.g. 5 min on the 20-min sketch axes).
-      const xt = this.opts.xStep ? { step: this.opts.xStep, unit: 'min', div: 60 } : xTicks(m.window || span);
+      // x axis: sim time (a plot may ask for its own step, e.g. 5 min on the 20-min sketch axes, or 2 h with xUnit 'h').
+      const xt = this.opts.xStep ? { step: this.opts.xStep, unit: this.opts.xUnit || 'min', div: this.opts.xUnit === 'h' ? 3600 : 60 } : xTicks(m.window || span);
       c.textAlign = 'center'; c.textBaseline = 'top';
       const first = Math.ceil(m.t0 / xt.step) * xt.step;
       let lastLabelX = -1e9;

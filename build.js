@@ -9,7 +9,9 @@ const crypto = require('crypto');
 
 const ROOT = __dirname;
 const DIST = path.join(ROOT, 'dist');
-const MAX_BYTES = 900 * 1024, WARN_BYTES = 750 * 1024;   // LEVELS.md §2 (M2): 900 KB throw, 750 KB warn
+// LEVELS.md §16 (coordinator decision with levels 1.1 and 1.7): 1.5 MB throw, 1.2 MB warn; no comment stripping
+// (Pages serves the file gzipped, about a quarter of its size).
+const MAX_BYTES = 1536 * 1024, WARN_BYTES = 1229 * 1024;
 
 function build(opts) {
   const o = opts || {};
@@ -72,8 +74,8 @@ function build(opts) {
 
   // 6. Size budget.
   const bytes = Buffer.byteLength(html);
-  if (bytes > MAX_BYTES) throw new Error('dist/index.html is ' + Math.round(bytes / 1024) + ' KB, over the 900 KB budget');
-  if (bytes > WARN_BYTES && !o.quiet) console.warn('warning: dist/index.html is ' + Math.round(bytes / 1024) + ' KB (budget 900 KB)');
+  if (bytes > MAX_BYTES) throw new Error('dist/index.html is ' + Math.round(bytes / 1024) + ' KB, over the 1.5 MB budget');
+  if (bytes > WARN_BYTES && !o.quiet) console.warn('warning: dist/index.html is ' + Math.round(bytes / 1024) + ' KB (warning at 1.2 MB, budget 1.5 MB)');
   if (!o.quiet) console.log('wrote dist/index.html (' + Math.round(bytes / 1024) + ' KB), build ' + buildHash + '; dist/tools/codes.html (' + Math.round(Buffer.byteLength(codes) / 1024) + ' KB)');
   return { buildHash, bytes, out, codesBytes: Buffer.byteLength(codes) };
 }

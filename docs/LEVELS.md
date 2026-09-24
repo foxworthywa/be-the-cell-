@@ -1822,7 +1822,9 @@ Each can change without affecting the others.
 
 1. **1.7 depends on the regulation module and the adaptation lag** (R-E13, R-E15). If the lag
    comes out above 60 min, lactose phases grow and 1.7 lasts longer in real time at a given
-   speed; the default speed may need to be 1 s = 1 h.
+   speed; the default speed may need to be 1 s = 1 h. *Resolved in the build (§16.8): lactose
+   phases of 245–260 min after both sugars, runs of 14–18 game-h, 1 s = 10 min by default (about
+   a minute and a half of real time), and "Run to the end".*
 2. **Noise.** 1.2's mRNA count and 1.4's band hold are stochastic. The calibration pass rates
    (§3.7) are the guard; failing variants are widened, not hidden.
 3. **Par run on slow phones.** 36,000 ticks at ≈ 50 µs is ≈ 2 s of engine time, spread over idle
@@ -1831,33 +1833,38 @@ Each can change without affecting the others.
 4. **Facts to verify before release:** about 3.0 × 10¹³ human cells; red blood cell life about
    120 days; GLUT4 and SGLT wording; AraE (P0AE24, 472 aa), LacA (P07464, 203 aa) and LacI
    (P03023, 360 aa) lengths; LacI about 10 tetramers per cell; Oehler 1990 repression factors.
-5. **Palette:** two new gene colours need the CVD check that U-5 was deferred for.
+5. **Palette:** two new gene colours need the CVD check that U-5 was deferred for. *Done:
+   `tests/ui-palette.test.js` (§16.10).*
 6. **Sketch fairness across devices:** a finger on a 360 px plot is coarser than a mouse. The
    metric uses tolerant features and a 0.25-min grid; think-aloud sessions should compare phone
    and laptop sketches (a pilot success criterion).
 7. **Integrity** is weak by design in Phase A (§10.5).
 8. **Size:** if the bundle passes 750 KB, add a safe comment-stripping step to `build.js`
    (tokenizer-based; never regex over code). With 1.2 and 1.4 it is 790 KB; whole-line comments
-   are about 120 KB of the scripts. Levels 1.1 and 1.7 will pass 900 KB without it.
+   are about 120 KB of the scripts. Levels 1.1 and 1.7 will pass 900 KB without it. *Decided
+   (§16.9): the limits are now 1.5 MB (fail) and 1.2 MB (warn), with no comment stripping; the
+   bundle is about 920 KB with all five levels.*
 9. **1.4 stockpile at half-life 5 min, ×2:** the stockpile holds the band on 6 of 40 seeds there
    (2.5% over all variants). A longer hold or a narrower band would close it at the cost of the
-   `single` rate (95%).
+   `single` rate (95%). *Decided (§16.9): that variant is removed (content version 2); the
+   stockpile now reaches the goal on 0.5% of runs.*
 10. **1.3 and the priming threshold:** engine 1.1 has no bootstrapping threshold (§16.1). 1.3
     needs a new way to show that an ATP-starved cell cannot make the enzymes that make ATP (for
     example a finite medium or a lower gate), decided before it is specified.
 11. **1.7 and the lag:** the wild-type lag is 125–146 min, not 20–60 (§16.1). The options in
     ENGINE.md §15 item 1 stand: accept 2-h lags (L phases ≥ 3·lagP90 ≈ 7 h), start every L phase
-    after a both-sugar phase (lag 64–71 min), or ask for a reserve in a later engine.
+    after a both-sugar phase (lag 64–71 min), or ask for a reserve in a later engine. *Decided
+    (§16.8): every L phase follows a both-sugar phase, and L ≥ 3·lagP90 on those schedules.*
 
 ---
 
-## 16. Changes after engine 1.1 (M2 build: levels 1.2 and 1.4, completion-code tools)
+## 16. Changes after engine 1.1 (M2 build: levels 1.1, 1.2, 1.4 and 1.7, completion-code tools)
 
-Levels 1.2 and 1.4, the sketch, the demo, the epilogue and the instructor's code tools were built
-on engine 1.1.0. Where the build departs from §1–§15 it is recorded here, with the reason. All
-numbers come from `tools/level-calibrate.js` (40 seeds per variant, run 2026-09-24) and are in
-`src/levels/btc-level-constants.js`; the level files read them from there. Levels 1.1 and 1.7 are
-not built yet; the facts in §16.1 bear on them.
+Levels 1.1, 1.2, 1.4 and 1.7, their Expert objectives, the sketch, the demo, the epilogue, the
+truth table, the DNA designer and the instructor's code tools were built on engine 1.1.0. Where
+the build departs from §1–§15 it is recorded here, with the reason. All numbers come from
+`tools/level-calibrate.js` (40 seeds per variant, run 2026-09-24) and are in
+`src/levels/btc-level-constants.js`; the level files read them from there.
 
 ### 16.1 Engine facts that changed the plan
 
@@ -1865,6 +1872,8 @@ not built yet; the facts in §16.1 bear on them.
 |---|---|---|
 | `m2-lac` has 10 genes (R-E19) | 9: the lab strain's 7 plus lacI and lacA (ENGINE §22.5) | Level code reads the strain's gene list; nothing assumes 10 |
 | Wild-type lactose lag 20–60 min (RT-2) | 125–146 min from glucose (12 seeds, median 132); 64–71 min after time in both sugars; never dormant (BIOLOGY "The lac operon", open item 1) | For 1.7, `LMIN = max(90, 3·lagP90)` would be about 7 h per L phase, which the 600-min templates of §7.7.3 cannot hold. Open item for 1.7 (§15 item 11) |
+| Lag after both sugars 64–71 min (12 seeds) | On the 1.7 schedules (every L after a B phase): first L phase 59–104 min (median 72), second 22–70 min; over all L phases p50 63, p90 81 | `LMIN = 245` min (§16.8) |
+| `m2-l11` = lab strain + araE | 8 genes; araE (slot 7) role `none` | the level's candidate list comes from the level, the gene list from the cell |
 | 1.3 "The price of a protein" runs with `primingSeed = 0`, a real bootstrapping threshold (about 30% of default capacity) | Gone: the energy gates let even 5% capacity restart (ENGINE §21.1 row 6, test g6) | 1.3's planned lesson ("running out of ATP stalls everything, including making more enzymes") needs a new mechanism. Open item for 1.3 (§15 item 10) |
 | A newborn (`start: 'birth'`, lacY off) carries about 17 LacY [M1] | About 4 (4.4 on average) | The HUD and the gene card show it before the first tick; nothing else depends on it |
 | A starving cell reaches the energy floor in minutes | Without sugar: charge ≈ 0.1 within 15 min (ATP 0.39 mM), below 0.1 after about an hour, dormant at about 10.5 h | The lab's About sheet and narrator lines 11b and 13b were rewritten (Lab spec §17); none of this touches 1.2 or 1.4, which run in 10 mM glucose |
@@ -1926,7 +1935,8 @@ not built yet; the facts in §16.1 bear on them.
 | § | Planned | Built | Why |
 |---|---|---|---|
 | 7.4.1, 7.4.5 | hold 10 game-min within 40 | **hold 15 within 45** (task card, story "fifteen minutes", HUD "held {h} of 15 min") | on engine 1.1 the stockpile (×4 to the band's middle, then off) stays in the band for about 10 min, because the mRNA already made keeps delivering while proteases cut; with a 10-min hold it passed. 45 min is still before the newborn replicates (≈ 48 min) |
-| 7.4.3 | S [M1] | `S[hl][level]` for ×¼, ×½, ×1, ×2, ×4: half-life 3 min 73, 142, 286, 572, 1,100; 4 min 98, 194, 382, 754, 1,469; 5 min 111, 215, 436, 880, 1,771 (coefficient of variation 0.01–0.33 at ×1–×4). Band [0.70, 1.35] kept; neighbouring settings outside the band on 99% | calibration |
+| 7.4.3 | 6 variants (half-life 3, 4, 5 min × target ×1, ×2) | **5 variants: half-life 5 min at ×2 removed** (content version 2) | coordinator decision (§16.9): there the stockpile held the band on 6 of 40 seeds |
+| 7.4.3 | S [M1] | `S[hl][level]` for ×¼, ×½, ×1, ×2, ×4: half-life 3 min 73, 144, 290, 579, 1,122; 4 min 100, 196, 380, 750, 1,463; 5 min 113, 219, 443, 888, 1,770 (coefficient of variation 0.01–0.33 at ×1–×4). Band [0.70, 1.35] kept; neighbouring settings outside the band on 98.3% | calibration (recalibrated after the variant change) |
 | 7.4.4 | Expert prompt "… about {X} LacY per minute, and each LacY lasts about {Y} minutes. About how many LacY will there be once the count levels off at ×1?" | "At ×1 this gene makes about {X} LacY a minute, and each lasts about {Y} minutes. About how many LacY are there once the count levels off?"; Y = 4, 5.5, 7 min | ≤ 140 characters |
 | 7.4.7 | p2 ✓ "Fall steadily, losing about half every {halfLife} minutes." | ✓ "Hold for a minute or two while the last mRNA is read, then fall steadily as proteases cut it up." — "Right. Proteases keep cutting it up, and once the last mRNA is gone nothing replaces what they cut." | measured after the switch-off: > 90% left at 2 min, 28–41% at 12 min, slower than halving every half-life because the leftover mRNA delivers for a few minutes |
 | 7.4.13 | reference: the target level when the count reaches `lo` | the target level when `protein + 15·mRNA + 20·nascent ≥ (lo + hi)/2` | switching at `lo` overshot the band (the mRNA already made carries the count on) |
@@ -1934,7 +1944,7 @@ not built yet; the facts in §16.1 bear on them.
 | 7.4.11 | one outro | `pulsed` when lacY was switched off during the run; `missed` when the goal was not met | "LacY was made and cut up at the same rate the whole time" must be true |
 | 7.4.2 | key "each marker = N LacY cut up" | a "cut up" flux marker (broken rectangle in the gene colour) from the glyphs of the gene with the most degradation, ladder from 1; key "LacY cut up by proteases (proteases are not drawn)" with its scale | Lab spec §17 |
 | 7.4.4 | epilogue after p2 | starts on the "Switch LacY off" tap; the dial is locked during it; 12 game-min at 1 s = 1 min | §16.2 |
-| 7.4.13 | results | reference goal and par 98.8% (goal at 20.9–34.4 min); `single` 95.0% (25.2–39.3 min); `pulser` never within par (goal 24.6%; its expectation, par missed and `PULSING`, met on 93.3%); `max` 0%; `stockpile` goal on 2.5%, all at half-life 5 min ×2 (6 of 40 there) | – |
+| 7.4.13 | results | reference goal and par 97.0% (goal at 20.9–34.8 min, 5th–95th percentile); `single` 95.5% (25.3–38.9 min); `pulser` never within par (goal 15.5%; its expectation, par missed and `PULSING`, met on 97.0%); `max` 0%; `stockpile` goal on 0.5% (1 of 200) | after the variant change (§16.9) |
 
 ### 16.5 Completion codes and the instructor's tools (§10.4)
 
@@ -1959,11 +1969,92 @@ not built yet; the facts in §16.1 bear on them.
   with one seed each cannot pass reliably at 97–99% rates.
 - L-7 in `level-replay.test.js` (with the CLI tools, the decoded table and the published
   `codes.html`). The narrator rules of both levels are checked for truth whenever they speak.
-- Browser (`tools/ui-check-levels.js`, run by `tools/ui-check.js`): LV-1, LV-4 (360 × 740 and
-  1280 × 800, sketch by touch and by mouse), LV-5, LV-7, LV-8, LV-9 and the published
-  `codes.html`. LV-3 (1.1) and LV-6 (1.7) are left to those levels.
-- Build: `dist/index.html` is 790 KB, over the 750 KB warning and under the 900 KB limit
-  (§15 item 8).
+- Browser (`tools/ui-check-levels.js`, run by `tools/ui-check.js`): LV-1, LV-3 (1.1: 360 × 740
+  and 1280 × 800), LV-4 (360 × 740 and 1280 × 800, sketch by touch and by mouse), LV-5, LV-6
+  (1.7: 360 × 740, 375 × 553 for the design and the run, 1280 × 800), LV-7, LV-8, LV-9 and the
+  published `codes.html`.
+- Build: `dist/index.html` is about 920 KB with all five levels, under the 1.2 MB warning and
+  the 1.5 MB limit (§16.9).
+
+### 16.7 Level 1.1
+
+| § | Planned | Built | Why |
+|---|---|---|---|
+| 7.1.2 | starving cell [M1]: charge ≈ 0.05, growth ≈ 0.33 λ_ref at 10 min | growth 0.35–0.37 λ_ref at 10 min (0.34–0.36 at 30), energy charge 0.61–0.63 (engine 1.1 homeostasis); R-E7 holds (≤ 0.45), `uBasal_backup` not lowered | calibration |
+| 7.1.5 | recovery [M1] ×1 57–82 min, ×2 32–40, ×4 23 | job seen (median, p90) ×1 10.8, 13.8 min; ×2 7.8, 8.9; ×4 6.0, 6.4. Goal at ×1 72 min (p90 86), ×2 35 (40), ×4 23 (25); limit 180 kept | calibration |
+| 7.1.4 | HUD | as planned; short forms "Find the transporter", "Found · growth {pct}%", "{n} / 3" | 360 px width |
+| 7.1.12 | one `l11.reveal`: "Glucose now gets in through …" for any candidate | four keys, each naming the job that was seen: `l11.revealGlucose`, `revealAmino`, `revealLactose`, `revealSplit` ("Lactose inside is now split by {N}, …") | "glucose gets in" is true only of ptsG |
+| 7.1.12 | `l11.nofit` "{N} {is} being made, but glucose still does not get in through {it}." | "Ribosomes are making {N}, but no glucose gets in through {it}."; never for ptsG (its first transporters let a little in before its job counts as seen) | truth |
+| 7.1.12 | – | `l11.nosplit` ("Lactose gets in, but almost none of it is split inside.") and `l11.busy` ("Ribosomes busy with {n} are not making other proteins, so growth slows over a few generations.") replace two lab lines that would name a hidden gene's job | hidden names |
+| 7.1.13 | `reasoned` keeps a candidate until its first protein + 8 game-min | + `keepMin` = 9 game-min (the worst ptsG ×2 job seen 7.5 min after its first protein, + 1, at least 8) | calibration |
+| 7.1.13 | – | `expert`: ptsG ×2, lacY ×2 and lactose at tick 0; goal, par, Expert bit 0 in 2 experiments | Expert objective (§13 step 8) |
+| 7.1.13 | results | reference, expert: goal and par 100% (12 orders × 40 seeds); `reasoned` goal 99.8% with E ≥ 0.65, par 74.8% (1, 2, 3, 4 experiments when ptsG is 1st…4th membrane gene); `shotgun` par 0%; `impatient`, `lactoseRoute` goal 0% | – |
+| 7.1.11 | one outro | `missed` (the transporter's job was never seen) and `slow` (found, but growth not back in time) | "The transporter was not [there]" must be true |
+| 5.5.1 | names revealed | a revealed card says "Named after what its protein did."; a toast "Gene C is now named: Glucose transporter."; graph chips and markers use the letter until then; the Genes tab reads "six unlabelled genes"; at the end every candidate is named, and the completion screen lists "Gene {letter}: {name} ({symbol}), in the membrane / inside the cell" | – |
+| 7.1.6 | result | "You used {n} experiments; par is 3 or fewer." and, for the Expert, "You also saw the job of gene {letter} (Expert)." | – |
+
+### 16.8 Level 1.7
+
+**The schedule (coordinator decision).** Every lactose-only phase comes straight after a
+both-sugar phase, and the run opens in both sugars, straight from the glucose-grown start (a
+glucose phase first let a division leave 2 of 40 wild-type cells with none of the preset's few
+LacY, and such a cell never let lactose in). Phase lengths come from the calibrated lag: every L
+phase is at least `LMIN = 3·lagP90` rounded up to 5 min, on these schedules 3 × 81.4 → **245 min**.
+The total time grows to fit.
+
+| Template | Phases (kind and minutes; L = LMIN + 15 before the jitter) |
+|---|---|
+| T1 | B 105 · L · G 90 · B 105 · L · G 60 |
+| T2 | B 120 · L · G 135 · B 105 · L · G 60 |
+| T3 | B 105 · L · B 60 · G 105 · B 120 · L · G 75 |
+| T4 | B 105 · L · G 75 · B 90 · G 60 · B 105 · L · G 60 |
+
+Every phase but the last moves by a multiple of 5 min in [−15, +15]; then L ≥ LMIN, a B phase
+before an L ≥ 90, every other phase ≥ 60. Runs last 13.4–18.3 game-h (14.2–17.7 h on the
+calibration's seeds). The default speed is 1 s = 10 min (a run takes about a minute and a half of
+real time; 1 s = 1 min and 1 s = 1 h are offered), and "Run to the end" finishes it in a few
+seconds.
+
+| § | Planned | Built | Why |
+|---|---|---|---|
+| 7.7.3 | 600-min templates opening in glucose; `LMIN = max(90, 3·lagP90)` | the templates above; LMIN 245 | the lag (§16.1) and the decision above |
+| 7.7.5 | `λL` [M1: doubling 104 min] | λL = 9.42 × 10⁻⁵ /s (doubling 122.7 min, 0.80 λ_ref) | calibration |
+| 7.7.14 | truth table | wt glucose 0.0–0.5% of the induced wild type's LacZ, lactose 50–66%; no lacI and no operator 10–17% and 51–66%; Is 0.0–0.5% and 0.1–1.0%: the answers of §7.7.7 hold (made ≥ 5%, almost none ≤ 1%) | calibration |
+| 7.7.6 | Expert bit 0: `rB/L ≤ 0.25` ("a quarter") | `rB/L ≤ rBLMax` = **0.5** ("half"): the reference's rB/L is 0.11–0.28 (p95 0.22), so a quarter would fail the normal lac genes on some schedules; without the CRP site rB/L is 0.83–1.41, well above half. The calibration picks a quarter if the reference's p95 is ≤ 0.2 | calibration |
+| 7.7.13 | results | reference: waste 0.1–0.4%, lag 44–76 min, E = 1 (par by construction); `coreWildType` E 0.91–1; `commander` waste 10.6–11.7%, E 0; `noRepressor` waste 2.9–3.7%, E 0; `lockedOff` lag 248–275 min, goal 0%; `lacIq` E 1; `repressorAsActivator` (the reference with "no repressor gene: almost none") raises `PRED_REPRESSOR_AS_ACTIVATOR`. Every solution meets its expectation on 40 of 40 (4 templates × 10) | – |
+| 7.7.4 | HUD "Now: {phase} · {growing / slowed / stopped}", "{elapsed} of 10 h", "No controls" | the same, with "{elapsed} of {total}"; only "Now: {phase}" in the first minute (no growth to report yet); "Next change: unknown" under it; the "Run to the end" button beside "No controls", which gives it its place below 400 px | total varies |
+| 7.7.4 | par in idle frames | from the moment the level opens, ≤ 4 ms per frame; the result shows "Working out par…" until it is done. The run file records par's final hash, and `verifyRunFile` recomputes par | – |
+| 7.7.2 | graph chips lacZ, lacY | lacZ, lacY, lacI (lacA available) | LacI's count is part of the story |
+| 7.7.2 | cell view additions | as planned (LacI V on the operator, free tetramers 1 dot each, the lac mRNA in three segments), plus a "lac region, enlarged" panel at the top of the stage: the design's parts, LacI on the operator while bound (with a dot of allolactose while induced), CRP–cAMP on the CRP site while cAMP is high; the rod is fitted below it | the operator is a few base pairs; at cell scale it cannot be seen |
+| 5.10 | designer | two strips of part buttons (≥ 48 px) with a one-line description and options each (lac promoter ×½, ×1, ×2, ×4; operator present/absent; CRP site present/absent; lacI normal / deleted / cannot bind allolactose; lacI promoter normal / strong); a drawing of the design; the "This design: …" sentence; Run asks "Once it runs, nothing can be changed. Run it?" | – |
+| 7.7.7 | truth table | one card per strain with its DNA drawn and the changed part outlined, two segmented choices per card (≥ 48 px); the Expert strain is dashed and marked; Lock in once the Core cells are set | phone layout |
+| 7.7.6 | result bars "Growth, Waste in glucose, Lag when lactose arrived" | "Lag on lactose" (fits one line at 360 px); a missed goal says why ("growth on lactose fell short", "the cell ran out of energy and stopped") | – |
+| 7.7.11 | story | intro lines 1 and 3 read "Glucose and lactose come and go, alone or together. The flask does not send a schedule." and "The sugars change without warning, for {hoursWord} hours. The console has lost its buttons."; `missed` replaces the whole outro (its last line would credit LacI and allolactose for a design that never switched); `alwaysOn` for designs with no operator or no lacI | truth |
+| 7.7.12 | rules on the instantaneous operator state | on the last minute of the lac region (all copies bound ≥ 95% of it with the inducer low for `l17.repressed`; none bound and the inducer high ≥ 90% for `l17.induced`; cAMP low ≥ 90% with the operator mostly free for `l17.crp`); silent in the first minute | the operator flickers between bound and free during induction |
+| 7.7.12 | `l17.lag` "Lactose is outside, but only a few permeases let it in, so allolactose builds up slowly." (operator bound, some inducer) | "Only lactose is here, and the cell has few lac proteins yet, so it grows slowly until more are made." when lactose is the only sugar, growth is below 0.5 λL, and lacI is not `Is` | on these schedules the operator is already free when the lactose-only phase starts (the lactose of the both-sugar phase before induced it); what holds growth back is the LacY per cell, which keeps rising through the phase (the test checks it) |
+
+### 16.9 Coordinator decisions (2026-09-24)
+
+1. **Build size:** `build.js` fails above 1.5 MB and warns above 1.2 MB; no comment stripping.
+2. **1.4:** the variant half-life 5 min × target ×2 is removed and 1.4 recalibrated (§16.4).
+3. **HUD height:** 44 px in every layout (§16.2), kept.
+4. **1.4 hold:** 15 min within 45, kept (§16.4).
+5. **1.7 schedule:** every lactose-only phase after a both-sugar phase; phases from the
+   calibrated lag; longer runs; a sensible default speed; "Run to the end" (§16.8).
+
+### 16.10 App (M2 build)
+
+- **Gene model** (`BTC.content.geneModel(ids, labConfig)`): the cell's own gene list (7, 8 or 9
+  genes), the visible genes in display order, letters, names hidden until revealed, colours by
+  gene or by display position (1.1), and each gene's locus. The cell view, the Genes and Graphs
+  panels, the key sheet, the narrator's phrases and the command markers all read it.
+- **Palette:** `g-lacI` #8800e0 / #a070ff (dark), `g-lacA` #e05010 / #ff9a4d, phase bands `band-G`,
+  `band-L`, `band-B`. U-5 (`tests/ui-palette.test.js`) checks the nine gene colours: ΔE76 ≥ 20.1
+  (light, worst under deuteranopia) and ≥ 8.3 (dark, protanopia) apart, ≥ 3:1 on the panel and
+  the cell; text tokens ≥ 4.5:1.
+- **Status strip:** a clock of 9 or more characters ("14 h 30 min") is set at 14 px on phones,
+  so it fits beside the Levels button.
+
 
 ---
 

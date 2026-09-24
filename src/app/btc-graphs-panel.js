@@ -60,6 +60,12 @@
       this.spendRef = PV.fermYield * PV.F_ref;      // ATP per second of the reference cell (engine spec §9)
     }
 
+    /** The screen's gene model (the app's; everything named when there is none). */
+    genes() {
+      const app = this.app;
+      return app.geneModel || app.BTC.content.geneModel(app.cell.observe().genes.map((g) => g.id), app.labConfig);
+    }
+
     /** The recorder behind the current window: full resolution for windows up to 6 h, the whole run for "All". */
     recorder() {
       const w = this.app.ui.window;
@@ -72,12 +78,13 @@
       // Gene chips.
       this.chips = {};
       const chipRow = h('div', { class: 'chip-row', role: 'group', 'aria-label': G.genesLabel });
-      const gv = app.labConfig.genesVisible;
-      for (const id of app.BTC.content.GENE_IDS) {
-        if (gv !== 'all' && Array.isArray(gv) && gv.indexOf(id) < 0) continue;     // background genes get no chip
-        const w = C.geneWords(id, app.labConfig.showNames);
-        const b = h('button', { class: 'chip gene-toggle', type: 'button', 'aria-pressed': 'false', 'data-gene': id, onclick: () => app.toggleGraphGene(id) }, [
-          h('span', { class: 'chip-dot', style: { background: 'var(--g-' + id + ')' } }), h('span', { class: 'sym-plain', text: w.tag }),
+      // One chip per visible gene, in the screen's display order; background genes get no chip.
+      const model = this.genes();
+      for (const id of model.visible) {
+        const w = model.words(id);
+        const b = h('button', { class: 'chip gene-toggle', type: 'button', 'aria-pressed': 'false', 'data-gene': id, onclick: () => app.toggleGraphGene(id),
+          'aria-label': w.name }, [
+          h('span', { class: 'chip-dot', style: { background: 'var(--' + model.color(id) + ')' } }), h('span', { class: 'sym-plain', text: w.tag }),
         ]);
         this.chips[id] = b;
         chipRow.appendChild(b);
@@ -279,10 +286,11 @@
         m.nSeries = genes.length;
         for (let s = 0; s < genes.length; s++) {
           const id = genes[s], gv = view.geneById[id], ser = m.series[s];
+          if (!gv) continue;
           ser.data = rec.series(spec.channel + id);
           ser.live = spec.key === 'mRNA' ? gv.mRNA + gv.nascent : gv.protein;
-          ser.color = 'g-' + id;
-          ser.label = C.geneWords(id, this.app.labConfig.showNames).tag + ' ' + F.count(ser.live);
+          ser.color = this.genes().color(id);
+          ser.label = this.genes().words(id).tag + ' ' + F.count(ser.live);
         }
       } else {
         m.nSeries = 1;
@@ -304,7 +312,7 @@
         const v = at >= 0 ? ser.data[at] : ser.live;
         if (spec.multi) {
           const id = this.app.ui.graphGenes[s];
-          pieces.push(C.geneWords(id, this.app.labConfig.showNames).tag + ' ' + F.count(v));
+          pieces.push(this.genes().words(id).tag + ' ' + F.count(v));
         } else pieces.push(spec.fmt(v));
       }
       const prefix = at >= 0 ? F.clock(this.recorder().ticks[at] * m.dt, false) + ': ' : '';

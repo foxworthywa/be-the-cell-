@@ -65,34 +65,103 @@
       about: 'Many flagellin molecules form the flagellum a cell swims with; the other flagellum genes are missing here, so it stays inside.',
       genePhrase: 'the flagellin gene', noun: 'flagellin', protein: 'flagellin',
     },
+    // Strain m2-l11 (level 1.1): the decoy, a transporter whose sugar is never present.
+    araE: {
+      slot: 7, name: 'Arabinose transporter', symbol: 'araE', plural: false,
+      job: 'Carries arabinose across the membrane.',
+      about: 'AraE sits in the membrane and carries arabinose in with a proton. There is no arabinose here, so it carries nothing.',
+      genePhrase: 'the arabinose transporter gene', noun: 'the arabinose transporter', protein: 'arabinose transporter',
+    },
+    // Strain m2-lac (level 1.7): the repressor and the third gene of the lac operon.
+    lacI: {
+      slot: 7, name: 'Lac repressor', symbol: 'lacI', plural: false, short: 'LacI',
+      job: 'Blocks the lac genes unless allolactose binds it.',
+      about: 'Four LacI chains form one repressor, drawn as a V. With allolactose bound it lets go of the operator.',
+      genePhrase: 'the repressor gene', noun: 'the lac repressor', protein: 'lac repressor',
+    },
+    lacA: {
+      slot: 8, name: 'Galactoside acetyltransferase', symbol: 'lacA', plural: false, short: 'LacA',
+      job: 'Third lac gene; does no work that matters here.',
+      about: 'LacA adds acetyl groups to some sugars. Three chains form one enzyme, drawn as a three-lobed cluster.',
+      genePhrase: 'the acetyltransferase gene', noun: 'the acetyltransferase', protein: 'acetyltransferase',
+    },
   };
   const GENE_IDS = ['ptsG', 'gly', 'aaSyn', 'aaImp', 'lacY', 'lacZ', 'fliC'];
+  // Every gene any strain has (the lab strain's seven, then araE, lacI and lacA).
+  const ALL_GENE_IDS = GENE_IDS.concat(['araE', 'lacI', 'lacA']);
   // The short tag on graph chips and line labels is the gene's id (LAB_UI §1.5).
-  for (const id of GENE_IDS) genes[id].tag = id;
+  for (const id of ALL_GENE_IDS) genes[id].tag = id;
+  const LETTERS = 'ABCDEFGHIJKLMNOP';
+  const DISPLAY_COLORS = ['g-ptsG', 'g-gly', 'g-aaSyn', 'g-aaImp', 'g-lacY', 'g-lacZ', 'g-fliC', 'g-lacI', 'g-lacA'];
 
-  /** The phrase table the narrator reads (BTC.narrate.createMemory({phrases})). */
-  function narratorPhrases() {
+  /**
+   * The phrase table the narrator reads (BTC.narrate.createMemory({phrases})). With a gene model
+   * (a level's display order) each gene's letter follows its display position, and genes the
+   * student may see named (background genes, genes revealed in 1.1) are marked open.
+   */
+  function narratorPhrases(model) {
     const out = {};
-    for (const id of GENE_IDS) {
+    for (const id of ALL_GENE_IDS) {
       const g = genes[id];
       out[id] = { genePhrase: g.genePhrase, noun: g.noun, plural: g.plural, slot: g.slot };
       if (g.short) out[id].name = g.short;
+      if (model) {
+        const k = model.index(id);
+        if (k >= 0) out[id].slot = k;
+        if (model.named(id)) out[id].open = true;
+      }
     }
     return out;
   }
 
-  const LETTERS = 'ABCDEFG';
-  /** Display words for a gene, honouring labConfig.showNames (hidden: "Gene A", job "Unknown"). */
-  function geneWords(id, showNames) {
+  /**
+   * Display words for a gene, honouring labConfig.showNames (hidden: "Gene A", job "Unknown").
+   * letter: the gene's display letter (hidden-name levels letter genes by display position).
+   */
+  function geneWords(id, showNames, letter) {
     const g = genes[id];
     if (showNames !== false) return g;
-    const L = LETTERS[g.slot];
+    const L = letter || LETTERS[g.slot];
     return { slot: g.slot, name: 'Gene ' + L, symbol: '', tag: L, plural: false, job: 'Unknown', about: '',
-      genePhrase: 'gene ' + L, noun: 'protein ' + L, protein: 'protein ' + L };
+      genePhrase: 'gene ' + L, noun: 'protein ' + L, protein: 'protein ' + L, letter: L };
+  }
+
+  /**
+   * How a screen shows the cell's genes (LEVELS §5.5.1; pure, test L-13): ids is the cell's gene
+   * list (slot order), lc the screen's labConfig. Visible genes come in display order, then the
+   * background genes; letters, colours (labConfig.colorBy 'display': colour k to position k)
+   * and chromosome positions follow that order. A revealed gene keeps its display colour and
+   * letter and gains its real name.
+   *   {ids, visible, order, index(id), isVisible(id), letter(id), color(id) (a palette token),
+   *    named(id), revealed(id), words(id), locusFrac(id), tuOf}
+   */
+  function geneModel(ids, lc) {
+    const c = lc || {};
+    const gv = c.genesVisible;
+    const vis = gv === 'all' || !Array.isArray(gv) ? ids.slice() : ids.filter((id) => gv.indexOf(id) >= 0);
+    const disp = Array.isArray(c.displayOrder) ? c.displayOrder.filter((id) => vis.indexOf(id) >= 0) : [];
+    const visible = disp.concat(vis.filter((id) => disp.indexOf(id) < 0));
+    const order = visible.concat(ids.filter((id) => visible.indexOf(id) < 0));
+    const at = {};
+    visible.forEach((id, k) => { at[id] = k; });
+    const hidden = c.showNames === false, byDisplay = c.colorBy === 'display', rev = c.revealed || {};
+    const index = (id) => (at[id] === undefined ? -1 : at[id]);
+    const letter = (id) => (index(id) >= 0 ? LETTERS[index(id)] : '');
+    const named = (id) => !hidden || index(id) < 0 || !!rev[id];
+    // Loci sit at (k + 0.5)/n along the loop in this order; n is at least 8, so the lab strain keeps its M1 spacing.
+    const n = Math.max(8, order.length);
+    return {
+      ids: ids.slice(), visible, order, index, letter, named, hidden,
+      isVisible: (id) => index(id) >= 0,
+      revealed: (id) => hidden && index(id) >= 0 && !!rev[id],
+      color: (id) => (index(id) < 0 ? 'muted' : byDisplay ? DISPLAY_COLORS[index(id) % DISPLAY_COLORS.length] : 'g-' + id),
+      words: (id) => geneWords(id, named(id), letter(id)),
+      locusFrac: (id) => (order.indexOf(id) + 0.5) / n,
+    };
   }
 
   return {
-    genes, GENE_IDS, narratorPhrases, geneWords,
+    genes, GENE_IDS, ALL_GENE_IDS, LETTERS, narratorPhrases, geneWords, geneModel,
 
     app: {
       title: 'Be the Cell',
@@ -166,6 +235,12 @@
       aaOut: 'Amino acids outside · 1 dot = {N}',
       membrane: 'Membrane',
       dna: 'DNA (the chromosome)',
+      // The lac operon (level 1.7).
+      tuMRNA: 'mRNA of {names}, one molecule for all three · #{id}',
+      repressor: 'Lac repressor LacI, four chains · 1 dot = 1',
+      repressorInducer: 'Lac repressor with allolactose bound · 1 dot = 1',
+      repressorBound: 'Lac repressor sitting on the operator',
+      operator: 'Operator: the stretch of DNA that LacI binds',
     },
     // Key sheet (LAB_UI §2.9).
     key: {
@@ -182,6 +257,9 @@
         fluxGlc: 'glucose coming in', fluxLac: 'lactose coming in', fluxAa: 'amino acids coming in',
         fluxOut: 'acids and ethanol out',
         fluxCut: '{name} cut up by proteases (proteases are not drawn)',
+        repressor: 'lac repressor LacI (four chains)', repressorInducer: 'LacI with allolactose bound (dot in the V)',
+        operator: 'operator on the DNA (LacI sits here while bound)', tuMRNA: 'lac mRNA: one strand, three genes in their colours',
+        notDrawn: 'allolactose and cAMP are not drawn; the lac region panel shows where they act',
       },
       perDot: '1 dot = {N}',
       perMarker: 'each marker = {N}',
@@ -206,9 +284,17 @@
       share: 'ribosome share', shareLabel: 'Share of working ribosomes reading this gene\'s mRNA',
       about: 'About', aboutClose: 'Less',
       promoter: 'promoter strength', pending: 'Applies when time runs.',
-      defaultTick: 'default', header: 'Genes', strain: 'lab strain',
+      defaultTick: 'default', header: 'Genes', strain: 'lab strain', strains: { 'm2-l11': 'six unlabelled genes', 'm2-lac': 'lac genes' },
       focusLabel: 'Watch {name} in the cell view',
       locked: 'Set by this level.', readOnly: 'Set by the DNA.',
+      revealed: 'Named after what its protein did.', operon: 'One mRNA for {names}',
+    },
+    // The lac region panel on the cell view (level 1.7): the design's parts and what sits on them now.
+    lacRegion: {
+      title: 'lac region, enlarged', lacI: 'lacI', noLacI: 'no lacI', crp: 'CRP site', noCrp: 'no CRP site', promoter: 'promoter',
+      operator: 'operator', noOperator: 'no operator', genes: 'lacZ lacY lacA', repressor: 'LacI', crpBound: 'CRP–cAMP',
+      label: 'The lac region: {parts}.', bound: 'LacI is on the operator', free: 'the operator is free', none: 'there is no operator',
+      crpOn: 'CRP with cAMP is on the CRP site', crpOff: 'the CRP site is empty', noSite: 'there is no CRP site',
     },
     levels: [
       { key: 'off', label: 'Off', value: 'off' },
@@ -430,7 +516,19 @@
         download: 'Download this run', again: 'Play again', next: 'Next level', startNamed: 'Start level {id}', levels: 'Levels',
         shareTitle: 'Be the Cell code', cardsCollected: 'Cards collected: {list}',
       },
-      hud: { goalMet: 'Goal met · Continue', continue: 'Continue', taskLabel: 'Goal: {text}. Open the task card.' },
+      hud: {
+        goalMet: 'Goal met · Continue', continue: 'Continue', taskLabel: 'Goal: {text}. Open the task card.',
+        running: 'To the end · {pct}%', stop: 'Stop', runningLabel: 'Running to the end, {pct}%. Tap to stop.',
+      },
+      reveal: 'Gene {letter} is now named: {name}.',
+      table: {
+        note: 'Set every cell of the three strains; the fourth is Expert and may be left.', expert: 'Expert',
+        choose: 'Choose for {row}, {col}', differs: 'differs from normal',
+      },
+      design: {
+        change: 'Change', close: 'Done', current: 'now: {v}', parts: 'Parts of the DNA', runNote: 'The design is fixed once it runs.',
+      },
+      designSummary: { present: 'present', absent: 'absent', normal: 'normal', deleted: 'deleted', blind: 'cannot bind allolactose', strong: 'strong (Iq)' },
       run: { ended: 'The run is over.' },
     },
   };

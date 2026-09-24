@@ -30,6 +30,8 @@
   void MC;
 
   const HOLD_MIN = 15, LIMIT_MIN = 45, EPILOGUE_MIN = 12, MEAN_TICKS = 60;
+  // [half-life (min), target setting]: every combination except half-life 5 min at ×2 (content version 2).
+  const VARIANTS = Object.freeze([[3, 1], [3, 2], [4, 1], [4, 2], [5, 1]]);
   const LN2 = 0.6931471805599453;
 
   const TEXT = {
@@ -149,16 +151,21 @@
   const clamp01 = (x) => (x > 1 ? 1 : x > 0 ? x : 0);
 
   const DEF = {
-    id: '1.4', code: '14', order: 4, version: 1, title: 'title', challenge: 'challenge', text: TEXT,
+    id: '1.4', code: '14', order: 4, version: 2, title: 'title', challenge: 'challenge', text: TEXT,
     mode: 'operator', scored: true, los: ['LO4'], misconceptions: ['MOLECULES_LAST', 'INSTANT', 'CELL_DECIDES'],
     estMinutes: 8, engine: '1.1',
     phases: ['intro', 'task', 'predict', 'run', 'result', 'predict2', 'epilogue', 'debrief', 'echo', 'complete'],
     holdMin: HOLD_MIN, limitMin: LIMIT_MIN,
 
-    /** Half-life 3, 4 or 5 min × target setting ×1 or ×2: 6 variants. The band is set around the calibrated steady count. */
+    /**
+     * Half-life 3, 4 or 5 min × target setting ×1 or ×2, without half-life 5 min at ×2: 5 variants
+     * (content version 2). There the stockpile (×4 to the band's middle, then off) held the band on
+     * 6 of 40 seeds, because a long half-life keeps the stock in the band for most of the hold
+     * (LEVELS.md, "Changes after engine 1.1"). The band is set around the calibrated steady count.
+     */
     variant(seed) {
       const r = K.rng(seed, '1.4');
-      const halfLife_min = r.pick([3, 4, 5]), targetLevel = r.pick([1, 2]);
+      const [halfLife_min, targetLevel] = r.pick(VARIANTS);
       const S = L.S[halfLife_min][targetLevel], S1 = L.S[halfLife_min][1];
       return { seed, halfLife_min, targetLevel, lo: K.round(L.band[0] * S, 10), hi: K.round(L.band[1] * S, 10), S1: K.round(S1, 10) };
     },
@@ -175,7 +182,7 @@
         medium: { glucose_mM: 10, lactose_mM: 0, aminoAcids_mM: 0 },
         genes: { lacY: { level: 'off', kdeg_perS: LN2 / (v.halfLife_min * 60) } },
         flags: { userGenes: ['lacY'] },
-        variant: { levelId: '1.4', content: 1, seed: v.seed, halfLife_min: v.halfLife_min, targetLevel: v.targetLevel },
+        variant: { levelId: '1.4', content: 2, seed: v.seed, halfLife_min: v.halfLife_min, targetLevel: v.targetLevel },
       };
     },
 

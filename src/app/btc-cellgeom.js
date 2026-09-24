@@ -64,7 +64,8 @@
    */
   function fit(g, length_um, width_um, pinchFrac) {
     let changed = false;
-    while (length_um * g.pxPerUm * FIT_MARGIN > (g.vertical ? g.h : g.w) && g.scaleSteps < 20) {
+    const along = g.fitAlong || (g.vertical ? g.h : g.w);   // fitAlong: the stage length left beside a panel
+    while (length_um * g.pxPerUm * FIT_MARGIN > along && g.scaleSteps < 20) {
       g.pxPerUm *= 0.85;
       g.scaleSteps++;
       changed = true;

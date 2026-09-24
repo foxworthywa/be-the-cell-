@@ -80,7 +80,8 @@ test('b-2 / U-12: the bundle inlines every script, stamps the build hash and kee
     const r = build({ out, quiet: true });
     const html = fs.readFileSync(path.join(out, 'index.html'), 'utf8');
     assert.ok(!/<script src=/.test(html), 'an external script remains');
-    assert.ok(r.bytes <= 900 * 1024, `bundle is ${Math.round(r.bytes / 1024)} KB`);
+    // LEVELS.md §16: 1.5 MB throw, 1.2 MB warn (levels 1.1 and 1.7 on top of 1.2 and 1.4; no comment stripping).
+    assert.ok(r.bytes <= 1536 * 1024, `bundle is ${Math.round(r.bytes / 1024)} KB`);
     assert.match(html, new RegExp('<meta name="btc-build" content="' + r.buildHash + '">'));
     assert.ok(html.indexOf("window.BTC_BUILD = '" + r.buildHash + "'") >= 0);
     for (const m of html.matchAll(/\s(?:src|href)="([^"]*)"/g)) {

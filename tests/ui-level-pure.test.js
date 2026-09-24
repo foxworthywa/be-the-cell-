@@ -33,7 +33,14 @@ test('L-13: HUD texts: the counter\'s short form under 400 px; words, not colour
   assert.equal(met.progress, null, 'no bar on the Continue button');
   assert.equal(Hud.texts(model, 360, 'continue').goal, C.game.hud.continue);
   assert.equal(Hud.texts({ goal: { text: 'x', progress: 7 } }, 360, null).progress, 1, 'progress is clamped');
-  assert.deepEqual(Hud.texts(null, 360, null), { goal: '', progress: null, gauge: null, timer: '', counter: '', label: 'Goal: . Open the task card.' });
+  assert.deepEqual(Hud.texts(null, 360, null), { action: null, sub: '', goal: '', progress: null, gauge: null, timer: '', counter: '', label: 'Goal: . Open the task card.' });
+  // 1.7: an action button ("Run to the end") takes the counter's place under 400 px; while it runs it shows its progress.
+  const act = Object.assign({}, model, { action: { id: 'runToEnd', text: 'Run to the end', short: 'To the end' }, goal: Object.assign({ sub: 'Next change: unknown' }, model.goal) });
+  assert.deepEqual([Hud.texts(act, 360, null).action.text, Hud.texts(act, 360, null).counter], ['To the end', '']);
+  assert.deepEqual([Hud.texts(act, 1280, null).action.text, Hud.texts(act, 1280, null).counter, Hud.texts(act, 1280, null).sub], ['Run to the end', 'mRNAs 18 / 40', 'Next change: unknown']);
+  assert.equal(Hud.texts(act, 360, null).sub, '', 'the second line only in wide layouts');
+  const running = Hud.texts({ action: { id: 'runToEnd', text: 'Run to the end', progress: 45 } }, 360, null).action;
+  assert.ok(running.running && /45%/.test(running.text) && /Stop/.test(running.text), running.text);
   // A goal's short form under 400 px (1.4), and a band gauge instead of a bar: band and value as shares of the gauge's range.
   const band = { goal: { text: 'LacY 412 · band 270–520 · held 4 of 15 min', short: 'LacY 412 · held 4 of 15', progress: null, gauge: { lo: 270, hi: 520, max: 780, value: 390 } } };
   assert.equal(Hud.texts(band, 360, null).goal, 'LacY 412 · held 4 of 15');

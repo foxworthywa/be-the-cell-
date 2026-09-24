@@ -14,6 +14,11 @@
  * goal met (or an epilogue has run its time) the goal chip becomes a
  * "Goal met · Continue" button. Text is written only when it changes; the app
  * calls update() at most 4 times per real second.
+ *
+ * Level 1.7 adds model.action {id, text, short, progress?}: a button after the counter
+ * ("Run to the end"; while it runs, its progress and Stop). Under 400 px the button takes
+ * the counter's place. model.goal.sub is a second line under the goal in wide layouts
+ * ("Next change: unknown").
  */
 (function (root, factory) {
   if (typeof module === 'object' && module.exports) {
@@ -39,7 +44,11 @@
     let goalText = (narrow && goal.short) || goal.text || '';
     if (mode === 'met') goalText = G.goalMet;
     else if (mode === 'continue') goalText = G.continue;
+    const act = m.action || null;
+    const actionText = act ? (typeof act.progress === 'number' ? F.fill(G.running, { pct: act.progress }) + ' · ' + G.stop : (narrow && act.short) || act.text) : '';
     return {
+      action: act ? { id: act.id, text: actionText, label: typeof act.progress === 'number' ? F.fill(G.runningLabel, { pct: act.progress }) : act.text, running: typeof act.progress === 'number' } : null,
+      sub: !narrow && width >= 1000 && goal.sub && mode !== 'met' && mode !== 'continue' ? goal.sub : '',
       goal: goalText,
       progress: typeof goal.progress === 'number' && mode !== 'met' && mode !== 'continue' ? Math.max(0, Math.min(1, goal.progress)) : null,
       gauge: goal.gauge && mode !== 'met' && mode !== 'continue' && goal.gauge.max > 0 ? {
@@ -47,7 +56,7 @@
         value: Math.max(0, Math.min(1, goal.gauge.value / goal.gauge.max)),
       } : null,
       timer: (m.timer && ((narrow && m.timer.short) || m.timer.text)) || '',
-      counter: m.counter ? (narrow && m.counter.short ? m.counter.short : m.counter.text) : '',
+      counter: m.counter && !(narrow && act) ? (narrow && m.counter.short ? m.counter.short : m.counter.text) : '',
       label: F.fill(G.taskLabel, { text: goal.text || '' }),
     };
   }
@@ -73,10 +82,13 @@
       this.el.band = h('span', { class: 'hud-gauge-band' });
       this.el.tick = h('span', { class: 'hud-gauge-tick' });
       this.el.barWrap = h('span', { class: 'hud-bar', 'aria-hidden': 'true' }, [this.el.bar, this.el.band, this.el.tick]);
+      this.el.sub = h('span', { class: 'hud-goal-sub', hidden: true });
       this.el.goal = h('button', { class: 'hud-chip hud-goal', type: 'button', onclick: () => this.opts.onGoal && this.opts.onGoal() },
-        [this.el.goalText, this.el.barWrap]);
+        [h('span', { class: 'hud-goal-lines' }, [this.el.goalText, this.el.sub]), this.el.barWrap]);
+      this.el.action = h('button', { class: 'btn hud-action', type: 'button', hidden: true, 'data-action': 'hud-action',
+        onclick: () => { if (this.actionId && this.opts.onAction) this.opts.onAction(this.actionId); } });
       root.textContent = '';
-      root.appendChild(h('div', { class: 'hud-row' }, [this.el.goal, this.el.timer, this.el.counter]));
+      root.appendChild(h('div', { class: 'hud-row' }, [this.el.goal, this.el.timer, this.el.counter, this.el.action]));
     }
 
     /** mode: null (running), 'met' (goal met, Continue) or 'continue' (the epilogue is over). */
@@ -87,6 +99,15 @@
       LY.setText(this.el.timer, t.timer);
       LY.setText(this.el.counter, t.counter);
       this.el.counter.hidden = !t.counter;
+      LY.setText(this.el.sub, t.sub);
+      this.el.sub.hidden = !t.sub;
+      this.el.action.hidden = !t.action;
+      this.actionId = t.action ? t.action.id : null;
+      if (t.action) {
+        LY.setText(this.el.action, t.action.text);
+        if (this.el.action.getAttribute('aria-label') !== t.action.label) this.el.action.setAttribute('aria-label', t.action.label);
+        this.el.action.classList.toggle('is-running', t.action.running);
+      }
       if (this.mode !== mode) {
         this.mode = mode;
         this.el.goal.classList.toggle('is-continue', !!mode);

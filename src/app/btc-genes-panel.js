@@ -1,6 +1,7 @@
 // @deps btc-content btc-format btc-layout btc-palette btc-plot
 /*
- * Be the Cell: the genes panel (LAB_UI §3): one card per gene, in slot order.
+ * Be the Cell: the genes panel (LAB_UI §3): one card per visible gene, in the screen's
+ * display order (slot order in the lab; a hidden-name level's own order, LEVELS §5.5.1).
  *
  * A card shows what the gene is, its promoter control, its counts (mature
  * mRNA, "+n" still being made, protein), a sparkline of the last simulated
@@ -35,16 +36,20 @@
       const h = LY.h, app = this.app;
       this.root = root;
       root.appendChild(h('div', { class: 'pane-head' }, [
-        h('h2', { text: C.card.header }), h('span', { class: 'pane-note', text: C.card.strain }),
+        h('h2', { text: C.card.header }), h('span', { class: 'pane-note', text: C.card.strains[app.cell.config.strain] || C.card.strain }),
       ]));
       const list = h('div', { class: 'card-list' });
       root.appendChild(list);
       const view = app.cell.observe();
       const lc = app.labConfig;
-      for (const gv of view.genes) {
-        // Genes outside labConfig.genesVisible keep running as background: no card (LEVELS §5.5.1).
-        if (lc.genesVisible !== 'all' && Array.isArray(lc.genesVisible) && lc.genesVisible.indexOf(gv.id) < 0) continue;
-        const id = gv.id, w = C.geneWords(id, lc.showNames);
+      const model = app.geneModel || C.geneModel(view.genes.map((g) => g.id), lc);
+      // Genes outside labConfig.genesVisible keep running as background: no card (LEVELS §5.5.1).
+      for (const id of model.visible) {
+        const gv = view.geneById[id];
+        if (!gv) continue;
+        const w = model.words(id);
+        // The genes of one transcription unit (m2-lac's lac operon) share one mRNA.
+        const tu = (view.tus || []).find((u) => u.cistrons.length > 1 && u.cistrons.indexOf(id) >= 0);
         const e = {
           id,
           state: h('span', { class: 'state-chip' }),
@@ -71,13 +76,15 @@
           class: 'card-head', type: 'button', 'aria-label': F.fill(C.card.focusLabel, { name: w.name }),
           onclick: () => app.setFocus(id),
         }, [
-          h('span', { class: 'card-chip', style: { background: 'var(--g-' + id + ')' } }),
+          h('span', { class: 'card-chip', style: { background: 'var(--' + model.color(id) + ')' } }),
           h('span', { class: 'card-title' }, [h('span', { class: 'card-name', text: w.name }), ' ', h('span', { class: 'sym', text: w.symbol })]),
         ]);
         const badge = gv.lumped ? h('span', { class: 'badge', text: F.fill(C.card.standsFor, { n: gv.standsForGenes }) }) : null;
-        const card = h('article', { class: 'gene-card', 'data-gene': id }, [
+        const card = h('article', { class: 'gene-card' + (model.revealed(id) ? ' is-revealed' : ''), 'data-gene': id, 'data-letter': model.hidden ? model.letter(id) : null }, [
           head,
           h('p', { class: 'card-job' }, [e.state, ' ', badge, badge ? ' ' : null, w.job]),
+          model.revealed(id) ? h('p', { class: 'card-named', text: C.card.revealed }) : null,
+          tu ? h('p', { class: 'card-named', text: F.fill(C.card.operon, { names: tu.cistrons.join(', ') }) }) : null,
           ctrl ? h('div', { class: 'card-ctrl' }, [h('span', { class: 'visually-hidden', text: C.card.promoter }), ctrl.el, ctrl.note])
             : h('p', { class: 'card-locked', text: lc.readOnlyGenes ? C.card.readOnly : C.card.locked }),
           h('div', { class: 'card-counts' }, [
@@ -91,6 +98,7 @@
         ]);
         if (ctrl) ctrl.el.setAttribute('aria-label', C.card.promoter + ', ' + w.name);
         e.card = card;
+        e.color = model.color(id);
         this.cards.push(e);
         list.appendChild(card);
       }
@@ -155,7 +163,7 @@
             if (!started) { c.moveTo(px, py); started = true; } else c.lineTo(px, py);
           }
           if (started) c.lineTo(SPARK_W - 1, y(live)); else { c.moveTo(SPARK_W - 3, y(live)); c.lineTo(SPARK_W - 1, y(live)); }
-          c.globalAlpha = alpha; c.lineWidth = width; c.strokeStyle = P['g-' + e.id]; c.stroke(); c.globalAlpha = 1;
+          c.globalAlpha = alpha; c.lineWidth = width; c.strokeStyle = P[e.color] || P.muted; c.stroke(); c.globalAlpha = 1;
         };
         line(mr, mMax, gv.mRNA + gv.nascent, 1, 0.55);
         line(prot, pMax, gv.protein, 2, 1);

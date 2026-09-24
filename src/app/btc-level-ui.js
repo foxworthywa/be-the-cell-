@@ -1,4 +1,4 @@
-// @deps btc-content btc-format btc-layout btc-pwa btc-home btc-sketch
+// @deps btc-content btc-format btc-layout btc-pwa btc-home btc-sketch btc-plot btc-designer
 /*
  * Be the Cell: the level screens (LEVELS §5.2–5.9): story beats, the task
  * card, prediction sheets, the result, the debrief, "Meanwhile, in you" and
@@ -15,19 +15,21 @@
  * Level 1.2 adds the sketch (BTC.Sketch) and the demo's sheet (the sketch over the
  * test run, feature by feature); level 1.4 adds the epilogue's "Switch LacY off"
  * sheet. A level's own words for these live in its TEXT (item.words, text.demo,
- * text.epilogue).
+ * text.epilogue). Level 1.7 adds the truth-table prediction (§5.4.4), the DNA editor
+ * (BTC.DesignerView, §5.10) and a result with three bars against par and the run's
+ * doublings against par over the sugar phases; 1.1 names every gene at the end.
  *
  * Pure helpers (test L-13): LevelUI.codeLines(code, perLine), LevelUI.scoreLines(result).
  */
 (function (root, factory) {
   if (typeof module === 'object' && module.exports) {
     module.exports = factory(require('./btc-content.js'), require('./btc-format.js'), require('./btc-layout.js'),
-      require('./btc-pwa.js'), require('./btc-home.js'), require('./btc-sketch.js'));
+      require('./btc-pwa.js'), require('./btc-home.js'), require('./btc-sketch.js'), require('./btc-plot.js'), require('./btc-designer.js'));
   } else {
     var B = root.BTC || (root.BTC = {});
-    B.LevelUI = factory(B.content, B.format, B.layout, B.pwa, B.HomeView, B.Sketch);
+    B.LevelUI = factory(B.content, B.format, B.layout, B.pwa, B.HomeView, B.Sketch, B.Plot, B.DesignerView);
   }
-})(typeof self !== 'undefined' ? self : this, function (C, F, LY, PWA, Home, Sketch) {
+})(typeof self !== 'undefined' ? self : this, function (C, F, LY, PWA, Home, Sketch, Plot, DV) {
   'use strict';
 
   const G = C.game;
@@ -116,6 +118,7 @@
         case 'run': return this.close();
         case 'demo': return r.demo.done ? this.demoResult() : this.close();
         case 'epilogue': return r.epilogue.started ? this.close() : this.epilogueSheet();
+        case 'design': return this.designSheet();
         case 'result': return this.result();
         case 'debrief': return this.debrief();
         case 'echo': return this.echo();
@@ -329,6 +332,9 @@
           ]));
           body.appendChild(clampNote);
           lockBtn.addEventListener('click', () => { const v = read(); if (v !== null && r.lock(it.id, Math.max(it.min, Math.min(it.max, v))).ok) this.afterLock(); });
+        } else if (it.kind === 'table') {
+          body.appendChild(this.tableWidget(it, lockBtn));
+          lockBtn.addEventListener('click', () => { if (this.tableReady(it) && r.lock(it.id, r.selected[it.id]).ok) this.afterLock(); });
         } else if (it.kind === 'sketch') {
           const S = G.sketch;
           LY.setText(lockBtn, S.done);
@@ -351,12 +357,94 @@
           });
           lockBtn.disabled = !sk.value().length || !sk.covered();
         }
-        body.appendChild(h('p', { class: 'sheet-note', text: it.kind === 'sketch' ? G.predict.sketchNote : G.predict.note }));
+        body.appendChild(h('p', { class: 'sheet-note', text: it.kind === 'sketch' ? G.predict.sketchNote : it.kind === 'table' ? G.table.note : G.predict.note }));
         if (it.expert) actions.push(h('button', { class: 'btn', type: 'button', onclick: () => { r.skip(it.id); this.afterLock(); } }, G.predict.skipExpert));
         actions.push(lockBtn);
         body.appendChild(h('div', { class: 'lv-sticky lv-actions' }, actions));
       });
     }
+    /** Every Core cell of a truth table is set (Expert rows may be left). */
+    tableReady(it) {
+      const r = this.runner, v = r.selected[it.id] || {};
+      return it.coreRows(r.variant).every((row) => it.cols.every((c) => v[row] && (v[row][c.id] === 0 || v[row][c.id] === 1)));
+    }
+
+    /**
+     * The truth table (§5.4.4): one card per strain with its DNA drawn (the part that differs outlined)
+     * and, per condition, a two-segment choice "LacZ made" / "almost none" (≥ 48 px each). Cards stack
+     * on a phone and sit in a 2 × 2 grid on a laptop; the fourth strain is Expert and may be left.
+     */
+    tableWidget(it, lockBtn) {
+      const r = this.runner, h = LY.h;
+      const rows = it.shownRows ? it.shownRows(r.variant) : it.rows.map((x) => x.id);
+      const core = it.coreRows(r.variant);
+      const label = (rid) => r.text(it.rows.find((x) => x.id === rid).label);
+      const grid = h('div', { class: 'tt-grid' });
+      const buttons = [];
+      const paint = () => {
+        const v = r.selected[it.id] || {};
+        for (const b of buttons) {
+          const on = v[b.row] && v[b.row][b.col] === b.val;
+          b.el.classList.toggle('is-on', !!on);
+          b.el.setAttribute('aria-checked', on ? 'true' : 'false');
+        }
+        lockBtn.disabled = !this.tableReady(it);
+      };
+      for (const rid of rows) {
+        const expert = core.indexOf(rid) < 0;
+        const pic = h('div', { class: 'tt-dna', 'aria-hidden': 'true' });
+        pic.innerHTML = DV.strainSvg(rid, C.lacRegion);
+        const card = h('div', { class: 'tt-card' + (expert ? ' is-expert' : ''), 'data-row': rid }, [
+          h('div', { class: 'tt-head' }, [h('span', { class: 'tt-name', text: label(rid) }), expert ? h('span', { class: 'tt-tag', text: G.table.expert }) : null]),
+          pic,
+        ]);
+        for (const col of it.cols) {
+          const group = h('div', { class: 'seg-group tt-seg', role: 'radiogroup', 'aria-label': label(rid) + ', ' + r.text(col.label) });
+          // "LacZ made" first, then "almost none" (values 1 and 0).
+          for (const val of [1, 0]) {
+            const b = h('button', { class: 'seg', type: 'button', role: 'radio', 'aria-checked': 'false', 'data-row': rid, 'data-col': col.id, 'data-value': String(val),
+              onclick: () => {
+                const cur = JSON.parse(JSON.stringify(r.selected[it.id] || {}));
+                (cur[rid] || (cur[rid] = {}))[col.id] = val;
+                r.select(it.id, cur);
+                paint();
+              } }, h('span', { class: 'seg-label', text: r.text(it.choices[val]) }));
+            buttons.push({ el: b, row: rid, col: col.id, val });
+            group.appendChild(b);
+          }
+          card.appendChild(h('div', { class: 'tt-row' }, [h('span', { class: 'tt-col', text: r.text(col.label) }), group]));
+        }
+        grid.appendChild(card);
+      }
+      paint();
+      return grid;
+    }
+
+    // --- the DNA editor (1.7, §5.10) -------------------------------------------------------
+    designSheet() {
+      const r = this.runner, T = this.def.text.design;
+      this.sheet('design', { title: r.text(T.title), className: 'lv-sheet lv-full lv-design' }, (body) => {
+        const dv = new DV({
+          text: T, design: r.design, words: G.design,
+          onChange: (d, path, from, to) => {
+            r.setDesign(d);
+            this.app.logEvent('design', { part: path, from, to });
+            this.app.saveLevel();
+          },
+          onRun: (d) => { r.setDesign(d); this.runDesign(); },
+        });
+        this.designer = dv;
+        dv.mount(body);
+      });
+    }
+    /** The design is confirmed: the run starts (paused) from it. */
+    runDesign() {
+      const r = this.runner;
+      if (r.phase !== 'design') return;
+      r.next();
+      this.after();
+    }
+
     afterLock() {
       const r = this.runner;
       if (!r.currentItem()) r.next();
@@ -439,8 +527,12 @@
       const prev = r.preview();
       this.dropCharts();
       this.sheet('result', { title: R.title, className: 'lv-sheet lv-full' }, (body) => {
-        const reason = R.reasons[r.run && r.run.endReason] || R.reasons.done;
+        // A level may say why its goal was missed (1.7: the run always reaches its end).
+        const own = typeof this.def.missReason === 'function' && r.monitorResult ? this.def.missReason(r.monitorResult) : null;
+        const reason = own || R.reasons[r.run && r.run.endReason] || R.reasons.done;
         body.appendChild(h('p', { class: 'lv-outcome ' + (r.goal ? 'is-met' : 'is-not'), text: r.goal ? R.met : F.fill(R.notMet, { reason }) }));
+        const parPending = r.hasPar() && !r.par.done;
+        if (parPending) body.appendChild(h('p', { class: 'sheet-note lv-working', 'aria-live': 'polite', text: r.text((this.def.text.result || {}).working || '') }));
         if (r.goal && typeof prev.E === 'number') {
           const E = Math.max(0, Math.min(1, prev.E)), within = E >= 0.8;
           body.appendChild(h('div', { class: 'lv-eff' }, [
@@ -451,6 +543,13 @@
             ]),
           ]));
           if (this.def.resultLines) for (const t of this.def.resultLines(r.variant, prev)) body.appendChild(h('p', { class: 'sheet-note', text: t }));
+        }
+        // 1.7: the three parts of efficiency against par, and the run's doublings against par over the phases.
+        const bars = !parPending && this.def.resultBars ? this.def.resultBars(r.variant, prev) : null;
+        if (bars) {
+          for (const b of bars) body.appendChild(this.bar(b.label, b.value, b.line, b.key));
+          const ch = this.def.resultChart ? this.def.resultChart(r.variant, prev) : null;
+          if (ch) this.growthChart(body, ch);
         }
         const review = this.reviewCards('predict');
         if (review.length) {
@@ -469,6 +568,56 @@
       });
     }
 
+    /** One bar against par (the efficiency bar's look): label, value 0–1 with the par mark at 80%, and a line. */
+    bar(label, value, line, key) {
+      const h = LY.h, R = G.result;
+      const E = Math.max(0, Math.min(1, value)), within = E >= 0.8;
+      return h('div', { class: 'lv-eff lv-sub', 'data-bar': key || null }, [
+        h('div', { class: 'lv-eff-head' }, [h('span', { text: label }), h('span', { class: 'num', text: pct(E) + ' · ' + (within ? R.withinPar : R.overPar) })]),
+        h('div', { class: 'lv-eff-bar', role: 'img', 'aria-label': label + ' ' + pct(E) + ', ' + (within ? R.withinPar : R.overPar) }, [
+          h('span', { class: 'lv-eff-fill' + (within ? ' is-within' : ''), style: { width: (100 * E).toFixed(1) + '%' } }),
+          h('span', { class: 'lv-eff-par', style: { left: '80%' } }, h('span', { class: 'lv-eff-par-label', text: R.parMark })),
+        ]),
+        line ? h('p', { class: 'sheet-note', text: line }) : null,
+      ]);
+    }
+
+    /** Doublings over the run: the design (solid) and par (dashed), over the phase bands (1.7). */
+    growthChart(host, ch) {
+      const h = LY.h;
+      const box = h('div', { class: 'lv-sketch-chart' });
+      const canvas = h('canvas', { class: 'sketch-canvas is-chart', role: 'img', 'aria-label': ch.words.label });
+      const wrap = h('div', { class: 'sketch-wrap is-chart' }, canvas);
+      box.appendChild(h('p', { class: 'sheet-note', text: ch.words.label }));
+      box.appendChild(wrap);
+      box.appendChild(h('div', { class: 'sketch-legend', 'aria-hidden': 'true' }, [
+        h('span', { class: 'sketch-key' }, [h('span', { class: 'sketch-swatch', style: { borderColor: 'var(--accent)' } }), ch.words.cell]),
+        h('span', { class: 'sketch-key' }, [h('span', { class: 'sketch-swatch is-dashed' }), ch.words.sketch]),
+      ]));
+      host.appendChild(box);
+      const stepS = ch.stepMin * 60, total = ch.totalMin * 60;
+      const maxY = Math.max(1, ...ch.mine, ...ch.par);
+      const plot = new Plot({ canvas, scale: 'fixed', min: 0, max: Math.ceil(maxY), yStep: 2, xStep: 7200, xUnit: 'h', xLabel: ch.words.x, yLabel: ch.words.y });
+      const draw = () => {
+        plot.resize();
+        plot.setOverlay(ch.par.map((y, i) => [i * stepS, y]), { color: 'muted', dash: [6, 5], width: 2 });
+        const n = ch.mine.length;
+        const m = {
+          ticks: new Int32Array(n), count: n, dt: 1, t0: 0, t1: (n - 1) * stepS, tEnd: total, window: total,
+          series: [{ data: new Float64Array(ch.mine), live: ch.mine[n - 1], color: 'accent', label: '' }], nSeries: 1,
+          markers: { n: 0, tick: [], kind: [], label: [] },
+          bands: { n: ch.bands.length, t0: ch.bands.map((b) => b.from * 60), t1: ch.bands.map((b) => b.to * 60), color: ch.bands.map((b) => b.color), label: ch.bands.map((b) => b.label) },
+          scrubT: -1,
+        };
+        for (let i = 0; i < n; i++) m.ticks[i] = i * stepS;
+        plot.draw(m);
+      };
+      draw();
+      let ro = null;
+      if (typeof ResizeObserver === 'function') { ro = new ResizeObserver(draw); ro.observe(wrap); }
+      (this.charts || (this.charts = [])).push({ destroy() { if (ro) ro.disconnect(); } });
+    }
+
     /** "You predicted … / What happened …" cards for the locked items of a phase. */
     reviewCards(phase) {
       const r = this.runner, h = LY.h, R = G.result, out = [];
@@ -484,8 +633,23 @@
         } else if (it.kind === 'number') {
           kids.push(h('p', { text: F.fill(R.estimate, { v: a.value }) }));
           kids.push(h('p', { text: a.correct ? R.estimateRight : R.estimateWrong }));
+        } else if (it.kind === 'table') {
+          // Each strain: your two cells against what those strains do (the model contract, measured in calibration).
+          const list = h('ul', { class: 'tt-review' });
+          for (const rid of a.rows) {
+            const lab = r.text(it.rows.find((x) => x.id === rid).label);
+            const cells = it.cols.map((c) => {
+              const mine = a.value[rid] ? a.value[rid][c.id] : undefined;
+              if (mine === undefined) return null;
+              const ok = a.cells[rid][c.id];
+              return h('span', { class: 'tt-cell ' + (ok ? 'is-right' : 'is-wrong') }, [h('span', { class: 'lv-mark', 'aria-hidden': 'true', text: ok ? '✓ ' : '✗ ' }),
+                r.text(c.label) + ': ' + r.text(it.choices[it.answer[rid][c.id]])]);
+            }).filter(Boolean);
+            if (cells.length) list.appendChild(h('li', {}, [h('span', { class: 'tt-name', text: lab }), h('span', { class: 'tt-cells' }, cells)]));
+          }
+          kids.push(list);
         }
-        const card = h('div', { class: 'lv-review' + (a.correct ? ' is-right' : a.skipped ? '' : ' is-wrong') }, kids);
+        const card = h('div', { class: 'lv-review' + (a.correct ? ' is-right' : a.skipped ? '' : ' is-wrong'), 'data-item': it.id }, kids);
         if (it.kind === 'sketch' && !a.skipped) this.sketchReview(card, it, a);
         out.push(card);
       }
@@ -559,6 +723,12 @@
         body.appendChild(h('div', { class: 'lv-actions lv-actions-start' }, row));
         body.appendChild(status);
         body.appendChild(h('p', { class: 'lv-keep', text: K.keep }));
+        // 1.1: every candidate named, with the letter this student saw (after the code, which matters most here).
+        if (this.def.completeNotes) {
+          const notes = this.def.completeNotes(r.variant, (id) => C.genes[id]);
+          body.appendChild(h('h3', { text: notes.heading }));
+          body.appendChild(h('ul', { class: 'lv-named' }, notes.lines.map((t) => h('li', { text: t }))));
+        }
         const more = [];
         if (this.def.scored) {
           more.push(h('button', { class: 'btn', type: 'button', onclick: () => app.downloadLevelRun() }, K.download));

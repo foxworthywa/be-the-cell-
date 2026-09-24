@@ -15,6 +15,8 @@
  *   r.items() / select(id, v) / lock(id, v) / skip(id) / optionOrder(id)   predictions
  *   r.ensureRun() → cell; r.halted(); r.retry(); r.continueWithoutGoal()  the run
  *   r.tap(qid, option) → {correct, fb, mc}           debrief (and scene) questions, with retries
+ *   r.setDesign(d), r.hasPar(), r.parStep(ms)        1.7: the student's DNA, and the par run (the reference
+ *                                                    design on the same schedule and seed), computed in slices
  *   r.echoNext()                                     "Meanwhile, in you"
  *   r.preview()                                      score components so far (the result sheet)
  *   r.result, r.code, r.runFile(extra), r.save(), LevelRunner.restore(def, saved, opts)
@@ -60,6 +62,47 @@
     return new Cell(config);
   }
 
+  const nowMs = () => (typeof performance !== 'undefined' && performance.now ? performance.now() : Date.now());
+
+  /**
+   * The par run of a designer level (LEVELS §7.7.4): the level's par design run headless on the
+   * student's variant with the task's engine seed (common random numbers) and the level's own
+   * monitor, stepped in slices. step(ms) runs until the monitor ends the run or ms of wall time
+   * have passed (Infinity: to the end); snapshot() → {done, result, finalHash}.
+   */
+  function parRunner(def, variant, make) {
+    const design = copy(def.par.design);
+    let cell = null, monitor = null, st = null, out = { done: false, result: null, finalHash: null, ticks: 0 };
+    return {
+      get done() { return out.done; },
+      step(ms) {
+        if (out.done) return true;
+        if (!cell) {
+          cell = (make || makeCell)(def.config(variant, 'par', { deviceSeed: 0, design }));
+          monitor = def.monitor(variant, { dt: cell.dt, K, variant, design });
+          if (monitor.start) monitor.start(cell);
+          st = { logIdx: 0, endReason: null, endTick: null };
+          cell.attachRecorder(monitorFeed(monitor, st));
+        }
+        const t0 = nowMs();
+        let n = 0;
+        while (!st.endReason) {
+          cell.step();
+          if ((++n & 255) === 0) { cell.takeEvents(); if (ms !== Infinity && nowMs() - t0 >= ms) break; }
+        }
+        cell.takeEvents();
+        if (st.endReason) {
+          out = { done: true, result: copy(monitor.result()), finalHash: cell.hash(), ticks: cell.tick };
+          cell = null; monitor = null;
+        }
+        return out.done;
+      },
+      progress() { return out.done ? 1 : cell && def.par.ticks ? Math.min(0.99, cell.tick / def.par.ticks(variant)) : 0; },
+      snapshot() { return copy(out); },
+      set(s) { if (s && s.done) out = copy(s); },
+    };
+  }
+
   function localDate() {
     const d = new Date();
     const p = (n) => (n < 10 ? '0' : '') + n;
@@ -88,8 +131,43 @@
     } else if (it.kind === 'sketch' && typeof it.evaluate === 'function') {
       const e = it.evaluate(value, variant, extras || {});
       if (e) { a.features = e.features; a.P = e.P; a.correct = e.P === 1; }
+    } else if (it.kind === 'table') {
+      const m = markTable(it, value, variant);
+      if (m.error) return { error: m.error };
+      Object.assign(a, m);
     }
     return a;
+  }
+
+  /**
+   * Marks a truth-table answer (LEVELS §3.3, §7.7.7): value {rowId: {colId: 0|1}}. Every Core cell
+   * (the variant's coreRows) must be set; the other rows are Expert and may be left empty.
+   * → {value (normalised), rows, coreRows, cells: {rowId: {colId: true|false}}, coreRight, coreTotal,
+   *    P, correct (every Core cell right), expertAll (every row set and right)} or {error}.
+   */
+  function markTable(it, value, variant) {
+    if (!value || typeof value !== 'object') return { error: 'not a table' };
+    const core = typeof it.coreRows === 'function' ? it.coreRows(variant) : it.rows.map((r) => r.id);
+    const rows = typeof it.shownRows === 'function' ? it.shownRows(variant) : it.rows.map((r) => r.id);
+    const cols = it.cols.map((c) => c.id);
+    const norm = {}, cells = {};
+    let coreRight = 0, coreTotal = 0, all = true;
+    for (const rid of rows) {
+      const src = value[rid] || {};
+      for (const cid of cols) {
+        const x = src[cid];
+        const set = x === 0 || x === 1;
+        const isCore = core.indexOf(rid) >= 0;
+        if (!set) { if (isCore) return { error: 'a Core cell is empty' }; all = false; continue; }
+        (norm[rid] || (norm[rid] = {}))[cid] = x;
+        const right = it.answer[rid][cid] === x;
+        (cells[rid] || (cells[rid] = {}))[cid] = right;
+        if (isCore) { coreTotal++; if (right) coreRight++; }
+        if (!right) all = false;
+      }
+    }
+    return { value: norm, rows, coreRows: core, cells, coreRight, coreTotal, P: coreTotal ? coreRight / coreTotal : 0,
+      correct: coreTotal > 0 && coreRight === coreTotal, expertAll: all };
   }
 
   /** Debrief state {qid: {tries, solved, first, firstCorrect, firstMc}} rebuilt from the taps, in order (pure). */
@@ -209,7 +287,10 @@
       this.goal = false;
       this.withoutGoal = false;
       this.demo = { done: false, cell: null, record: null, result: null };
-      this.design = null;
+      // Designer levels start from the level's starting design (1.7: the Commander's, LEVELS §5.10).
+      this.design = def.designStart ? copy(def.designStart) : null;
+      this.par = def.par ? parRunner(def, this.variant, o.makeCell) : null;
+      this.onRunShown = false;
       this.epilogue = { startTick: null, done: false, started: false };
       this.result = null;
       this.code = null;
@@ -245,7 +326,11 @@
       if (p === 'intro') this.beat = { name: 'intro', index: 0 };
       else if (p === 'scenes') this.scene = { index: 0, line: 0 };
       else if (p === 'run') {
+        // A designer level's cell is built from the design the student ran (it applies at tick 0).
+        if (this.has('design') && this.run && this.run.cell.tick === 0 && !this.run.endReason) this.replaceRunCell();
         this.ensureRun();
+        const onRun = this.beatLines('onRun');
+        if (onRun.length && !this.onRunShown) this.beat = { name: 'onRun', index: 0 };
         this.log('run_start', { speed: this.speedFn ? this.speedFn() : null });
       } else if (p === 'result') {
         if (this.goal && def.story.outro.length && !this.outroShown) this.beat = { name: 'outro', index: 0 };
@@ -295,6 +380,7 @@
       if (this.beat) {
         const name = this.beat.name;
         if (name === 'outro') this.outroShown = true;
+        if (name === 'onRun') this.onRunShown = true;
         this.beat = null;
         if (name !== 'intro') return { ok: true, phase: this.phase };
       }
@@ -318,7 +404,7 @@
         const alt = key && def.story.extra && def.story.extra[key];
         if (alt) return alt;
       }
-      return def.story[name] || [];
+      return def.story[name] || (def.story.extra && def.story.extra[name]) || [];
     }
     storyLine() {
       if (!this.beat) return null;
@@ -436,7 +522,8 @@
       if (it.kind === 'sketch') {
         d.points = Array.isArray(a.value) ? a.value.filter(Boolean).length : 0;
         if (a.features) { d.features = a.features; d.P = a.P; }
-      } else { d.value = a.value; d.correct = a.correct === undefined ? null : a.correct; }
+      } else if (it.kind === 'table') { d.value = a.value; d.P = a.P; d.correct = a.correct; }
+      else { d.value = a.value; d.correct = a.correct === undefined ? null : a.correct; }
       this.log('predict', d);
       return { ok: true };
     }
@@ -484,6 +571,21 @@
       this.attachRun(cell, null);
       return cell;
     }
+
+    /** The same run with a fresh cell from the current config (1.7: the design was edited before Run). */
+    replaceRunCell() {
+      if (this.run) this.run.cell.detachRecorder(this.run.recorder);
+      this.run = null;
+      const cell = this.makeCell(this.def.config(this.variant, 'task', this.extra()));
+      this.attachRun(cell, null);
+      return cell;
+    }
+
+    // --- the par run (1.7) --------------------------------------------------------------
+    hasPar() { return !!this.par; }
+    /** Runs the par run for up to ms of wall time (Infinity: to the end); true when it is done. */
+    parStep(ms) { return this.par ? this.par.step(ms === undefined ? Infinity : ms) : true; }
+    parResult() { return this.par && this.par.done ? this.par.snapshot().result : null; }
 
     attachRun(cell, saved) {
       const def = this.def;
@@ -620,8 +722,17 @@
     }
 
     // --- labConfig, HUD, narrator ------------------------------------------------------
+    /** The level's labConfig for the current phase; revealed genes come from the run's monitor (1.1). */
     labConfig(extraState) {
-      return this.def.labConfig(this.variant, Object.assign({ phase: this.phase, revealed: {}, scene: this.phase === 'scenes' ? this.scene.index : null }, extraState || {}));
+      const mon = this.run && this.run.monitor.save ? this.run.monitor.save() : null;
+      const revealed = mon && mon.revealed ? copy(mon.revealed) : {};
+      return this.def.labConfig(this.variant, Object.assign({ phase: this.phase, revealed, scene: this.phase === 'scenes' ? this.scene.index : null,
+        design: this.design }, extraState || {}));
+    }
+    /** A key that changes whenever the labConfig would (the revealed genes), so the app knows to rebuild its panels. */
+    labConfigKey() {
+      const mon = this.run && this.run.monitor.save ? this.run.monitor.save() : null;
+      return this.phase + '|' + (mon && mon.revealed ? Object.keys(mon.revealed).sort().join(',') : '');
     }
     hud() {
       if (!this.def.hud) return null;
@@ -633,10 +744,17 @@
     /** Level narrator rules with the read-only `level` object of §5.5.4 as their fourth argument. */
     narratorRules() {
       const runner = this;
-      return this.def.narratorRules.map((r) => ({
-        key: r.key, template: this.text(r.template), gene: r.gene || null, preempt: !!r.preempt,
-        when: (f, m, t) => r.when(f, m, t, runner.levelView()),
-      }));
+      return this.def.narratorRules.map((r) => {
+        // A rule's gene is fixed (a string) or chosen when it speaks (gene(facts, memory, tick, level): 1.1's reveals).
+        const rule = { key: r.key, template: this.text(r.template), gene: typeof r.gene === 'string' ? r.gene : null, preempt: !!r.preempt };
+        rule.when = (f, m, t) => {
+          const lv = runner.levelView();
+          const ok = r.when(f, m, t, lv);
+          if (ok && typeof r.gene === 'function') rule.gene = r.gene(f, m, t, lv) || null;
+          return ok;
+        };
+        return rule;
+      });
     }
     levelView() {
       const demo = this.phase === 'demo';
@@ -657,14 +775,15 @@
       const def = this.def;
       if (!def.score) return {};
       return def.score(this.variant, this.monitorResult || {}, this.answersForScore(),
-        { demo: this.demo.result, design: this.design, withoutGoal: this.withoutGoal }) || {};
+        { demo: this.demo.result, design: this.design, withoutGoal: this.withoutGoal, par: this.parResult() }) || {};
     }
 
     finish() {
       if (this.result) return this.result;
       const def = this.def;
+      if (this.par && this.monitorResult) this.parStep(Infinity);
       const comp = def.score ? (def.score(this.variant, this.monitorResult || {}, this.answersForScore(),
-        { demo: this.demo.result, design: this.design, withoutGoal: this.withoutGoal }) || {}) : {};
+        { demo: this.demo.result, design: this.design, withoutGoal: this.withoutGoal, par: this.parResult() }) || {}) : {};
       const r = summarise(def, {
         goal: this.goal, comp, debrief: this.debriefState, variantSeed: this.variantSeed, attempt: this.attempt,
         runs: this.runs, override: this.override, record: this.record,
@@ -699,6 +818,7 @@
       if (sk && this.answers[sk.id] && this.answers[sk.id].locked) level.sketch = copy(this.answers[sk.id].value);
       const records = { task: copy(this.record) };
       if (this.demo.record) records.demo = copy(this.demo.record);
+      if (this.par && this.par.done) records.par = { finalHash: this.par.snapshot().finalHash };
       return { format: 'btc-level-run', v: 1, build: x.build || null, ui: x.ui || {}, level, records, telemetry: x.telemetry || [] };
     }
 
@@ -718,6 +838,8 @@
         echoIndex: this.echoIndex, cards: this.cards.slice(), withoutGoal: this.withoutGoal, design: copy(this.design),
         demo: { done: this.demo.done, record: copy(this.demo.record), result: copy(this.demo.result) },
         epilogue: copy(this.epilogue),
+        // A par run in progress is not saved: it starts again (LEVELS §4.4). A finished one is small.
+        par: this.par && this.par.done ? this.par.snapshot() : null, onRunShown: this.onRunShown,
         run: this.run ? {
           endReason: this.run.endReason, endTick: this.run.endTick, logIdx: this.run.logIdx,
           monitor: this.run.monitor.save ? copy(this.run.monitor.save()) : null,
@@ -755,6 +877,8 @@
     r.design = copy(s.design) || null;
     r.demo = { done: !!(s.demo && s.demo.done), cell: null, record: s.demo ? copy(s.demo.record) : null, result: s.demo ? copy(s.demo.result) : null };
     r.epilogue = copy(s.epilogue) || { startTick: null, done: false, started: false };
+    if (r.par && s.par) r.par.set(s.par);
+    r.onRunShown = !!s.onRunShown;
     r.record = copy(s.record) || null;
     r.monitorResult = copy(s.monitorResult) || null;
     r.goal = !!s.goal;
@@ -841,10 +965,16 @@
         const cell = r.startDemo();
         while (!r.checkDemo()) { cell.step(); cell.takeEvents(); }
       } else if (p === 'design') {
-        if (sol.design) r.setDesign(sol.design);
+        if (sol.design) r.setDesign(typeof sol.design === 'function' ? sol.design(r.variant) : sol.design);
       } else if (p === 'run') {
         stepCell(r, r.run.cell, () => !!r.run.endReason);
         if (!r.run.endReason) throw new Error('level ' + def.id + ': the run did not end within ' + maxTicks + ' ticks');
+        // The par run (1.7): opts.parCache (variantSeed → snapshot) lets tools share it between solutions.
+        if (r.par && !r.par.done) {
+          const cached = o.parCache && o.parCache[r.variantSeed];
+          if (cached) r.par.set(cached);
+          else { r.parStep(Infinity); if (o.parCache) o.parCache[r.variantSeed] = r.par.snapshot(); }
+        }
       } else if (p === 'result') {
         if (!r.goal) {
           if (o.retryFailed && !retried) { retried = true; r.retry(); continue; }
@@ -924,6 +1054,15 @@
         check('run ends as recorded', rep.st.endTick === record.finalTick, rep.st.endTick, record.finalTick);
         monitorResult = copy(rep.monitor.result()) || {};
       }
+      // The par run (1.7): recomputed from the variant (it is the reference design on the same seed).
+      let par = null;
+      if (def.par) {
+        const pr = parRunner(def, variant);
+        pr.step(Infinity);
+        const snap = pr.snapshot();
+        par = snap.result;
+        if (recs.par && recs.par.finalHash) check('par run reaches its final hash', snap.finalHash === recs.par.finalHash, recs.par.finalHash, snap.finalHash);
+      }
       // Answers and debrief, re-marked from what the file stores.
       const predictions = {};
       for (const it of def.predictions) {
@@ -932,7 +1071,7 @@
         else if (it.expert) predictions[it.id] = { locked: false, skipped: true, value: null };
       }
       const debrief = debriefFromTaps(def, L.debrief);
-      const comp = def.score ? (def.score(variant, monitorResult, { predictions, debrief }, { demo, design, withoutGoal: false }) || {}) : {};
+      const comp = def.score ? (def.score(variant, monitorResult, { predictions, debrief }, { demo, design, withoutGoal: false, par }) || {}) : {};
       const r = summarise(def, {
         goal: !!monitorResult.goal, comp, debrief, variantSeed, attempt: L.attempt, runs: L.runs, override: L.override, record,
       });
@@ -957,8 +1096,8 @@
 
   /**
    * What a played solution got wrong against its expect (§3.6): [] when it met every claim.
-   * expect: {goal: bool, par: bool (true: goal met and E ≥ 0.8; false: not both), P, minTotal,
-   * flags: [ids that must be raised], X (bits that must be set)}.
+   * expect: {goal: bool, par: bool (true: goal met and E ≥ 0.8; false: not both), P, minTotal, minE (goal met
+   * with E at least this), flags: [ids that must be raised], X (bits that must be set)}.
    */
   function checkExpect(expect, result) {
     const e = expect || {}, r = result, out = [];
@@ -968,12 +1107,13 @@
     if (e.par === true && !withinPar) out.push('not within par (E ' + r.E + ')');
     if (e.par === false && withinPar) out.push('within par');
     if (typeof e.P === 'number' && !(typeof r.P === 'number' && Math.abs(r.P - e.P) < 1e-9)) out.push('P ' + r.P + ', expected ' + e.P);
+    if (typeof e.minE === 'number' && !(r.G === 1 && typeof r.E === 'number' && r.E >= e.minE - 1e-9)) out.push('E ' + r.E + ' below ' + e.minE);
     if (typeof e.minTotal === 'number' && !(r.total >= e.minTotal)) out.push('total ' + r.total + ' < ' + e.minTotal);
     for (const f of e.flags || []) if ((r.flags || []).indexOf(f) < 0) out.push('flag ' + f + ' not raised');
     if (typeof e.X === 'number' && (r.X & e.X) !== e.X) out.push('Expert bits ' + r.X + ', expected ' + e.X);
     return out;
   }
 
-  const game = { makeCell, playHeadless, LevelRunner, answerRecord, debriefFromTaps, summarise, monitorFeed, verifyRunFile, checkExpect };
+  const game = { makeCell, playHeadless, LevelRunner, answerRecord, markTable, debriefFromTaps, summarise, monitorFeed, verifyRunFile, checkExpect, parRunner };
   return { LevelRunner, game };
 });

@@ -86,9 +86,14 @@
       if (!isStr(it.prompt)) fail(path + '.prompt', 'missing prompt');
       if (!isObj(it.x) || !isObj(it.y)) fail(path + '.x', 'sketch axes {min, max, label}');
     } else if (it.kind === 'table') {
+      if (!isStr(it.prompt)) fail(path + '.prompt', 'missing prompt');
       if (!Array.isArray(it.rows) || !Array.isArray(it.cols)) fail(path + '.rows', 'rows and cols are arrays');
       if (!Array.isArray(it.choices) || it.choices.length !== 2) fail(path + '.choices', 'two choice labels');
       if (!isObj(it.answer)) fail(path + '.answer', 'answer {rowId: {colId: 0|1}}');
+      for (const r of it.rows) for (const c of it.cols) {
+        if (!it.answer[r.id] || (it.answer[r.id][c.id] !== 0 && it.answer[r.id][c.id] !== 1)) fail(path + '.answer.' + r.id + '.' + c.id, '0 or 1');
+      }
+      if (it.coreRows !== undefined && typeof it.coreRows !== 'function') fail(path + '.coreRows', 'coreRows(variant) → [rowId]');
     }
     if (it.phase !== undefined && it.phase !== 'predict' && it.phase !== 'predict2') fail(path + '.phase', 'predict or predict2');
     if (it.expert !== undefined && typeof it.expert !== 'boolean') fail(path + '.expert', 'true or false');
@@ -208,6 +213,7 @@
       }
     }
     if (def.outroKey !== undefined && typeof def.outroKey !== 'function') fail('outroKey', 'must be outroKey(variant, monitorResult, goal)');
+    if (def.missReason !== undefined && typeof def.missReason !== 'function') fail('missReason', 'must be missReason(monitorResult) → a phrase or null');
     if (has('intro') && !def.story.intro.length) fail('story.intro', 'the intro beat has no lines');
     if (has('scenes')) {
       if (!Array.isArray(def.scenes) || !def.scenes.length) fail('scenes', 'a list of scenes');
