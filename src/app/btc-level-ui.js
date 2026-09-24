@@ -237,6 +237,8 @@
       // {N}: how many glucose one moving mark stands for, as the cell view draws them now (PROLOGUE §2.4.3 H11).
       const cv = app.views.cellView, N = cv && cv.markerN ? F.count(cv.markerN[0]) : '';
       let text = F.fill(info.text, { N }), who = info.who, point = info.point;
+      const zl = app.views && app.views.zoom && typeof app.views.zoom.get === 'function' ? app.views.zoom.get() : 'cell';
+      if (info.cellNote && zl === 'cell' && (info.stage === 'lines' || info.stage === 'tap')) text += ' ' + F.fill(info.cellNote, { N });
       // A step whose own line explains a readout (P2's H2, H4, H9): the student has met it; it is not introduced again.
       if (info.introduces && (info.stage === 'lines' || info.stage === 'tap') && app.progress) for (const id of info.introduces) app.progress.markIntroduced(id);
       // A step that moves the cell to a faster speed (P2's H10; 1.2's waits once nothing new is to be seen) does it once,
@@ -277,10 +279,8 @@
         const zl = app.views && app.views.zoom ? app.views.zoom.level : 'cell';
         for (const o of info.offer) if (o.zoom !== zl) buttons.push({ label: r.text(o.label || W.lookCloser), action: 'watch-zoom-' + o.zoom, onClick: () => app.setZoom(o.zoom, 'guide') });
       }
-      // cover: at a step read with Next, nothing below the cell view is needed, so the callout may lie over the
-      // controls to keep off what it points at (the pocket of the protein close-up on a phone, pm9).
       this.guide().show({ key: 'step:' + info.id + ':' + info.stage + ':' + info.line, who, text, extra, point,
-        count: F.fill(W.stepOf, { i: info.index + 1, n: info.count }), buttons, cover: info.stage === 'lines' || info.stage === 'tap' });
+        count: F.fill(W.stepOf, { i: info.index + 1, n: info.count }), buttons });
     }
 
     /** After a watch action: saved, shown, and the cell runs on by itself when the next step waits on it and the student had it running. */
@@ -879,6 +879,7 @@
       const r = this.runner, h = LY.h, R = G.result;
       const prev = r.preview();
       this.dropCharts();
+      LY.hideToast();                   // a run's note ("Sped up …") is over once its result is read
       this.sheet('result', { title: R.title, className: 'lv-sheet lv-full' }, (body) => {
         // A level may say why its goal was missed (1.7: the run always reaches its end).
         const own = typeof this.def.missReason === 'function' && r.monitorResult ? this.def.missReason(r.monitorResult) : null;
@@ -1067,6 +1068,7 @@
     complete() {
       const r = this.runner, h = LY.h, app = this.app, K = G.complete, res = r.result;
       if (!this.completed) { this.completed = true; app.levelCompleted(r); }
+      LY.hideToast();
       this.sheet('complete', { title: this.title(), className: 'lv-sheet lv-full lv-complete' }, (body) => {
         // The Prologue has no task card, so no Expert objectives (and nothing to count).
         const lines = scoreLines(res, ((this.def.text.task || {}).expert || []).length);

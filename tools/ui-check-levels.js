@@ -124,7 +124,7 @@ async function run(browser, port, OUT, check) {
     await shot('story');
     while ((await L(page, 'phase')) === 'intro') await tap('.lv-next');
     // The watch: one copy outlined and followed in the HUD; the gene off, the transporters since then counted.
-    let readInto = '', sinceOff = '', zoom = '', gate = null, twoVoices = null;
+    let readInto = '', sinceOff = '', zoom = '', gate = null, twoVoices = null, capClear = null;
     for (let g = 0; g < 80 && (await L(page, 'phase')) === 'watch'; g++) {
       const w = await R(page, 'window.__btc.app.test.level.watch.info()');
       if (!w || w.done) break;
@@ -135,7 +135,7 @@ async function run(browser, port, OUT, check) {
       if (w.id === 'w1b') {
         readInto = await hudGoal(); zoom = await R(page, 'window.__btc.app.views.zoom.get()');
         // PB1: the watched copy is gone and at least ten copies have been broken down; the cause gives their average.
-        gate = await R(page, "(() => { const g = window.__btc.cell.observe().geneById.lacY; return { gone: g.mRNAMade - g.mRNA, cause: document.querySelector('.guide').textContent }; })()");
+        gate = await R(page, "(() => { const g = window.__btc.cell.observe().geneById.lacY, e = document.querySelector('.hud-goal-text'); return { gone: g.mRNAMade - g.mRNA, cause: document.querySelector('.guide').textContent, hud: e.textContent, hudCut: e.scrollWidth > e.clientWidth + 0.5 }; })()");
         await shot('w1b');
       }
       // PM2: one voice at a time: the narrator bar is hidden while a guide callout shows.
@@ -143,12 +143,22 @@ async function run(browser, port, OUT, check) {
         twoVoices = await R(page, "(() => { const g = document.querySelector('.guide'), n = document.getElementById('narrator'); return !!g && !g.hidden && !!n && getComputedStyle(n).visibility !== 'hidden'; })()");
       }
       if (w.id === 'w2b') { sinceOff = await hudGoal(); await shot('w2b'); }
+      // The gone copy's caption in the Gene close-up stays clear of the gene's own label (drawn at dnaY + 14 or + 26).
+      if (w.id === 'w3' && capClear === null) {
+        capClear = await R(page, "(() => { const z = window.__btc.app.views.zoom, p = z.gplan, e = document.querySelector('.zoom-caption'), cv = document.getElementById('closeup-canvas');"
+          + " if (!e || e.hidden || !cv || z.get() !== 'gene') return { shown: false }; const c = e.getBoundingClientRect(), top = cv.getBoundingClientRect().top, y = top + p.dnaY + (p.dosage === 2 ? 26 : 14);"
+          + " return { shown: true, text: e.textContent, clear: c.bottom <= y - 7 || c.top >= y + 7, cap: [Math.round(c.top), Math.round(c.bottom)], label: Math.round(y) }; })()");
+        await shot('w3');
+      }
       await tap('[data-action="watch-next"]');
     }
     check('LV-4 ' + s.tag + ' watch in the Gene close-up: the HUD follows the outlined copy, then counts the transporters since the switch-off',
-      zoom === 'gene' && /[Rr]ead into \d+/.test(readInto) && /since/.test(sinceOff), JSON.stringify({ zoom, readInto, sinceOff }));
-    check('LV-4 ' + s.tag + ' PB1: the watched copy\'s step waits for at least ten copies broken down, and its cause gives their average',
-      !!gate && gate.gone >= 10 && /gave \d+ each on average/.test(gate.cause), JSON.stringify(gate));
+      zoom === 'gene' && /^This copy: \d+ transporters?/.test(readInto) && /since/.test(sinceOff), JSON.stringify({ zoom, readInto, sinceOff }));
+    check('LV-4 ' + s.tag + ' PB1: the watched copy\'s step waits for at least ten copies broken down, and its cause gives their average (once: the guess feedback repeats no number)',
+      !!gate && gate.gone >= 10 && /gave \d+ each on average/.test(gate.cause) && (gate.cause.match(/on average/g) || []).length === 1 && !/This one gave/.test(gate.cause), JSON.stringify(gate));
+    check('LV-4 ' + s.tag + ' W1b: the top bar says "This copy: n transporters" in plain words, whole', !!gate && /^This copy: \d+ transporters?(, broken down)?$/.test(gate.hud) && !gate.hudCut, JSON.stringify(gate && { hud: gate.hud, cut: gate.hudCut }));
+    check('LV-4 ' + s.tag + ' W3: the gone copy\'s caption "this copy: n transporters, then broken down" clears the gene label',
+      !!capClear && capClear.shown && capClear.clear && /^this copy: \d+ transporters?, then broken down$/.test(capClear.text), JSON.stringify(capClear));
     check('LV-4 ' + s.tag + ' PM2: the narrator bar is hidden while a guide callout shows', twoVoices === false, String(twoVoices));
     // The task: the two machine cards, the goal and "Start".
     const task = await R(page, "{ phase: window.__btc.app.test.level.phase(), cards: document.querySelectorAll('.lv-cards > *').length, text: document.querySelector('.sheet-body').textContent }");
@@ -209,9 +219,20 @@ async function run(browser, port, OUT, check) {
     await paint(page);
     const end = await hudGoal();
     await shot('run-end');
+    // A note left from the run ("Sped up …") goes when the result opens; a toast never covers a sheet's main button.
+    await page.evaluate(() => window.__btc.BTC.layout.toast('Sped up to 1 s = 1 min: enough transporters are on the way.'));
     await tap('.hud-goal');
     const result = await R(page, "document.querySelector('.sheet-body').textContent");
     await shot('result');
+    const toastOk = await page.evaluate(() => {
+      const LY = window.__btc.BTC.layout, t = document.getElementById('toast'), cleared = t.hidden;
+      LY.toast('A note while the result is open.');
+      const a = t.getBoundingClientRect(), c = document.querySelector('.sheet [data-action="result-continue"]').getBoundingClientRect();
+      const over = a.left < c.right && a.right > c.left && a.top < c.bottom && a.bottom > c.top;
+      LY.hideToast();
+      return { cleared, over };
+    });
+    check('LV-4 ' + s.tag + ' the result clears the run\'s toast, and a toast never covers the sheet\'s Continue', toastOk.cleared && !toastOk.over, JSON.stringify(toastOk));
     check('LV-4 ' + s.tag + ' result: goal met, growth on milk sugar against glucose, the copies in plain words (no "par")', /Goal met/.test(end)
       && /On milk sugar the cell grew at \d+% of its speed on glucose/.test(result) && /Copies made/.test(result) && /just enough|more than needed/.test(result) && !/\bpar\b/i.test(result),
       end + ' / ' + result.slice(0, 200));

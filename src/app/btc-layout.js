@@ -111,6 +111,7 @@
       document.removeEventListener('keydown', onKey, true);
       backdrop.remove();
       openSheetState = null;
+      document.body.removeAttribute('data-sheet');
       if (opts.onClose) opts.onClose();
       if (opener && opener.focus && document.contains(opener)) opener.focus();
     }
@@ -129,6 +130,8 @@
     document.addEventListener('keydown', onKey, true);
     opts.build(body, close);
     root.appendChild(backdrop);
+    // While a sheet is open a toast goes to the top of the screen, never over the sheet's buttons (index.html).
+    document.body.setAttribute('data-sheet', '');
     const first = closeBtn || focusables(sheet)[0];
     if (first) first.focus({ preventScroll: true });
     openSheetState = { close, body, sheet, backdrop, title: titleEl, key: opts.key || null };

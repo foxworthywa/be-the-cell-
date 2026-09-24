@@ -63,6 +63,7 @@ function watchPath(def, acc) {
   for (const st of def.watch.steps) {
     for (const l of st.lines) acc.put(st.id, l.text, l.who);
     if (st.wait) acc.put(st.id, st.wait);                    // the line shown while the step waits for the cell
+    if (st.cellNote) acc.put(st.id, st.cellNote);            // said after the line in the whole-cell view
     if (st.guess) acc.guess(st.id, st.guess);
     for (const t of acc.later[st.id] || []) acc.put(st.id, t);
     if (st.cause) acc.put(st.id, st.cause);

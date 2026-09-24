@@ -108,7 +108,7 @@
       h8: [{ who: 'narrator', text: 'Ribosomes are reading it, each building one transporter chain.' }],
       h9: [{ who: 'narrator', text: 'The first transporters are finished. Their count is here.' }],
       h10: [{ who: 'narrator', text: 'They sit across the membrane. A hollow mark means only a few so far.' }],
-      h11: [{ who: 'narrator', text: 'Glucose now comes in through them. In the whole-cell view, each moving mark stands for {N} glucose.' }],
+      h11: [{ who: 'narrator', text: 'Glucose now comes in through them.' }],
       h12: [{ who: 'narrator', text: 'With glucose coming in, energy is back to normal. Growth picks up over the next half hour.' }],
       h13: [
         { who: 'commander', text: 'It did exactly what I told it.' },
@@ -128,6 +128,8 @@
     offNote: 'The gene is off, so no new copies are started. Switch it on to carry on.',
     // While a step waits on the model, what is happening (no silent wait, PM4).
     wait: { h11: 'More transporters are being built. Glucose comes in faster as their number grows.' },
+    // Said after H11's line only while the whole-cell view shows (in the protein close-up there are no such marks, pm9).
+    cellNote: { h11: 'Each moving mark stands for {N} glucose.' },
     look: { gene: 'Look closer', protein: 'Look at one transporter' },
     // Q7's machine cards (§4.3): what each does first, then its name. ATP is not named before S3, so these are not the lab's job lines.
     cardsQ7: {
@@ -176,7 +178,7 @@
       cause: TEXT.causes.h9, notes: offNotes },
     // From H10 the wait for glucose is long (about 20 game-min): the cell goes to 1 s = 1 min by itself, and says so (PM4).
     { id: 'h10', until: { test: 'inPlace', pause: true }, lines: TEXT.steps.h10, point: 'glyph:membrane:ptsG', gate: { kind: 'tap' }, notes: offNotes, speed: 60 },
-    { id: 'h11', until: { test: 'workOver', x: 1, pause: true }, lines: TEXT.steps.h11, point: 'marker:glucose', gate: { kind: 'tap' }, cause: TEXT.causes.h11,
+    { id: 'h11', until: { test: 'workOver', x: 1, pause: true }, lines: TEXT.steps.h11, cellNote: TEXT.cellNote.h11, point: 'marker:glucose', gate: { kind: 'tap' }, cause: TEXT.causes.h11,
       wait: TEXT.wait.h11, notes: offNotes, offer: [{ label: TEXT.look.protein, zoom: 'protein' }], offerSpeed: 60 },
     { id: 'h12', until: { test: 'energyNormal', pause: true }, lines: TEXT.steps.h12, point: 'gauge:energy', gate: { kind: 'tap' }, notes: offNotes, offerSpeed: 60 },
     { id: 'h13', lines: TEXT.steps.h13, gate: { kind: 'tap' } },

@@ -42,7 +42,9 @@ async function run(browser, port, OUT, check) {
     await tap('.level-row[data-level="P"]');
     const rungs = [], bars = [];
     let backOk = null, ringOk = null, railOk = null, fill = null, decode = null, table = null, skips = 0;
-    const sees = [];
+    const sees = [], arts = [];
+    // Its layout height (a rung's zoom-in animation scales it for 300 ms), once the sheet has settled.
+    const artH = async () => { await page.waitForTimeout(150); await paint(page); return R(page, "(() => { const a = document.querySelector('.pl-art'); return a ? a.offsetHeight : 0; })()"); };
     for (let guard = 0; guard < 160; guard++) {
       if ((await phase(page)) !== 'scenes') break;
       const i = await info(page);
@@ -78,6 +80,11 @@ async function run(browser, port, OUT, check) {
         railOk = await page.evaluate(() => document.querySelectorAll('.pl-rail-row').length);
         if (full) await shot('rail-sheet');
         await page.keyboard.press('Escape'); await paint(page);
+      }
+      // The drawing a question depends on stays readable over a tall sheet (at least 150 px; the sheet scrolls instead).
+      if (touch && ((i.guess && !i.guess.seen) || (i.activity && i.activity.open && !i.activity.done && (i.activity.kind === 'copy' || i.activity.kind === 'read')))) {
+        const k = i.scene.id + (i.guess && !i.guess.seen ? '-guess' : '-act');
+        if (!arts.some((x) => x.startsWith(k + ':'))) arts.push(k + ':' + await artH());
       }
       if (i.guess && !i.guess.seen) {
         const n = await page.locator('.lv-option').count();
@@ -151,6 +158,8 @@ async function run(browser, port, OUT, check) {
     check('BO-1 ' + s.tag + ' PB3: "See what happens" goes on at once to the scene that shows it (D1 to D2, F4 to F5)',
       sees.length === 2 && sees.every((x) => /:ok$/.test(x)), sees.join(' '));
     check('BO-1 ' + s.tag + ' PM6: no Skip on a first play of part 1', skips === 0, String(skips));
+    if (touch) check('BO-1 ' + s.tag + ' the drawing over a guess or activity sheet keeps at least 150 px (D1, F4, C4, E3)',
+      arts.length >= 4 && arts.every((x) => Number(x.split(':')[1]) >= 150), arts.join(' '));
     check(tag + ' part 1 ends on its completion screen: an unscored code, "What is simplified", "Next: Prologue 2"; the result is stored',
       done.phase === 'complete' && /^BTC2-P0-/.test(done.code || '') && /Prologue 2/.test(done.next) && done.simplified && done.stored === 1, JSON.stringify(done));
     finish(s, 'BO-1', probs);
@@ -168,7 +177,7 @@ async function run(browser, port, OUT, check) {
     }
     // The watch: each step's callout; a waiting step runs on the real loop (1 s = 10 s) and stops at its gate.
     const stops = [], pointed = [];
-    let h10 = null, h11 = null;
+    let h10 = null, h11 = null, h11p = null;
     const toasts = [];
     for (let guard = 0; guard < 120; guard++) {
       if ((await phase(page)) !== 'watch') break;
@@ -215,6 +224,17 @@ async function run(browser, port, OUT, check) {
         }, w.point));
       }
       if (['h2', 'h4', 'h9', 'h11', 'h14'].includes(w.id)) await shot(w.id);
+      // In the protein close-up H11's callout covers neither the pocket (its ring) nor the counters below the view.
+      if (w.id === 'h11' && !h11p) {
+        await page.evaluate(() => window.__btc.app.views.zoom.set('protein', 'segment'));
+        await page.waitForTimeout(400); await paint(page);
+        h11p = await R(page, "(() => { const b = document.querySelector('.guide').getBoundingClientRect(), r = document.querySelector('.guide-ring'), c = document.querySelector('.tb-counters').getBoundingClientRect();"
+          + " const q = r && !r.hidden ? r.getBoundingClientRect() : null, hit = (x) => !!x && b.left < x.right && b.right > x.left && b.top < x.bottom && b.bottom > x.top;"
+          + " return { ring: !!q, overRing: hit(q), overCounters: hit(c), box: [Math.round(b.top), Math.round(b.bottom)], text: document.querySelector('.guide .gd-line').textContent }; })()");
+        await shot('h11-protein');
+        await page.evaluate(() => window.__btc.app.views.zoom.set('cell', 'segment'));
+        await paint(page);
+      }
       await tap('[data-action="watch-next"]');
     }
     await page.waitForTimeout(300);
@@ -224,6 +244,8 @@ async function run(browser, port, OUT, check) {
     check('BO-4 ' + s.tag + ' part 2: on the real loop at 1 s = 10 s, the cell stops by itself at the tick of each gate (H4, H7)', stops.length === 2 && stops.every((x) => /:true$/.test(x)), stops.join(' '));
     check('BO-4 ' + s.tag + ' part 2: the pointer\'s ring is on the element (or the cell) each step is about', pointed.length >= 8 && pointed.every((x) => /:ok$/.test(x)), pointed.join(' '));
     check('BO-4 ' + s.tag + ' part 2: the switch answers the tap with no toast', toasts.length === 0, toasts.join(' | '));
+    check('BO-4 ' + s.tag + ' H11 in the protein close-up: the callout covers neither the pocket nor the counters, and says nothing of the whole-cell view\'s marks',
+      !!h11p && h11p.ring && !h11p.overRing && !h11p.overCounters && !/moving mark/.test(h11p.text), JSON.stringify(h11p));
     check('BO-4 ' + s.tag + ' PM4: at H10 the watch speeds up to 1 s = 1 min and says so; H11 waits with its own line',
       !!h10 && h10.speed === 60 && /Sped up: 1 s = 1 min/.test(h10.text) && !!h11 && h11.speed === 60 && /More transporters are being built/.test(h11.text), JSON.stringify({ h10, h11 }).slice(0, 400));
     check('BO-4 ' + s.tag + ' part 2 ends on its completion screen: an unscored code, "Next: level 1.1"', done.phase === 'complete' && /^BTC2-P2-/.test(done.code || '') && /1\.1/.test(done.next), JSON.stringify(done));

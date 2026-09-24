@@ -2305,8 +2305,8 @@ framework, or the levels as this file describes them:
 - **A readout's introducing callout pauses a run** until its Next, then the run goes on (an
   introduction at 1 s = 1 min used to let a minute pass per second under it).
 - **One voice at a time:** the narrator bar is hidden while a guide callout shows. The callout keeps
-  off what it points at (below or above its ring; a line read with Next, `cover`, may lie over the
-  controls below the cell view).
+  off what it points at (below or above its ring, inside the cell view; never over the counters below
+  it), and a step's `cellNote` is said only while the whole-cell view shows.
 - **Narrator in levels:** the lab's "The mRNA for … is gone; the protein remains and is shared out at
   each division." is not said in a level (its phase is dropped; the cell's growth is read instead).
 - **Skip** ("Skip to the next activity", "Skip story") only for a student who has finished that level
@@ -2327,6 +2327,14 @@ framework, or the levels as this file describes them:
 - **Checks:** LV-4 (PB1 gate, PM2 narrator, PB2 counter not cut, the auto speed-up, no "par" in the
   result), LV-6 (no "par"), BO-1 (PB3, PM6), BO-4 (PM4, no toast on the switch); ST-2 scans wait and
   done lines, the run's notes and result words.
+- **Follow-up from the screenshots:** while a sheet is open a toast sits at the top of the screen, never
+  over the sheet's buttons, and the result and completion sheets clear any toast left from the run. Over
+  a Prologue drawing a tall sheet leaves the drawing about 180 px and scrolls instead (D1, F4, C4, E3).
+  1.2's watch names the copy plainly ("This copy: 37 transporters"; the close-up's "this copy: 26
+  transporters, then broken down" clear of the gene label), g1's feedback no longer repeats the cause's
+  numbers, and the watch HUD has no copies chip. A step's `cellNote` is said only in the whole-cell view,
+  so P2's H11 callout fits between the protein close-up's pocket and the counters. Checked by LV-4
+  (toast, W1b top bar, W3 caption), BO-1 (the drawing ≥ 150 px) and BO-4 (H11 in the close-up).
 
 
 ---

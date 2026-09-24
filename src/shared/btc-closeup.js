@@ -71,8 +71,10 @@
       inline: Object.freeze({ mRNA: 'mRNA copy', ribosome: 'ribosome', chain: 'new chain', rnap: 'RNA polymerase', promoter: 'copying starts here (promoter)' }),
       moreCopies: '+{n} more copies with {r} ribosomes',
       moreCopy: '+1 more copy with {r} ribosomes',
-      watched: 'this copy: read into {n}',
-      watchedGone: 'this copy: read into {n}, then broken down',
+      // {proteins}: the protein's one-word noun, or "chains" for a machine of several chains (the chains started on it).
+      watched: 'this copy: {n} {proteins}',
+      watchedGone: 'this copy: {n} {proteins}, then broken down',
+      chain: 'chain', chains: 'chains',
       scale: '{nm} nm',
       shorter: 'mRNA drawn folded and shorter',
       legend: '1 strand = 1 mRNA · 1 ribosome drawn = {R}',

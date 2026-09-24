@@ -429,6 +429,8 @@ body[data-layout="compact"] .sheet { width: 100%; border-radius: 16px 16px 0 0; 
 body[data-layout="compact"] .toast { bottom: calc(64px + var(--safe-b)); }
 /* Home and the Prologue's drawings keep their buttons and sheets at the bottom: a toast goes to the top there. */
 body[data-surface="home"] .toast, body[data-surface="prologue"] .toast { top: calc(12px + var(--safe-t)); bottom: auto; }
+/* An open sheet keeps its main button at its bottom (a phone) or its foot (a laptop): a toast goes to the top then. */
+body[data-sheet] .toast { top: calc(12px + var(--safe-t)); bottom: auto; }
 .toast-action { min-height: 44px; white-space: nowrap; flex: none; background: transparent; color: inherit; border-color: currentColor; }
 .banner {
   position: fixed; z-index: 30; top: calc(8px + var(--safe-t)); left: 8px; right: 8px; margin: 0 auto; max-width: 560px;
@@ -685,6 +687,9 @@ body:not([data-layout="compact"]) .sheet-backdrop.lv-dim { align-items: flex-end
 .lv-story { box-shadow: 0 -4px 24px rgba(0, 0, 0, .18); }
 body[data-layout="compact"] .lv-story { max-height: 50vh; max-height: 50dvh; }
 body[data-layout="compact"] .lv-story.lv-tall { max-height: 86vh; max-height: 86dvh; }
+/* Over a Prologue drawing the question depends on (D1's copy by the pore, the letters to fill, the codon read), a tall
+   sheet leaves the drawing about 180 px (the bar is 53 px): the sheet scrolls instead, its fade saying there is more. */
+body[data-surface="prologue"][data-layout="compact"] .lv-story.lv-tall { max-height: min(86vh, calc(100vh - 250px)); max-height: min(86dvh, calc(100dvh - 250px)); }
 .lv-full { max-height: 90vh; max-height: 90dvh; }
 body[data-layout="compact"] .lv-full { height: calc(100vh - 12px - var(--safe-t)); height: calc(100dvh - 12px - var(--safe-t)); max-height: none; }
 .lv-sheet .sheet-body { flex: 1 1 auto; gap: 10px; }

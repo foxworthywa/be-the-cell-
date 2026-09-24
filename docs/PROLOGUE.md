@@ -625,9 +625,10 @@ narrator, and the guide's pointer. Speed 1 s = 10 s at the start; the guide offe
 speed with nothing new on screen. A step's `wait` line is shown while it waits (in place of "Watching the
 cell…" alone), and a step with `speed` moves the cell to that speed once (at once, or when its test turns
 true) and says so in the callout: "Sped up: 1 s = 1 min." The callout keeps off what it points at: it goes
-below or above the ring when its place would cover it, and a line read with Next may lie over the controls
-below the cell view to do so (the pocket of the protein close-up on a phone). While a callout shows, the
-narrator bar under the cell is hidden (one voice at a time, PM2).
+below or above the ring, inside the cell view, when its place would cover it (the pocket of the protein
+close-up on a phone); it never covers the counters and the switch below the cell view. A step's `cellNote`
+is said after its line only while the whole-cell view shows (H11's moving marks). While a callout shows,
+the narrator bar under the cell is hidden (one voice at a time, PM2).
 
 **State tests** (pure functions of `cell.observe()` and the step monitor, evaluated after every
 tick by a monitor attached like a level's; when one turns true the loop stops after that tick and
@@ -660,7 +661,7 @@ the pointer appears; the same run replayed stops at the same tick):
 | H8 | ribosome glyphs on it | "Ribosomes are reading it, each building one transporter chain." | – | state `firstRibosome` → tap; offer "Look closer" (Gene) | – |
 | H9 | the transporter counter | "The first transporters are finished. Their count is here." | – | state `firstProtein` → tap | "Ribosomes built them from the copies." |
 | H10 | a membrane glyph | "They sit across the membrane. A hollow mark means only a few so far." | – | state `inPlace` → tap; the cell moves to 1 s = 1 min ("Sped up: 1 s = 1 min.") | – |
-| H11 | glucose markers | "Glucose now comes in through them. In the whole-cell view, each moving mark stands for {N} glucose." (while it waits: "More transporters are being built. Glucose comes in faster as their number grows.") | – | state `workOver(1)` → tap; offer "Look at one transporter" (Protein) | "Glucose came in only once transporters sat in the membrane." |
+| H11 | glucose markers | "Glucose now comes in through them." and, while the whole-cell view shows (`cellNote`), "Each moving mark stands for {N} glucose." (while it waits: "More transporters are being built. Glucose comes in faster as their number grows.") | – | state `workOver(1)` → tap; offer "Look at one transporter" (Protein) | "Glucose came in only once transporters sat in the membrane." |
 | H12 | energy word | "With glucose coming in, energy is back to normal. Growth picks up over the next half hour." | – | state `energyNormal` → tap | – |
 | H13–H14 | – | the closing story lines of §2.8.2 (the Commander's "It did exactly what I told it.", the narrator's cause, and the set-up for 1.1) | – | tap per line | – |
 
@@ -1003,7 +1004,7 @@ spread of chain progress. The key says "The model shares ribosomes evenly among 
 │ outside                               │
 │ ═▮═══▮▮════▮═════▮══════▮═══ +2,134 more │ membrane with finished transporters
 │   ╲│   ╲│╱    chains going into the membrane│
-│  ⬭─⬭──⬭──⬭~~~~~~~~~~  this copy: read into 7│ the watched copy (outlined)
+│  ⬭─⬭──⬭──⬭~~~~~  this copy: 7 transporters│ the watched copy (outlined)
 │  ⬭──⬭─⬭~~~~~~~~~~                          │
 │  ⬭~~~~~~ ⬭─⬭~~~~                            │
 │  ~~~~~⬭~~~~ ⸗ (broken copy fading)          │
@@ -1093,7 +1094,8 @@ in two columns of lanes, the DNA along the bottom.
 ### 3.5 The watched mRNA
 
 A level step, or a tap on a strand in the Gene zoom ("Watch this copy", 44 px), marks one mRNA
-molecule as **watched**. Its strand is outlined and labelled "this copy: read into {n}".
+molecule as **watched**. Its strand is outlined and labelled "this copy: {n} transporters" (the protein's
+one-word noun, singular for 1; "chains" for a machine of several chains).
 
 `BTC.MRNAWatch` (`src/shared/btc-mrnawatch.js`, pure, attached per tick like the Recorder, so the
 count is exact whatever the frame rate, and replays identically):
@@ -1102,7 +1104,7 @@ count is exact whatever the frame rate, and replays identically):
   of the gene's new ribosomes, the model's own even split), pushed at `D0 = ribosomes.odometer_aa`;
 - each tick: entries with `odometer_aa − D0 ≥ L` are finished and added to `made`;
 - after the id vanishes (broken down), entries already started still finish (the model finishes
-  chains on a decayed copy), then the count stops: "this copy: read into {round(made)}, then broken
+  chains on a decayed copy), then the count stops: "this copy: {round(made)} transporters, then broken
   down after {t}".
 It exposes `{id, made, started, alive, lifetime_s}` and `save()` / `restore()` for the level
 autosave. The count is the model's expected share (fractional, shown rounded); the key says "The
@@ -1419,7 +1421,7 @@ and 25, and the words change with it.
 | Step | Lines (exact) | Guess | Act / gate | Cause after the gate (exact) |
 |---|---|---|---|---|
 | W1 | "This is the lactose transporter gene. It is switched off, so nothing is being copied." | **g1** (below) | act: switch lacY on (the student's tap; logged) | – |
-| W1b | "The first copy is outlined. Watch how many transporters ribosomes build from it before it is broken down." (while it waits: "Ribosomes are reading the copies. The count waits until the first ten copies have all been broken down.") | – | state `firstMRNA` sets the watched copy (the first mature lacY mRNA after the switch-on); the counter "this copy: read into {n}" runs; gate `watchedGoneAndTen` (pause): the watched copy **and** the first ten copies made from it on are broken down (PB1: one copy can give 1 or 40). Speed: 1 s = 1 min once the watched copy is gone or has been read for 3 min (`watchedGoneOrOld`) | "This copy gave {nTr} in {t}, then it was broken down. Copies last different times: the first {b} gave {avg} each on average." ({nTr}: "1 transporter", "37 transporters"; {avg}: the mean of those ten copies' own counts, so no survivor bias) |
+| W1b | "The first copy is outlined. Watch how many transporters ribosomes build from it before it is broken down." (while it waits: "Ribosomes are reading the copies. The count waits until the first ten copies have all been broken down.") | – | state `firstMRNA` sets the watched copy (the first mature lacY mRNA after the switch-on); the top bar reads "This copy: {n} transporters" ("…, broken down" once gone; no copies chip beside it, the copies made are counted below the cell) and the close-up labels the copy "this copy: {n} transporters" ("…, then broken down", its DNA moved up to clear the caption); gate `watchedGoneAndTen` (pause): the watched copy **and** the first ten copies made from it on are broken down (PB1: one copy can give 1 or 40). Speed: 1 s = 1 min once the watched copy is gone or has been read for 3 min (`watchedGoneOrOld`) | "This copy gave {nTr} in {t}, then it was broken down. Copies last different times: the first {b} gave {avg} each on average." ({nTr}: "1 transporter", "37 transporters"; {avg}: the mean of those ten copies' own counts, so no survivor bias) |
 | W2 | "Ribosome after ribosome reads each copy until it is broken down." | **g2** (below) | act: switch lacY off | – |
 | W2b | "The gene is off. Count the copies still left." (while it waits: "No new copies are started. The copies left are still read, and are broken down one by one.") | – | counters "copies left {m}" and "transporters made since off: +{a}"; gate `fewCopiesLeft` (pause): a tenth of the copies there were at the switch-off are left (PM5: the very last copy took up to 19 game-min); at 1 s = 1 min | "Switching the gene off stopped new copies from being started. The copies already made were still read: {a} more transporters in {tOff}." |
 | W3 | "So one copy gives about {avg} transporters, and they keep arriving until the last copy is broken down." | – | tap | – |
@@ -1428,10 +1430,12 @@ and 25, and the words change with it.
 
 | Option (exact) | mc | What happened (fb, exact; shown at W1b's gate) |
 |---|---|---|
-| "One." | `OTHER` | "Ribosome after ribosome read each copy. This one gave {nTr}; on average a copy gave {avg}." |
-| "About twenty." (the cause) | – | "Ribosome after ribosome read each copy until it was broken down. This one gave {nTr}; on average a copy gave {avg}." |
-| "Thousands." | `OTHER` | "Each copy lasts only minutes, so it gives tens, not thousands. This one gave {nTr}; on average a copy gave {avg}." |
-| "It is never broken down, so it keeps going." | `MOLECULES_LAST` | "Copies are broken down within minutes. This one lasted {t} and gave {nTr}." |
+| "One." | `OTHER` | "Ribosome after ribosome read each copy." |
+| "About twenty." (the cause) | – | "Ribosome after ribosome read each copy until it was broken down." |
+| "Thousands." | `OTHER` | "Each copy lasts only minutes, so it gives tens, not thousands." |
+| "It is never broken down, so it keeps going." | `MOLECULES_LAST` | "Copies are broken down within minutes." |
+
+(No numbers in this feedback: it is shown with W1b's cause, which already gives this copy's count and the average.)
 
 **Guess g2:** "What will happen if you switch the gene off now?"
 

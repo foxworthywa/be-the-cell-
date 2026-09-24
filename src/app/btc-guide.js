@@ -7,8 +7,7 @@
  * view, or over the open panel when the cell is on another tab (the simple graph's introduction), at the
  * top or, when the ring is up there, at the bottom; the ring lets taps through.
  *
- *   guide.show({key, who, text, extra: [{text, kind}], point, count, buttons: [{label, action, primary, onClick}], cover})
- *     (cover: nothing below the cell view is needed now, so the callout may lie over it to keep off its ring)
+ *   guide.show({key, who, text, extra: [{text, kind}], point, count, buttons: [{label, action, primary, onClick}]})
  *   guide.hide(); guide.place()            (after a layout change; the app calls it on its slow tick)
  *
  * Where it points: a readout or `point` id (BTC.tiers.TARGETS), 'tab:<name>', a CSS selector, or a
@@ -178,13 +177,14 @@
       }
       // Never over what it points at: when that place covers the ring, the line goes just below the ring (or just
       // above it) inside the area, when it fits there (the protein close-up on a phone, its pocket mid-picture).
+      // It never leaves the area for the counters and the switch below it; when it fits neither side, it sits as low
+      // in the area as it can, over as little of the ring as it can.
       if (t && !this.ring.hidden && !this.box.hidden) {
         const b = this.box.getBoundingClientRect(), rr = this.ring.getBoundingClientRect(), H = b.height;
         if (b.left < rr.right && b.right > rr.left && b.top < rr.bottom && b.bottom > rr.top) {
           if (rr.bottom + 8 + H <= area.bottom - 4) { this.box.style.bottom = ''; this.box.style.top = Math.round(rr.bottom + 8) + 'px'; }
           else if (rr.top - 8 - H >= area.top + (overCell ? 52 : 4)) { this.box.style.top = ''; this.box.style.bottom = Math.round(window.innerHeight - rr.top + 8) + 'px'; }
-          // A line read with Next (cover) may lie over the controls below the cell view instead.
-          else if (this.cur.cover && rr.bottom + 8 + H <= window.innerHeight - 8) { this.box.style.bottom = ''; this.box.style.top = Math.round(rr.bottom + 8) + 'px'; }
+          else if (rr.top < area.top + area.height / 2) { this.box.style.top = ''; this.box.style.bottom = Math.round(window.innerHeight - area.bottom + 4) + 'px'; }
         }
       }
       this.box.classList.toggle('is-low', low);

@@ -327,17 +327,27 @@
       const app = this.app, cell = app.cell, v = cell.observe(), f = app.focusIndex(), gv = v.genes[f];
       const b = this.built, epoch = v.clock.generation;
       const wid = this.watch && this.watch.alive && this.watch.gene === gv.id ? this.watch.id : -1;
-      if (b.tick === v.tick && b.focus === f && b.w === this.cw && b.h === this.ch && b.epoch === epoch && b.level === 'gene' && b.watched === wid) return false;
+      // The caption "this copy: n …, then broken down" sits at the bottom (two lines on a phone): the DNA and its label
+      // move up to clear it.
+      const cap = !!(this.watch && this.watch.gene === gv.id && this.watch.watching && !this.watch.alive);
+      if (b.tick === v.tick && b.focus === f && b.w === this.cw && b.h === this.ch && b.epoch === epoch && b.level === 'gene' && b.watched === wid && b.cap === cap) return false;
       cell.detail(gv.id, this.detailOut);
       const wide = this.cw >= 640;
-      this.CU.planGene(v, this.detailOut, { w: this.cw, h: this.ch, top: 52, bottom: 52 },
+      this.CU.planGene(v, this.detailOut, { w: this.cw, h: this.ch, top: 52, bottom: cap ? 102 : 52 },
         { focus: f, maxCopies: wide ? 12 : 6, watchedId: wid, epoch }, this.gplan);
       // A copy broken down breaks up where it was (a process marker); not after a jump of many ticks (run to the end, tests).
       if (b.tick >= 0 && v.tick - b.tick <= 5 && app.isRunning()) this.geneView.spawnGone(this.gplan);
-      b.tick = v.tick; b.focus = f; b.w = this.cw; b.h = this.ch; b.epoch = epoch; b.level = 'gene'; b.watched = wid;
+      b.tick = v.tick; b.focus = f; b.w = this.cw; b.h = this.ch; b.epoch = epoch; b.level = 'gene'; b.watched = wid; b.cap = cap;
       return true;
     }
 
+    /** What the watched copy was read into, in one word: "transporters" ("1 transporter"), or "chains" for LacZ's four. */
+    copyNoun(id, n) {
+      const T = this.CU.TEXT.gene, M = this.CU.machineOf(id), TI = this.app.BTC.tiers, m = this.app.geneModel;
+      if (M && M.chains > 1) return n === 1 ? T.chain : T.chains;
+      const w = TI && m && m.named(id) ? TI.proteinsWord(m, id, false, true) : 'proteins';
+      return n === 1 ? w.replace(/s$/, '') : w;
+    }
     /** A cheap change test for the words on screen: numbers only, no allocation (kBegin, kPut…, then this.kDiff). */
     kBegin() { this.kIdx = 0; this.kDiff = this.kModel !== this.app.geneModel || this.kLevel !== this.level; this.kModel = this.app.geneModel; this.kLevel = this.level; }
     kPut(x) { const i = this.kIdx++; if (this.kArr[i] !== x) { this.kArr[i] = x; this.kDiff = true; } }
@@ -361,7 +371,7 @@
         go.geneLabel = words.symbol ? words.name + ' gene · ' + words.symbol : words.name;
         go.showPromoterLabel = true; go.shape = PAL.shape[id] || 'circle'; go.repColor = this.colorTok('lacI');
         go.moreText = plan.protMore > 0 ? F.fill(plan.membraneGene ? T.moreMembrane : T.more, { n: F.count(plan.protMore) }) : '';
-        go.watched = wl && wl.alive ? { lane: plan.watchedLane, text: F.fill(T.watched, { n: F.count(made) }) } : null;
+        go.watched = wl && wl.alive ? { lane: plan.watchedLane, text: F.fill(T.watched, { n: F.count(made), proteins: this.copyNoun(id, made) }) } : null;
         // A transcription unit with several genes (lacZ lacY lacA): each gene's stretch of the DNA in its colour.
         const tu = v.tus && v.tus.find((u) => u.cistrons.indexOf(id) >= 0 && u.cistrons.length > 1);
         go.unitColors = tu ? tu.cistrons.map((cid) => {
@@ -374,7 +384,7 @@
             : plan.m === 0 ? (plan.R >= 0.5 ? F.fill(T.summaryFinishing, { r: F.count(plan.R) }) : T.summaryNone)
             : F.fill(plan.m === 1 ? T.summaryOne : T.summary, { r: F.count(plan.R), m: F.count(plan.m) });
         // The copies not drawn (and their ribosomes) are in the summary, the canvas label and the key.
-        const cap = wl && !wl.alive ? F.fill(T.watchedGone, { n: F.count(made) }) : '';
+        const cap = wl && !wl.alive ? F.fill(T.watchedGone, { n: F.count(made), proteins: this.copyNoun(id, made) }) : '';
         this.moreLine = plan.moreCopies > 0 ? F.fill(plan.moreCopies === 1 ? T.moreCopy : T.moreCopies, { n: F.count(plan.moreCopies), r: F.count(Math.max(0, plan.moreRib)) }) : '';
         this.overlays(summary, cap, '', F.fill(T.scale, { nm: plan.scaleNm }), plan.scalePx, plan.ribToScale ? T.shorter : T.shorter + ' · ' + T.ribLarger,
           F.fill(T.legend, { R: plan.ribScale }));

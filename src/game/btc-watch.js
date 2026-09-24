@@ -181,6 +181,7 @@
       });
       if (s.cause !== undefined && (typeof s.cause !== 'string' || !s.cause)) fail(p + '.cause', 'one sentence');
       if (s.wait !== undefined && (typeof s.wait !== 'string' || !s.wait)) fail(p + '.wait', 'one sentence shown while the step waits');
+      if (s.cellNote !== undefined && (typeof s.cellNote !== 'string' || !s.cellNote)) fail(p + '.cellNote', 'one sentence said only in the whole-cell view');
       if (s.speed !== undefined) {
         if (typeof s.speed === 'object' && s.speed) { cond(p + '.speed', s.speed); if (!(s.speed.to > 0)) fail(p + '.speed.to', 'a speed'); }
         else if (!(typeof s.speed === 'number' && s.speed > 0)) fail(p + '.speed', 'a speed (sim s per real s), or {to, test}');

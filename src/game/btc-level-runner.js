@@ -1216,6 +1216,8 @@
         // While the step waits on the model: a line saying what is happening (no guided step sits silent, PM4); and a
         // speed the step moves the cell to (with a note saying so) when the wait would be long at the default speed.
         wait: s.wait ? fill(s.wait) : null, speed: null,
+        // A sentence about the whole-cell view (its marks), added to the line only while that view shows.
+        cellNote: s.cellNote ? fill(s.cellNote) : null,
         // Readouts this step's own line explains (P2's H2, H4, H9): the tiered screen does not introduce them again.
         introduces: s.introduces ? s.introduces.slice() : null,
       };

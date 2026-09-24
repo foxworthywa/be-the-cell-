@@ -122,10 +122,11 @@
     g1: {
       prompt: 'When you switch the gene on, how many transporters will ribosomes build from one mRNA copy before it is broken down?',
       options: [
-        { t: 'One.', mc: 'OTHER', fb: 'Ribosome after ribosome read each copy. This one gave {nTr}; on average a copy gave {avg}.' },
-        { t: 'About {ppmWords}.', cause: true, fb: 'Ribosome after ribosome read each copy until it was broken down. This one gave {nTr}; on average a copy gave {avg}.' },
-        { t: 'Thousands.', mc: 'OTHER', fb: 'Each copy lasts only minutes, so it gives tens, not thousands. This one gave {nTr}; on average a copy gave {avg}.' },
-        { t: 'It is never broken down, so it keeps going.', mc: 'MOLECULES_LAST', fb: 'Copies are broken down within minutes. This one lasted {t} and gave {nTr}.' },
+        // Shown at W1b with its cause, which already gives this copy's count and the average: no numbers again here.
+        { t: 'One.', mc: 'OTHER', fb: 'Ribosome after ribosome read each copy.' },
+        { t: 'About {ppmWords}.', cause: true, fb: 'Ribosome after ribosome read each copy until it was broken down.' },
+        { t: 'Thousands.', mc: 'OTHER', fb: 'Each copy lasts only minutes, so it gives tens, not thousands.' },
+        { t: 'It is never broken down, so it keeps going.', mc: 'MOLECULES_LAST', fb: 'Copies are broken down within minutes.' },
       ],
     },
     g2: {
@@ -174,10 +175,11 @@
       goal: '{count} of {T} lactose transporters', goalShort: 'Transporters {count} of {T}',
       milk: 'Milk sugar here · {count} transporters', milkShort: 'Milk here · {count} transporters',
       timer: 'milk in {time}', timerShort: 'milk in {time}', watchTimer: 'watching {time} more', watchTimerShort: '{time} more',
-      copy: 'This copy: read into {n}', copyGone: 'Read into {n}, then broken down', copyShort: 'Read into {n}',
+      // The watched copy in plain words (the coordinator's review of the screenshots): "This copy: 37 transporters".
+      copy: 'This copy: {nTr}', copyGone: 'This copy: {nTr}, broken down', copyShort: 'This copy: {nTr}',
       sinceOff: '+{a} transporters since the switch-off', sinceOffShort: '+{a} since off',
       watchGoal: 'Watching the lactose transporter gene', watchGoalShort: 'Watching the gene',
-      watchCounter: '{m} copies made', watchCounterShort: '{m} made', clock: 'minute {t}',
+      clock: 'minute {t}',
     },
     graph: { target: 'target {T}', milk: 'milk arrives' },
     // The transporter counter in the Try (PB2): the transporters, and about how many the copies still here will give.
@@ -399,16 +401,15 @@
         let goal = { text: H.watchGoal, short: H.watchGoalShort, progress: null, done: false };
         if (s.step === 'w1b' && s.watching) {
           const n = Math.round(s.n || 0);
-          goal = { text: K.fill(s.alive ? H.copy : H.copyGone, { n }), short: K.fill(H.copyShort, { n }), progress: null, done: false };
+          const nTr = comma(n) + ' ' + (n === 1 ? TEXT.one : TEXT.many);
+          goal = { text: K.fill(s.alive ? H.copy : H.copyGone, { nTr }), short: K.fill(H.copyShort, { nTr }), progress: null, done: false };
         } else if ((s.step === 'w2b' || s.step === 'w2c' || s.step === 'w3') && s.offTick >= 0) {
           const a = comma(s.a || 0);
           goal = { text: K.fill(H.sinceOff, { a }), short: K.fill(H.sinceOffShort, { a }), progress: null, done: false };
         }
         const t = Math.floor((s.tick || 0) / 60);
-        return {
-          goal, timer: { text: K.fill(H.clock, { t }), short: K.fill(H.clock, { t }) },
-          counter: { text: K.fill(H.watchCounter, { m: comma(s.m || 0) }), short: K.fill(H.watchCounterShort, { m: comma(s.m || 0) }) },
-        };
+        // No copies chip: "copies made" is counted just below the cell, and "This copy: 37 transporters" needs the room.
+        return { goal, timer: { text: K.fill(H.clock, { t }), short: K.fill(H.clock, { t }) } };
       }
       const count = Math.floor(s.count + 0.5), Dt = v.D * 60, END = (v.D + MILK_MIN) * 60;
       const milk = s.milk || s.tick > Dt;
