@@ -32,6 +32,26 @@
 
 ## Specific to Be the Cell
 
+### Teach first, in plain words (Alex, after the first play-through)
+
+The game builds understanding; it does not test understanding the student has not had a chance
+to build. So:
+
+- **Plain language wherever possible.** Write for a first-year non-major reading on a phone.
+  Course terms (gene, DNA, mRNA, ribosome, protein, enzyme, transporter, repressor, promoter,
+  ATP) stay, with a plain explanation the first time each appears. Family names, acronyms and
+  dense clauses do not ("Yours are GLUTs and SGLTs, not PtsG's family" became "Your
+  transporters are different proteins that do the same job").
+- **Function before name.** Every protein is introduced by what it does, in context, with a
+  picture of its shape at work, and only then by name. A goal such as "400 LacY in the membrane
+  by minute 14" is rewritten as "Lactose, the sugar in milk, gets in only through a transporter
+  protein in the membrane. Get 400 of them in place within 14 minutes."
+- **Show the process before asking about it.** The opening walks through gene → mRNA → protein
+  at a scale where each step is visible (see docs/PROLOGUE.md) before any level asks the student
+  to reason with it.
+- **Predictions invite a guess; feedback explains the cause.** A wrong prediction is the start
+  of an explanation, never a failed test.
+
 ### The player is the genome
 
 The only lever is which genes are expressed. Everything else in the cell happens because a
