@@ -62,7 +62,9 @@
     const Vcen = p.k_P * cell.sectors[2].mass / p.L_P;
     k.SynCap = Vded > 0 && Vcen > 0 ? Vded * Vcen / (Vded + Vcen) : 0;
     k.ImpCap = roleAmount(cell, 'aa-import') * p.k_imp * sat(env.aminoAcids_mM, p.K_imp);
-    k.YCap = roleAmount(cell, 'lactose-import') * p.k_Y * sat(env.lactose_mM, p.K_Y);
+    // Inducer exclusion (m2-lac option): while glucose flows in, EIIA-Glc blocks part of LacY.
+    k.YRaw = roleAmount(cell, 'lactose-import') * p.k_Y * (cell.lac ? 1 - cell.lac.exclusion : 1);
+    k.YCap = k.YRaw * sat(env.lactose_mM, p.K_Y);
     k.ZMax = roleAmount(cell, 'lactose-split') * p.k_Z;
     k.NA = p.A_tot * p.N_mM * V;
   }
@@ -77,12 +79,15 @@
     const cCapped = p.c_tl + p.c_o + p.c_rRNA * k.fR;  // ATP per aa polymerised, capped group
     const txPerV = p.atpPerNT * p.ntPerAA * txSlow * k.Nnasc;   // mRNA elongation ATP per unit ṽ
     const upkeepV = p.m_V * V;
+    const upB = p.upkeepBasal, KupN = k.KupN, nUp = p.n_up, KelN = k.KelN, nEl = p.n_el;
     const bgTx0 = k.bgTx0;
     const LinMaxN = p.L_max * p.N_mM * V, KZN = p.K_Z * p.N_mM * V;
     const Ksyn = p.chi_C + p.c_syn / p.fermYield;       // carbon + ATP cost of one aa, in hexose
     const s0 = cell.s0, Kpi = p.K_pi, Kaa = p.K_aa;
     const Ki = p.K_i, KiI = p.K_iI;
     const U = k.U, Cgly = k.Cgly, SynCap = k.SynCap, ImpCap = k.ImpCap, YCap = k.YCap, ZMax = k.ZMax;
+    // LacY without energy still lets lactose run downhill (facilitated diffusion), up to the outside level.
+    const YRaw = k.YRaw, KY = p.K_Y, satOut = sat(cell.env.lactose_mM, KY), perMM = p.N_mM * V;
 
     let e = cell.E, AA = cell.AA, Lin = cell.Lin;
     let vInt = 0, sigX = 0;
@@ -92,15 +97,23 @@
 
     for (let s = 0; s < K; s++) {
       const a = AA / V;
-      const vt = p.v_max * (a / (a + Kaa)) / (e + KE);        // running-ribosome speed per unit e
+      const sE = M.hill(e, KelN, nEl);                       // elongation gate: ribosomes pause when energy runs short
+      const sU = M.hill(e, KupN, nUp);                       // upkeep gate: regulated upkeep stops first
+      const vt = p.v_max * (a / (a + Kaa)) * sE / (e + KE);   // running-ribosome speed per unit e
       const Jt = Jfac * vt;                                   // aa/s per unit e
       const Dc = cCapped * Jt + txPerV * vt;
       const aI = a / KiI;
       const It = ImpCap / (1 + aI * aI) / (e + KE);           // import, trans-inhibited by the inside pool
       let room = 1 - Lin / LinMaxN;
       if (room < 0) room = 0;
-      const Yt = YCap * room / (e + KE);
-      const upT = upkeepV / (e + Km);
+      const Yt = YCap * room / (e + KE);                     // energised import (symport), accumulates up to L_max
+      let Yp = 0;                                             // de-energised share: facilitated diffusion down the gradient
+      if (YRaw > 0) {
+        const down = satOut - sat(Lin / perMM, KY);
+        if (down > 0) Yp = YRaw * down * KE / (e + KE);
+      }
+      // Upkeep: a basal share, plus a regulated share that the stringent response cuts when energy runs short.
+      const upT = upkeepV / (e + Km) * (upB + (1 - upB) * sU);
       const bgT = bgTx0 / (e + Kin);
       const Du = upT + bgT + p.c_imp * It + p.c_Y * Yt;
       let Z = Lin > 0 ? ZMax * Lin / (Lin + KZN) : 0;
@@ -115,7 +128,7 @@
       const Syn0 = SynCap / (1 + aK * aK);                    // feedback-inhibited aa synthesis
       let Synt = 0;
       if (u > 0) {
-        Synt = Syn0 * e / ((e + KE) * u);
+        Synt = Syn0 * sU * e / ((e + KE) * u);                 // amino-acid synthesis stops with housekeeping (upkeep gate)
         const carbonCap = Ft / Ksyn;                          // carbon for aa plus its ATP stays ≤ F
         if (Synt > carbonCap) Synt = carbonCap;
       }
@@ -133,7 +146,7 @@
       const JZ = Cin > 0 ? F * Z / Cin : 0;
       const Jglc = Cin > 0 ? F * U / Cin : 0;
       AA += h * (Jsyn + Jimp - J);
-      Lin += h * (JY - JZ);
+      Lin += h * (JY + Yp - JZ);
       vInt += h * vt * mc;
       sigX += h * x / (e + Kin);
       lTl += h * p.c_tl * J;
@@ -144,7 +157,7 @@
       lTr += h * (p.c_imp * Jimp + p.c_Y * JY);
       lFerm += h * p.fermYield * (F - p.chi_C * Jsyn);
       fPoly += h * J; fMade += h * Jsyn; fImp += h * Jimp; fGlc += h * Jglc;
-      fLacIn += h * JY; fLacSplit += h * JZ; fHex += h * F; fFerm += h * (F - p.chi_C * Jsyn);
+      fLacIn += h * (JY + Yp); fLacSplit += h * JZ; fHex += h * F; fFerm += h * (F - p.chi_C * Jsyn);
       // Floor applied after the fluxes so the ledger identity stays exact; the injection is booked.
       if (x < p.E_floor) { lFloor += (p.E_floor - x) * NA; x = p.E_floor; }
       e = x;

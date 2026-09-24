@@ -24,7 +24,7 @@
 })(typeof self !== 'undefined' ? self : this, function (M, GR, CMD, EV) {
   'use strict';
 
-  const FACTS_SCHEMA = '1.2';
+  const FACTS_SCHEMA = '1.3';
   // 1 mmol/gDW/h = 3.21e4 molecules/s per fL of cell (spec §3; display only).
   const MMOL_PER_GDWH = 3.21e4;
   const SECTOR_IDS = ['R', 'Q', 'P'];
@@ -48,6 +48,10 @@
     growth: ['normal', 'slow', 'arrested'],
     justDivided: [true, false],
     limiting: ['translation-blocked', 'transcription-blocked', 'no-carbon', 'energy', 'amino-acids', 'ribosomes'],
+    // Schema 1.3 (v1.1; LEVELS.md R-E16): the regulated lac operon, null in strains without it.
+    lacOperator: ['bound', 'free', 'none', null],
+    inducer: ['none', 'some', null],
+    crp: ['low', 'high', null],
   });
 
   const USELESS_ORDER = ['fliC', 'lacZ', 'lacY', 'aaImp'];
@@ -74,6 +78,8 @@
     if (CMD.isOn(g)) {
       const rifF = 1 - cell.rho, cmF = 1 - cell.theta;
       if (cell.E < 0.05 || (rifF < cmF ? rifF : cmF) < 0.1) return 'stalled';
+      // A regulated operon with every operator copy held by the repressor (v1.1, m2-lac).
+      if (cell.lac && g.leader.index === cell.lac.leader && m + n === 0 && cell.lac.free === 0) return 'repressed';
       const ep = cell.eventState.genes[g.index];
       if (ep.kind === 'on' && ep.firstTxTick === null && n === 0) return 'waiting';
       return m + n > 0 ? 'transcribing' : 'waiting';
@@ -104,6 +110,7 @@
       schema: FACTS_SCHEMA, drug: { rif: 'off', cm: 'off' }, medium: 'glucose', glucoseLevel: 'high', carbon: 'glucose',
       glucoseImport: 'normal', glucoseStep: 'import', energy: 'normal', aa: 'ok', lactoseBlock: null, lastCommandedGene: null,
       uselessGene: null, aaOutside: false, aaImportOn: false, growth: 'normal', justDivided: false, limiting: 'ribosomes',
+      lacOperator: null, inducer: null, crp: null,
       _gene: { id: '', state: '' },       // reused holder behind lastCommandedGene
     };
   }
@@ -159,6 +166,18 @@
     f.growth = st.arrested ? 'arrested' : cell.lambdaEMA < 0.8 * p.lambda_ref ? 'slow' : 'normal';
     f.justDivided = st.lastDivisionTick !== null && cell.tick - st.lastDivisionTick <= JUST_DIVIDED_TICKS;
     f.limiting = limiting(cell);
+    // Schema 1.3: the lac operon. 'bound' when any copy's operator holds the repressor; the
+    // inducer counts as 'some' at or above the level that frees half the operators at the
+    // normal LacI count (lac.inducerHalf_uM); cAMP below half its no-glucose level is 'low'.
+    const lac = cell.lac;
+    if (lac) {
+      let bound = 0;
+      for (let c = 0; c < cell.dosage; c++) bound += lac.op[c];
+      f.lacOperator = !lac.operator ? 'none' : bound > 0 ? 'bound' : 'free';
+      const I = 1000 * (lac.allo / (p.N_mM * V) + env.iptg_mM);
+      f.inducer = I >= lac.inducerHalf_uM ? 'some' : 'none';
+      f.crp = lac.cAMP < 0.5 ? 'low' : 'high';
+    } else { f.lacOperator = null; f.inducer = null; f.crp = null; }
     return f;
   }
 
@@ -177,6 +196,9 @@
         nascent: 0, nascentProgress: new Float64Array(g.nascent.cap), ribosomes: 0, polysome: 0,
         protein: 0, proteinRounded: 0, conc_perFL: 0, proteomeFraction: 0, synthesis_perS: 0,
         madeSinceOn: 0, madeSinceOff: 0, geneState: 'off', functionSeen: false,
+        mRNAMade: 0, proteinMade: 0, initiations: 0,   // cumulative since tick 0 (R-E8; a unit's cistrons share mRNA counts)
+        degraded_perS: 0,                        // protein removed by degradation in the last tick, per s (R-E10)
+        tu: d.tu,                                // transcription unit (lacZ, lacY and lacA share 'tu_lac' in m2-lac)
         episode: { onTick: null, firstMRNATick: null, firstProteinTick: null, offTick: null },
       };
       genes.push(v);
@@ -184,6 +206,16 @@
     }
     const sectors = {};
     for (let s = 0; s < SECTOR_IDS.length; s++) sectors[SECTOR_IDS[s]] = { mRNA: 0, mass: 0, fraction: 0 };
+    // Transcription units: one entry per unit (a one-gene unit is named after its gene). The
+    // mRNA ids are the unit's molecule list itself (valid [0, mRNA)).
+    const tus = [];
+    for (let i = 0; i < nG; i++) {
+      const g = cell.genes[i];
+      if (!g.isLeader) continue;
+      const cistrons = cell.genes.filter((x) => x.leader === g).map((x) => x.id);
+      const order = g.tuSize > 1 ? cell.layout.tus.find((t) => t.leader === i).members.map((m) => cell.genes[m].id) : cistrons;
+      tus.push({ id: g.d.tu, cistrons: Object.freeze(order), mRNA: 0, mRNAIds: g.mature.ids, nascent: 0, leader: g.id });
+    }
     const view = {
       tick: -1, t_s: 0,
       clock: { minutes: 0, generation: 0, cellAge_s: 0, lastCycle_min: 0, doublingEMA_min: 0 },
@@ -192,8 +224,16 @@
       aminoAcids: { count: 0, mM: 0, state: 'ok' },
       lactose: { inside: 0, inside_mM: 0 },
       ribosomes: { total: 0, elongating: 0, running: 0, stalled: 0, free: 0, activeFraction: 0, vRun_aaPerS: 0, vTx_ntPerS: 0, byUnit: new Float64Array(nU), kInitPerMRNA: 0 },
-      genes, geneById,
+      genes, geneById, tus,
       sectors,
+      // The regulated lac operon (m2-lac; null in other strains; LEVELS.md R-E16).
+      lac: cell.lac ? {
+        operatorCopies: 1, operatorBound: 0, lacITetramers: 0, lacIFree: 0, allolactose: 0, allolactose_mM: 0,
+        cAMP: 1, crpFactor: 1,
+        inducer_uM: 0 /* allolactose + IPTG */, iptg_uM: 0, activeLacI: 0 /* tetramers not holding inducer */,
+        promoterActivity: 0 /* per-copy promoter use: crpFactor × (free + leak × bound) */, exclusion: 0,
+        inducerHalf_uM: cell.lac.inducerHalf_uM, design: cell.lac.design,
+      } : null,
       proteome: { byGene: new Float64Array(nG), R: 0, Q: 0, P: 0 },
       flux: {
         glucoseIn: 0, glucoseIn_mmolPerGDWh: 0, lactoseIn: 0, lactoseSplit: 0, hexoseToGlycolysis: 0, hexoseFermented: 0,
@@ -205,7 +245,7 @@
         names: cell.ledger.names, perS: new Float64Array(6), fractions: new Float64Array(6), cumulative: new Float64Array(6),
         supply_perS: 0, floor_perS: 0, cumulativeSupply: 0,
       },
-      env: { glucose_mM: 0, lactose_mM: 0, aminoAcids_mM: 0, oxygen: false },
+      env: { glucose_mM: 0, lactose_mM: 0, aminoAcids_mM: 0, iptg_mM: 0, oxygen: false },
       drugs: { rifampicin: 0, chloramphenicol: 0, theta: 0 },
       scale: { dt_s: cell.p.dt, substeps: cell.p.substeps },
     };
@@ -298,6 +338,11 @@
       v.madeSinceOn = ep.kind === 'on' ? g.pMade - ep.pMadeAtOn : 0;
       v.madeSinceOff = ep.kind === 'off' ? g.pMade - ep.pMadeAtOff : 0;
       v.geneState = geneState(cell, g);
+      v.functionSeen = st.fnSeen[i];
+      v.mRNAMade = g.mMade;
+      v.proteinMade = g.pMade;
+      v.initiations = g.initiations;
+      v.degraded_perS = g.degraded / dt;
       v.episode.onTick = ep.onTick;
       v.episode.firstMRNATick = ep.firstMRNATick;
       v.episode.firstProteinTick = ep.firstProteinTick;
@@ -343,6 +388,30 @@
     view.env.glucose_mM = cell.env.glucose_mM;
     view.env.lactose_mM = cell.env.lactose_mM;
     view.env.aminoAcids_mM = cell.env.aminoAcids_mM;
+    view.env.iptg_mM = cell.env.iptg_mM;
+    for (let t = 0; t < view.tus.length; t++) {
+      const u = view.tus[t], g = cell.geneById[u.leader];
+      u.mRNA = g.mature.count;
+      u.nascent = g.nascent.len;
+    }
+    if (cell.lac) {
+      const L = cell.lac, o = view.lac;
+      let bound = 0;
+      for (let c = 0; c < cell.dosage; c++) bound += L.op[c];
+      o.operatorCopies = cell.dosage;
+      o.operatorBound = bound;
+      o.lacITetramers = L.tetramers;
+      o.lacIFree = L.tetramers > bound ? L.tetramers - bound : 0;
+      o.allolactose = L.allo;
+      o.allolactose_mM = L.allo / (p.N_mM * V);
+      o.cAMP = L.cAMP;
+      o.crpFactor = L.crpFactor;
+      o.inducer_uM = L.inducer_uM;
+      o.iptg_uM = 1000 * cell.env.iptg_mM;
+      o.activeLacI = L.active;
+      o.promoterActivity = cell.k.lacTx;
+      o.exclusion = L.exclusion;
+    }
     view.drugs.rifampicin = cell.rifDose;
     view.drugs.chloramphenicol = cell.cmDose;
     view.drugs.theta = theta;

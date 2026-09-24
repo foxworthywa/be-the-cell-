@@ -5,7 +5,8 @@
 //
 // Uses the globally installed Playwright (never "playwright install") and
 // Chromium. Serves dist/ with serve.js, except P11, which opens dist/index.html
-// by file://. Every interactive check uses ?test=1&seed=1 and drives time with
+// by file://. Every interactive check uses ?test=1&seed=1&lab=1 (the app opens on the level list otherwise,
+// LEVELS §5.11) and drives time with
 // app.test.runTicks(n), so results do not depend on machine speed.
 // Screenshots (for human review, no pixel diff) go to test-artifacts/screens/.
 'use strict';
@@ -50,7 +51,7 @@ async function openPage(browser, port, vp, opts) {
     }
     return route.continue();
   });
-  await page.goto((o.url || 'http://localhost:' + port + '/') + (o.query || '?test=1&seed=1'));
+  await page.goto((o.url || 'http://localhost:' + port + '/') + (o.query || '?test=1&seed=1&lab=1'));
   await page.waitForFunction(() => window.__btc && window.__btc.app && window.__btc.app.test);
   await paint(page);
   return { page, context, errors, offsite };
@@ -228,13 +229,14 @@ async function main() {
     const k4 = await page.evaluate(() => __btc.app.test.narratorKey());
     const word = await page.locator('.atp-word').textContent();
     check('P4 narrator: no sugar', k4 === 'starve.nosugar', k4);
-    check('P4 ATP gauge word is "very low"', word === 'very low', word);
+    // Engine 1.1: a starving cell keeps a little charge (E ≈ 0.1–0.2), so the gauge reads "low", not "very low".
+    check('P4 ATP gauge word is "low"', word === 'low', word);
     await T(page, 120);
     const growth = await page.locator('.st-growth-text').textContent();
     check('P4 growth reads "not growing"', growth === 'not growing', growth);
     await tapTab(page, 'cell');
     const cv4 = await page.evaluate(() => __btc.app.test.cellViewStats());
-    check('P4 ADP glyphs ≥ 15 and ATP ≤ 1', cv4.ADP >= 15 && cv4.ATP <= 1, 'ADP ' + cv4.ADP + ', ATP ' + cv4.ATP);
+    check('P4 ADP glyphs ≥ 15 and ATP ≤ ¼ of ADP', cv4.ADP >= 15 && cv4.ATP <= cv4.ADP / 4, 'ADP ' + cv4.ADP + ', ATP ' + cv4.ATP);
     await page.waitForTimeout(1600);
     await paint(page);
     await page.screenshot({ path: path.join(OUT, 'P4-starved-cell.png') });
@@ -304,9 +306,9 @@ async function main() {
       const pg = await ctx3.newPage();
       const errs3 = [];
       pg.on('pageerror', (e) => errs3.push(e.message));
-      await pg.goto('http://localhost:' + port + '/?seed=1&reset=1');
+      await pg.goto('http://localhost:' + port + '/?seed=1&reset=1&lab=1');
       await pg.waitForFunction(() => window.__btc && window.__btc.app);
-      await pg.goto('http://localhost:' + port + '/?seed=1');
+      await pg.goto('http://localhost:' + port + '/?seed=1&lab=1');
       await pg.waitForFunction(() => window.__btc && window.__btc.app);
       await paint(pg);
       await pg.locator('[data-tab="medium"]:visible').first().click();
@@ -333,7 +335,7 @@ async function main() {
     const errs = [];
     page.on('console', (m) => { if (m.type() === 'error') errs.push(m.text()); });
     page.on('pageerror', (e) => errs.push(e.message));
-    await page.goto('file://' + path.join(DIST, 'index.html') + '?test=1&seed=1');
+    await page.goto('file://' + path.join(DIST, 'index.html') + '?test=1&seed=1&lab=1');
     await page.waitForFunction(() => window.__btc && window.__btc.app && window.__btc.app.test);
     const p11 = await page.evaluate(async () => {
       __btc.app.test.runTicks(100);

@@ -8,7 +8,8 @@
  * random draw come out the same. Commands from config.schedule are skipped:
  * the config submits them itself.
  *
- *   run(record | {config, log}, toTick)  → Cell at toTick (throws ReplayError on a version or configHash mismatch)
+ *   run(record | {config, log}, toTick, {attach(cell)}?)  → Cell at toTick (throws ReplayError on a version or
+ *                                        configHash mismatch); attach is called before the first step
  *   verify(record)                       → {ok, mismatchTick?, expected?, got?, finalHash}
  */
 (function (root, factory) {
@@ -49,9 +50,9 @@
   }
 
   /**
-   * Replays to toTick (default: the record's finalTick). opts.onMismatch(tick, what)
-   * is called when a resubmitted command gets a different seq or rejection than
-   * it did live; verify() uses it, run() alone ignores it.
+   * Replays to toTick (default: the record's finalTick). opts.attach(cell) is called once,
+   * before the first step. opts.onMismatch(tick, what) is called when a resubmitted command
+   * gets a different seq or rejection than it did live; verify() uses it.
    */
   function run(record, toTick, opts) {
     if (!record || typeof record !== 'object' || !record.config) throw new ReplayError('bad-record', 'a run record needs a config and a log');
@@ -69,6 +70,8 @@
     }
     const end = toTick !== undefined ? toTick : record.finalTick !== undefined ? record.finalTick : 0;
     const onMismatch = opts && opts.onMismatch;
+    // Observers (a level monitor, a Recorder) attach before the first step (LEVELS.md R-E18).
+    if (opts && typeof opts.attach === 'function') opts.attach(cell);
     const entries = entriesOf(record.log || [], cell.config.schedule.length);
     for (let i = 0; i < entries.length; i++) {
       const e = entries[i];

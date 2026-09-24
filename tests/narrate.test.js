@@ -73,7 +73,7 @@ function cover(f) {
   coverage['drug.rif'].add(f.drug.rif);
   coverage['drug.cm'].add(f.drug.cm);
   for (const field of ['medium', 'glucoseLevel', 'carbon', 'glucoseImport', 'glucoseStep', 'energy', 'aa', 'lactoseBlock', 'uselessGene',
-    'aaOutside', 'aaImportOn', 'growth', 'justDivided', 'limiting']) coverage[field].add(f[field]);
+    'aaOutside', 'aaImportOn', 'growth', 'justDivided', 'limiting', 'lacOperator', 'inducer', 'crp']) coverage[field].add(f[field]);
   coverage.lastCommandedGene.add(f.lastCommandedGene === null ? null : 'gene');
 }
 const keysSeen = new Set();
@@ -131,23 +131,31 @@ test('U-4: fliC ×4 → gene.tx within 20 ticks, before gene.rising; lacZ ×¼ f
   assert.ok(w.first('gene.tx') > w.keys[0].tick, w.seq());
 });
 
-test('U-4: glucose None → starve.nosugar within 10 ticks, and still starve.nosugar after 15 min (after dormant)', () => {
+test('U-4: glucose None → starve.nosugar within 10 ticks, and still starve.nosugar after 15 min (v1.1: the cell keeps a little charge, so it is not dormant)', () => {
   const r = play({ commands: [[0, medium({ glucose_mM: 0 })]], ticks: 900 });
   const t = r.first('starve.nosugar');
   assert.ok(t >= 0 && t <= 10, r.seq());
-  const dormant = r.event('dormant');
-  assert.ok(dormant > 0 && dormant < 900, `dormant at ${dormant}`);
+  assert.equal(r.event('dormant'), -1, 'dormant within 15 min');
   assert.equal(r.keyAt(900), 'starve.nosugar', r.seq());
   assert.ok(!r.keys.some((k) => k.key === 'starve.dormant'), r.seq());
+  // Once ATP has run out (a larger basal upkeep makes that minutes instead of hours; test-only), still starve.nosugar after dormant.
+  const d = play({ config: { params: { upkeepBasal: 0.03 } }, commands: [[0, medium({ glucose_mM: 0 })]], ticks: 1800 });
+  const dormant = d.event('dormant');
+  assert.ok(dormant > 0 && dormant < 1800, `dormant at ${dormant}`);
+  assert.equal(d.keyAt(1800), 'starve.nosugar', d.seq());
 });
 
+// Scenarios that need ATP to run out use a larger basal upkeep (test-only), so a starving cell reaches
+// energy 'none' in minutes; with the v1.1 default it keeps a little charge for hours (glucose test g5).
+const DRAIN = { upkeepBasal: 0.03 };
+
 test('U-4: ptsG knockout (no protein), glucose High → starve.noimport before dormant, then starve.dormant', () => {
-  const r = play({ config: { genes: { ptsG: KO } }, ticks: 900 });
+  const r = play({ config: { genes: { ptsG: KO }, params: DRAIN }, ticks: 1800 });
   const dormant = r.event('dormant');
   const noimport = r.first('starve.noimport');
   assert.ok(noimport >= 0 && noimport < dormant, r.seq());
   assert.ok(r.first('starve.dormant') >= dormant, r.seq());
-  assert.equal(r.keyAt(900), 'starve.dormant', r.seq());
+  assert.equal(r.keyAt(1800), 'starve.dormant', r.seq());
 });
 
 test('U-4: gly knockout (no protein), glucose High → growth.arrested (transporters are fine, so no transporter line)', () => {
@@ -160,7 +168,8 @@ test('U-4: gly knockout (no protein), glucose High → growth.arrested (transpor
 test('U-4: glucose None + lactose, then (once E < 0.1) lacY ×1 and lacZ ×1 on → gene.noatp', () => {
   let switched = -1;
   const r = play({
-    commands: [[0, medium({ glucose_mM: 0, lactose_mM: PV.lactosePresent })]], ticks: 600,
+    config: { params: DRAIN },
+    commands: [[0, medium({ glucose_mM: 0, lactose_mM: PV.lactosePresent })]], ticks: 900,
     script: (c, f, tick) => {
       if (switched < 0 && f.energy === 'none') { switched = tick; c.command(setP('lacY', 1)); c.command(setP('lacZ', 1)); }
     },
@@ -169,7 +178,7 @@ test('U-4: glucose None + lactose, then (once E < 0.1) lacY ×1 and lacZ ×1 on 
   const t = r.first('gene.noatp');
   assert.ok(t > switched, r.seq());
   assert.equal(r.keys.find((k) => k.key === 'gene.noatp').gene, 'lacZ');
-  assert.equal(r.keyAt(600), 'gene.noatp', r.seq());
+  assert.equal(r.keyAt(900), 'gene.noatp', r.seq());
 });
 
 test('U-4: lacZ ×1 in glucose, 30 min later glucose None + lactose → lac.noY; the same with lacY → lac.noZ', () => {
@@ -227,11 +236,13 @@ test('U-4: glucose-processing genes Off in High glucose → starve.noenzyme (the
   assert.equal(r.keyAt(5 * HOUR), 'starve.noenzyme', r.seq());
 });
 
-test('U-4: lac genes ×1 for only 30 min, then lactose only → lac.toofew once ATP is gone; ×4 for an hour never gives it', () => {
+test('U-4: lac genes ×1 for only 5 min, then lactose only → lac.toofew once ATP is gone; ×4 for an hour never gives it', () => {
   const lactoseOnly = medium({ glucose_mM: 0 });
-  const few = play({ commands: [[0, setP('lacY', 1)], [0, setP('lacZ', 1)], [0, medium({ lactose_mM: PV.lactosePresent })], [1800, lactoseOnly]], ticks: 1800 + 900 });
-  assert.ok(few.first('lac.toofew', 1800) > 1800, few.seq());
-  assert.equal(few.keyAt(1800 + 900), 'lac.toofew', few.seq());
+  // v1.1: with its default upkeep a cell with too few lac proteins keeps a little charge (energy 'low',
+  // growth.arrested); the line needs ATP gone, so this arm uses a much larger basal upkeep (test-only).
+  const few = play({ config: { params: { upkeepBasal: 0.3 } }, commands: [[0, setP('lacY', 1)], [0, setP('lacZ', 1)], [0, medium({ lactose_mM: PV.lactosePresent })], [300, lactoseOnly]], ticks: 300 + 900 });
+  assert.ok(few.first('lac.toofew', 300) > 300, few.seq());
+  assert.equal(few.keyAt(300 + 900), 'lac.toofew', few.seq());
   const ok = play({ commands: [[0, setP('lacY', 4)], [0, setP('lacZ', 4)], [0, medium({ lactose_mM: PV.lactosePresent })], [HOUR, lactoseOnly]], ticks: 2 * HOUR });
   assert.ok(!ok.keys.some((k) => k.key === 'lac.toofew'), ok.seq());
   assert.equal(ok.keyAt(2 * HOUR), 'growth.lactose', ok.seq());
@@ -350,6 +361,18 @@ test('U-4: lacY and aaImp as useless genes (fast promoters and strong RBS), and 
   let low = -1;
   const s = play({ commands: [[0, setP('ptsG', 'off')]], ticks: 6 * HOUR, script: (c, f, tick) => { if (low < 0 && f.glucoseImport === 'low') low = tick; } });
   assert.ok(low > 0, s.seq());
+});
+
+test('U-4: the regulated lac operon (strain m2-lac, facts 1.3): repressed in glucose (operator bound, no inducer, CRP low); on lactose the inducer frees it and CRP is high; a design without an operator reads none', () => {
+  const r = play({ config: { strain: 'm2-lac' }, commands: [[600, medium({ glucose_mM: 0, lactose_mM: PV.lactosePresent })]], ticks: 1200 });
+  const seen = { g: null, l: null };
+  const g = play({ config: { strain: 'm2-lac' }, ticks: 60 });
+  seen.g = [g.facts.lacOperator, g.facts.inducer, g.facts.crp];
+  seen.l = [r.facts.lacOperator, r.facts.inducer, r.facts.crp];
+  assert.deepEqual(seen.g, ['bound', 'none', 'low'], 'in glucose');
+  assert.deepEqual(seen.l, ['free', 'some', 'high'], 'after 10 min on lactose');
+  const oc = play({ config: { strain: 'm2-lac', design: { lac: { operator: false } } }, ticks: 10 });
+  assert.equal(oc.facts.lacOperator, 'none');
 });
 
 test('U-4: every rule was reached and every facts value occurred (run after the scenarios)', (t) => {

@@ -40,8 +40,11 @@
       const list = h('div', { class: 'card-list' });
       root.appendChild(list);
       const view = app.cell.observe();
+      const lc = app.labConfig;
       for (const gv of view.genes) {
-        const id = gv.id, w = C.geneWords(id, app.labConfig.showNames);
+        // Genes outside labConfig.genesVisible keep running as background: no card (LEVELS §5.5.1).
+        if (lc.genesVisible !== 'all' && Array.isArray(lc.genesVisible) && lc.genesVisible.indexOf(gv.id) < 0) continue;
+        const id = gv.id, w = C.geneWords(id, lc.showNames);
         const e = {
           id,
           state: h('span', { class: 'state-chip' }),
@@ -59,7 +62,10 @@
           aboutBtn.setAttribute('aria-expanded', open ? 'true' : 'false');
           aboutBtn.textContent = open ? C.card.aboutClose : C.card.about;
         });
-        const ctrl = app.makePromoterControl(() => id, 'card');
+        // Dials: replaced by a line when the DNA sets them (designer levels) or a level hides gene
+        // controls; shown but disabled, with "Set by this level.", when a level locks the gene.
+        const mode = app.geneControlMode(id);
+        const ctrl = mode === 'free' || mode === 'locked' ? app.makePromoterControl(() => id, 'card') : null;
         e.ctrl = ctrl;
         const head = h('button', {
           class: 'card-head', type: 'button', 'aria-label': F.fill(C.card.focusLabel, { name: w.name }),
@@ -72,7 +78,8 @@
         const card = h('article', { class: 'gene-card', 'data-gene': id }, [
           head,
           h('p', { class: 'card-job' }, [e.state, ' ', badge, badge ? ' ' : null, w.job]),
-          h('div', { class: 'card-ctrl' }, [h('span', { class: 'visually-hidden', text: C.card.promoter }), ctrl.el, ctrl.note]),
+          ctrl ? h('div', { class: 'card-ctrl' }, [h('span', { class: 'visually-hidden', text: C.card.promoter }), ctrl.el, ctrl.note])
+            : h('p', { class: 'card-locked', text: lc.readOnlyGenes ? C.card.readOnly : C.card.locked }),
           h('div', { class: 'card-counts' }, [
             h('span', { class: 'count-m' }, e.mrna), h('span', { class: 'count-p' }, e.protein), e.spark,
           ]),
@@ -82,7 +89,7 @@
           ]),
           e.about,
         ]);
-        ctrl.el.setAttribute('aria-label', C.card.promoter + ', ' + w.name);
+        if (ctrl) ctrl.el.setAttribute('aria-label', C.card.promoter + ', ' + w.name);
         e.card = card;
         this.cards.push(e);
         list.appendChild(card);

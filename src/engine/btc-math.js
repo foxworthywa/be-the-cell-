@@ -71,6 +71,23 @@
     return g;
   }
 
+  /** x^n for a small non-negative integer n, by repeated multiplication (Math.pow is banned, §2.3). */
+  function powInt(x, n) {
+    let r = 1;
+    for (let i = 0; i < n; i++) r *= x;
+    return r;
+  }
+
+  /**
+   * Hill function x^n/(x^n + Kn) with an integer coefficient n and Kn = K^n given
+   * (precomputed once with powInt). 0 for x ≤ 0.
+   */
+  function hill(x, Kn, n) {
+    if (!(x > 0)) return 0;
+    const xn = powInt(x, n);
+    return xn / (xn + Kn);
+  }
+
   /** In-place insertion sort of strings by UTF-16 code units (no comparator sort, no locale). */
   function sortStrings(arr) {
     for (let i = 1; i < arr.length; i++) {
@@ -225,7 +242,7 @@
 
   return {
     LN2, LN2HI, LN2LO, N_mM, POW2,
-    detExp, dsqrt, sortStrings, utf8, fnv1a32, hash64, canonicalJSON,
+    detExp, dsqrt, powInt, hill, sortStrings, utf8, fnv1a32, hash64, canonicalJSON,
     ByteWriter, ByteReader, base64Encode, base64Decode,
   };
 });

@@ -113,6 +113,7 @@ function viewData(v) {
     o.genes[i].mRNABirthTick = Array.from(g.mRNABirthTick.slice(0, g.mRNA));
     o.genes[i].nascentProgress = Array.from(g.nascentProgress.slice(0, g.nascent));
   });
+  v.tus.forEach((u, i) => { o.tus[i].mRNAIds = Array.from(u.mRNAIds.slice(0, u.mRNA)); });
   delete o.geneById;
   return o;
 }

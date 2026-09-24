@@ -44,6 +44,9 @@
     const Vnew = Mnew / p.rho;
     if (cell.dosage === 1 && Vnew >= p.repFrac * cell.Vbirth) {
       cell.dosage = 2;
+      // The new operon copy starts in the state of the old one: re-binding after the fork passes
+      // (≈ tau_search/10 s) is neglected, so the time-averaged repression stays at Oehler's values.
+      if (cell.lac) cell.lac.op[1] = cell.lac.op[0];
       cell.emit('replication');
     }
     k.Mend = Mnew;
@@ -62,12 +65,16 @@
     rec.Mbefore = Mbefore;
     for (let i = 0; i < genes.length; i++) {
       const g = genes[i], r = rec.genes[i];
-      r.mRNABefore = g.mature.count;
-      r.mRNAKept = g.mature.halve(s);
-      r.mRNASister = r.mRNABefore - r.mRNAKept;
-      r.nascentBefore = g.nascent.len;
-      r.nascentKept = g.nascent.halve(s);
-      r.nascentSister = r.nascentBefore - r.nascentKept;
+      if (g.isLeader) {                                    // a unit's mRNA is split once, with its leader
+        r.mRNABefore = g.mature.count;
+        r.mRNAKept = g.mature.halve(s);
+        r.mRNASister = r.mRNABefore - r.mRNAKept;
+        r.nascentBefore = g.nascent.len;
+        r.nascentKept = g.nascent.halve(s);
+        r.nascentSister = r.nascentBefore - r.nascentKept;
+      } else {
+        r.mRNABefore = 0; r.mRNAKept = 0; r.mRNASister = 0; r.nascentBefore = 0; r.nascentKept = 0; r.nascentSister = 0;
+      }
       // Whole proteins go to one daughter or the other; the fractional remainder (protein
       // counts are averages, spec §18 item 9) is split evenly, so both shares stay ≥ 0.
       const P = g.P, n = Math.floor(P);
@@ -80,7 +87,7 @@
       r.ribosomesBefore = g.cohorts.nSum;
       g.cohorts.scaleAndRebase(0.5, cell.D);
       r.ribosomesKept = g.cohorts.nSum;
-      g.nascent.rebase(cell.N);
+      if (g.isLeader) g.nascent.rebase(cell.N);
     }
     for (let j = 0; j < sec.length; j++) {
       const u = sec[j], r = rec.sectors[j];
@@ -92,6 +99,12 @@
     }
     rec.AABefore = cell.AA; cell.AA *= 0.5; rec.AAKept = cell.AA;
     rec.LinBefore = cell.Lin; cell.Lin *= 0.5; rec.LinKept = cell.Lin;
+    if (cell.lac) {                                        // one operon copy goes to each daughter; allolactose halves
+      const keep = R.uniform(s) < 0.5 ? 0 : 1;
+      cell.lac.op[0] = cell.lac.op[keep];
+      cell.lac.op[1] = 0;
+      cell.lac.allo *= 0.5;
+    }
     // E is unchanged: ATP halves with the volume.
     cell.Rbusy *= 0.5;
     cell.D = 0;

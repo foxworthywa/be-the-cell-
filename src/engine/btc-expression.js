@@ -25,29 +25,64 @@
 })(typeof self !== 'undefined' ? self : this, function (M, R) {
   'use strict';
 
-  /** Per-copy initiation rate (/s) from the promoter controls; knockout is exactly 0. */
+  /**
+   * Per-copy initiation rate (/s) of a transcription unit's promoter, from its leader's
+   * controls. Knockout is exactly 0 for a one-gene unit; a longer unit is transcribed
+   * until all its cistrons are knocked out (cell.refreshDerived). promoterScale is a
+   * designer setting of a regulated promoter (config.regulation), 1 otherwise.
+   */
   function promoterRate(p, gene) {
-    if (gene.knockout) return 0;
+    if (gene.knockout && gene.tuSize === 1) return 0;
     const r = gene.rateOverride === gene.rateOverride         // not NaN: an explicit rate
       ? gene.rateOverride
-      : gene.rRef * (gene.level > 0 ? gene.level : p.leak);
+      : gene.rRef * gene.promoterScale * (gene.level > 0 ? gene.level : p.leak);
     return r < p.rateCap ? r : p.rateCap;
   }
 
-  // §7.3 Player transcription initiation (stochastic), genes in slot order.
+  /**
+   * mRNA copies ribosomes can load for this cistron: mature molecules, plus transcripts in
+   * progress on which RNA polymerase has already passed the cistron's start (coupled
+   * translation; transcripts are oldest first, so they form a prefix). A knocked-out
+   * cistron of a longer unit is not translated.
+   */
+  function translatableCopies(g, N) {
+    if (g.knockout && g.tuSize > 1) return 0;
+    const nq = g.nascent;
+    if (g.offset === 0) return g.mature.count + nq.len;
+    let n = 0;
+    while (n < nq.len && N - nq.N0[nq.index(n)] >= g.offset) n++;
+    return g.mature.count + n;
+  }
+
+  // §7.3 Player transcription initiation (stochastic), transcription units in slot order of their first cistron.
   function initiateTranscription(cell) {
     const k = cell.k, genes = cell.genes, T = cell.tick;
-    const scale = cell.dosage * k.hin * k.rifF * cell.p.dt;
+    // Energy gates (v1.1): promoter firing slows with the elongation gate, so the transcripts in
+    // progress stay about as many as in growth while each moves slowly (no pile-up of stalled
+    // polymerases); an unregulated promoter also closes with the promoter gate s_tx. The lac
+    // promoter does not: cAMP–CRP is high exactly when carbon is short, and lac mRNA is a large
+    // share of what little RNA a cell makes in the diauxic lag (Jacobson 1970).
+    const base = k.hin * k.rifF * k.sEl * cell.p.dt;
     for (let i = 0; i < genes.length; i++) {
       const g = genes[i];
-      const mu = g.rate * scale;
-      let n = R.poisson(g.txStream, mu);           // exactly one uniform per gene per tick
+      if (!g.isLeader) continue;                   // other cistrons share the unit's transcripts
+      // Free promoter copies: the dosage, or (a regulated operon) the copies whose operator is free × activation.
+      const isLac = g.regulated && cell.lac && g.index === cell.lac.leader;
+      const copies = isLac ? k.lacTx : cell.dosage * k.sTx;
+      const mu = g.rate * copies * base;
+      let n = R.poisson(g.txStream, mu);           // exactly one uniform per unit per tick
       // A gene can hold only so many polymerases: one per footprint of DNA per copy.
       const room = cell.dosage * g.maxNascentPerCopy - g.nascent.len;
       if (n > room) n = room > 0 ? room : 0;
       for (let j = 0; j < n; j++) g.nascent.push(cell.N, T);
       g.initiations += n;
       g.txStarted = n;
+    }
+    for (let i = 0; i < genes.length; i++) {
+      const g = genes[i];
+      if (g.isLeader) continue;
+      g.txStarted = g.leader.txStarted;
+      g.initiations = g.leader.initiations;
     }
   }
 
@@ -58,7 +93,8 @@
     let wlNonQ = 0;
     for (let i = 0; i < genes.length; i++) {
       const g = genes[i];
-      wlNonQ += g.rbs * (g.mature.count + g.nascent.len) * g.L;
+      g.tlCopies = translatableCopies(g, cell.N);  // read again by translation initiation (§7.5)
+      wlNonQ += g.rbs * g.tlCopies * g.L;
     }
     const R_ = sec[0], Q = sec[1], P_ = sec[2];
     wlNonQ += R_.rbs * R_.m * R_.L + P_.rbs * P_.m * P_.L;
@@ -66,8 +102,8 @@
     const xa2 = k.xa * k.xa;
     const fP = (0.4 + 0.6 / (1 + xa2)) / 0.7;     // P-sector expression rises when amino acids run short
     R_.sigma0 = p.beta_R * cell.dosage * k.chi * k.rifF;
-    Q.sigma0 = k.kM * mQstar * k.rifF;
-    P_.sigma0 = p.beta_P * cell.dosage * fP * k.rifF;
+    Q.sigma0 = k.kM * mQstar * k.rifF * k.sUp;        // the upkeep gate shuts housekeeping transcription down when energy is short
+    P_.sigma0 = p.beta_P * cell.dosage * fP * k.rifF * k.sUp;
     k.bgTx0 = p.atpPerNT * (R_.sigma0 * R_.nt + Q.sigma0 * Q.nt + P_.sigma0 * P_.nt);
   }
 
@@ -77,7 +113,7 @@
     let W = 0;
     for (let i = 0; i < genes.length; i++) {
       const g = genes[i];
-      W += g.rbs * (g.mature.count + g.nascent.len);   // nascent transcripts count: translation is coupled
+      W += g.rbs * g.tlCopies;                     // nascent transcripts count: translation is coupled
     }
     for (let s = 0; s < sec.length; s++) W += sec[s].rbs * sec[s].m;
 
@@ -85,17 +121,17 @@
     // Ribosomes that finished a chain last tick are recycled before they bind again,
     // so the busy count is the one taken right after last tick's initiation.
     const Rfree = Rtot > cell.Rbusy ? Rtot - cell.Rbusy : 0;
-    const gI = k.hin * (p.gI_basal + (1 - p.gI_basal) * k.chi);   // ppGpp/hibernation stand-in
+    // ppGpp stand-in: χ sets the active share; the basal share hibernates when energy is short (stringent gate).
+    const gI = k.hin * (p.gI_basal * k.sEl + (1 - p.gI_basal) * k.chi);
     const kappa = p.k_on * gI * W / k.V;
     const nBind = W > 0 ? Rfree * k.cmF * (1 - M.detExp(-kappa * p.dt)) : 0;
 
     let Relong = 0, Nnasc = 0;
     for (let i = 0; i < genes.length; i++) {
       const g = genes[i];
-      const copies = g.mature.count + g.nascent.len;
-      if (nBind > 0) g.cohorts.push(D, nBind * g.rbs * copies / W);
+      if (nBind > 0) g.cohorts.push(D, nBind * g.rbs * g.tlCopies / W);
       Relong += g.cohorts.nSum;
-      Nnasc += g.nascent.len;
+      if (g.isLeader) Nnasc += g.nascent.len;      // each transcript in progress is counted once
     }
     for (let s = 0; s < sec.length; s++) {
       const u = sec[s];
@@ -144,11 +180,40 @@
     }
   }
 
+  /**
+   * §7.8b Rescue of stalled ribosomes (v1.1). When the elongation gate has paused ribosomes,
+   * the mRNA under a paused ribosome is still degraded (half-life 180 s); the ribosome then
+   * sits on a truncated message and is released by trans-translation, its unfinished chain
+   * broken down to amino acids. So each tick a share (1 − s(E))·(1 − e^(−k_M·dt)) of every
+   * cohort is released and its residues return to the pool. At a growing cell's charge s ≈ 1
+   * and nothing is released; mass and the amino-acid balance are conserved.
+   */
+  function rescueStalled(cell) {
+    const k = cell.k, genes = cell.genes, sec = cell.sectors, D = cell.D;
+    const sEnd = M.hill(cell.E, k.KelN, cell.p.n_el);
+    const share = (1 - sEnd) * (1 - k.decayFactorM);
+    k.rescued = 0;
+    if (!(share > 0)) return;
+    let aa = 0, n = 0;
+    for (let i = 0; i < genes.length + sec.length; i++) {
+      const q = i < genes.length ? genes[i].cohorts : sec[i - genes.length].cohorts;
+      if (!(q.nSum > 0)) continue;
+      aa += share * q.nascentAA(D);
+      n += share * q.nSum;
+      q.scaleAndRebase(1 - share, 0);
+    }
+    cell.AA += aa;
+    cell.flux.aaRecycled += aa / cell.p.dt;
+    cell.Rbusy = cell.Rbusy > n ? cell.Rbusy - n : 0;
+    k.rescued = n;
+  }
+
   // §7.9 Player mRNA: decay first (in id order), then transcripts that reached full length mature.
   function playerMRNA(cell) {
     const genes = cell.genes, N = cell.N, T = cell.tick;
     for (let i = 0; i < genes.length; i++) {
       const g = genes[i];
+      if (!g.isLeader) continue;                   // a unit's mRNA decays and matures once, with its leader
       g.mDecayed = g.mature.decay(g.decayStream, g.pDecay);
       let done = 0;
       const nq = g.nascent, nt = g.nt;
@@ -161,6 +226,12 @@
       }
       g.mMade += done;
       g.mCompleted = done;
+    }
+    for (let i = 0; i < genes.length; i++) {
+      const g = genes[i];
+      if (g.isLeader) continue;
+      const l = g.leader;
+      g.mDecayed = l.mDecayed; g.mCompleted = l.mCompleted; g.mMade = l.mMade; g.newestInitTick = l.newestInitTick;
     }
   }
 
@@ -181,17 +252,19 @@
     let recycled = 0;
     for (let i = 0; i < genes.length; i++) {
       const g = genes[i];
+      g.degraded = 0;
       if (!(g.kdeg > 0)) continue;
       const dP = g.P * g.kdegLoss;
       g.P -= dP;
+      g.degraded = dP;                             // view.genes[i].degraded_perS (R-E10)
       recycled += g.L * dP;
     }
     cell.AA += recycled;
-    cell.flux.aaRecycled = recycled / cell.p.dt;
+    cell.flux.aaRecycled += recycled / cell.p.dt;         // (zeroed at the start of the tick; rescue adds too)
   }
 
   return {
-    promoterRate, initiateTranscription, sectorTranscription, initiateTranslation,
-    completeChains, playerMRNA, sectorMRNA, degradeProteins,
+    promoterRate, translatableCopies, initiateTranscription, sectorTranscription, initiateTranslation,
+    completeChains, rescueStalled, playerMRNA, sectorMRNA, degradeProteins,
   };
 });

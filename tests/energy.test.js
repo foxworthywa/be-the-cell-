@@ -27,7 +27,7 @@ function ledgerShares(cfg) {
 const ranked = (shares) => Object.keys(shares).sort((a, b) => shares[b] - shares[a]);
 const show = (shares) => ranked(shares).map((n) => `${n} ${fmt(100 * shares[n], 1)}%`).join(', ');
 
-test('e1: translation is the largest ATP expense of a growing cell', (t) => {
+test('e1: translation is the largest ATP expense of a growing cell; upkeep catches up when carbon limits growth (v1.1)', (t) => {
   const ref = ledgerShares();
   t.diagnostic(`reference: spend ${fmt(ref.spend)} ATP/s; ${show(ref.shares)}`);
   const order = ranked(ref.shares);
@@ -36,11 +36,17 @@ test('e1: translation is the largest ATP expense of a growing cell', (t) => {
   assert.ok(margin >= 1.25, `translation is only ${fmt(margin, 2)}× the next category (${order[1]})`);
   assert.ok(ref.shares.transcription <= 0.06, `transcription takes ${fmt(100 * ref.shares.transcription, 1)}%`);
   assert.ok(ref.spend >= 7e5 && ref.spend <= 1.3e6, `total spend ${fmt(ref.spend)} ATP/s`);
-  for (const [label, cfg] of [['fliC ×4', { genes: { fliC: { level: 4 } } }], ['ptsG ×0.25', { genes: { ptsG: { level: 0.25 } } }]]) {
-    const r = ledgerShares(cfg);
-    t.diagnostic(`${label}: ${show(r.shares)}`);
-    assert.equal(ranked(r.shares)[0], 'translation', `${label}: largest category is ${ranked(r.shares)[0]}`);
-  }
+  const fli = ledgerShares({ genes: { fliC: { level: 4 } } });
+  t.diagnostic(`fliC ×4: ${show(fli.shares)}`);
+  assert.equal(ranked(fli.shares)[0], 'translation', `fliC ×4: largest category is ${ranked(fli.shares)[0]}`);
+  // Carbon-limited growth (few transporters): the cell keeps its charge (v1.1 homeostasis), so upkeep
+  // runs at full rate while growth slows, and its share rises to about that of translation (Pirt:
+  // maintenance is a fixed cost per hour, so it weighs more the slower a cell grows).
+  const slow = ledgerShares({ genes: { ptsG: { level: 0.25 } } });
+  t.diagnostic(`ptsG ×0.25: ${show(slow.shares)}`);
+  assert.ok(slow.shares.upkeep > ref.shares.upkeep + 0.05, `ptsG ×0.25: upkeep ${fmt(100 * slow.shares.upkeep, 1)}% vs ${fmt(100 * ref.shares.upkeep, 1)}% in the reference`);
+  assert.ok(slow.shares.translation >= 0.3, `ptsG ×0.25: translation ${fmt(100 * slow.shares.translation, 1)}%`);
+  assert.equal(ranked(slow.shares).slice(0, 2).sort().join(','), 'translation,upkeep', `ptsG ×0.25: the two largest are ${ranked(slow.shares).slice(0, 2).join(', ')}`);
 });
 
 test('e3: when chloramphenicol blocks growth, upkeep becomes the largest expense', (t) => {

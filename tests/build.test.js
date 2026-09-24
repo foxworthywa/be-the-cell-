@@ -92,7 +92,7 @@ test('b-1: build-files.json lists every engine and shared file once, in an order
 
 const GLOBAL_NAME = {
   'btc-math': 'math', 'btc-prng': 'prng', 'btc-params': 'params', 'btc-catalog': 'catalog', 'btc-presets': 'presets',
-  'btc-genome': 'genome', 'btc-queue': 'queue', 'btc-expression': 'expression', 'btc-metabolism': 'metabolism',
+  'btc-genome': 'genome', 'btc-queue': 'queue', 'btc-regulation': 'regulation', 'btc-expression': 'expression', 'btc-metabolism': 'metabolism',
   'btc-growth': 'growth', 'btc-commands': 'commands', 'btc-events': 'events', 'btc-observe': 'observe', 'btc-cell': 'Cell',
   'btc-replay': 'replay', 'btc-dots': 'dots', 'btc-recorder': 'Recorder', 'btc-narrate': 'narrate',
 };
@@ -100,7 +100,7 @@ const GLOBAL_NAME = {
 test('b-1: each file loads through require and in a bare context with only `self`, defining BTC.<name>', () => {
   const ctx = vm.createContext({});
   vm.runInContext('var self = this;', ctx);
-  for (const f of FILES.filter((x) => !x.startsWith('src/app/'))) {
+  for (const f of FILES.filter((x) => x.startsWith('src/engine/') || x.startsWith('src/shared/'))) {   // game and level files: tests/levels.test.js
     const name = path.basename(f, '.js');
     const src = fs.readFileSync(path.join(ROOT, f), 'utf8');
     assert.ok(require(path.join(ROOT, f)), `${f} did not load through require`);

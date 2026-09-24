@@ -121,7 +121,9 @@ npm run ui-check    # builds, then runs the browser checks and saves screenshots
 to serve the unbuilt source files directly (no service worker is registered then). Opening
 `dist/index.html` by double-click also works. Useful URL parameters: `?seed=N` (a new cell with
 that seed), `?reset=1` (ignore the autosaved cell), `?test=1` (no autosave or service worker,
-seed 1, and test hooks on `window.__btc.app.test`).
+seed 1, and test hooks on `window.__btc.app.test`). The app opens on the level list (or the last
+screen used); `?lab=1` opens the free-play lab, `?level=<id>` a level, and `?level=<id>&v=<6
+characters>` a given variant as a think-aloud attempt 0 (docs/LEVELS.md §5.11).
 
 `npm run ui-check` needs Playwright and Chromium installed globally (it never installs them,
 and prints "skipped" without them). It checks five screen sizes (360×740, 375×553, 740×360,

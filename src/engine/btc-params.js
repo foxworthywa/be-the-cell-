@@ -72,19 +72,30 @@
       perMin + ' /min.' + (id === 'lacZ' ? lacZNote : ''));
   }
 
+  // Strain m2-lac (level 1.7): one lac promoter for lacZ, lacY and lacA, and the repressor gene lacI.
+  p('rRef_lac', 1.6 / 60, '/s per copy', 'as rRef_lacZ; Kennell & Riezman via Roussel & Zhu 2006 (≈20 LacZ/s fully induced)', 'U',
+    '1.6 /min: fully induced (free operator, cAMP–CRP high) gives the lab strain\'s lacZ ×1, ≈2×10⁴ LacZ monomers (2.4% of proteome)');
+  p('rRef_lacI', 0.05 / 60, '/s per copy', 'Gilbert & Müller-Hill 1966 (≈10 repressor tetramers per gene copy)', 'PV',
+    '0.05 /min with b_lacI 0.1: about one mRNA per generation, ≈4 monomers per mRNA (Yu 2006 via Roussel & Zhu 2006), ≈10 tetramers');
+
   // --- Translation -----------------------------------------------------------
   const RBS = { ptsG: 1.0, gly: 3.0, aaSyn: 3.0, aaImp: 1.0, lacY: 0.5, lacZ: 1.5, fliC: 2.0 };
   for (const id of ['ptsG', 'gly', 'aaSyn', 'aaImp', 'lacY', 'lacZ', 'fliC']) {
     p('b_' + id, RBS[id], '–', 'calibrated to k_init ≈0.15 /s at b = 1', 'D', 'relative ribosome-binding strength (RBS)');
   }
-  p('k_on', 1.6e-4, 'fL/s per free ribosome per b·mRNA', 'calibrated to k_init 0.151 /s; Zong 2010; Kennell & Riezman via Roussel & Zhu 2006 (0.1–0.12 /s)', 'D', '');
-  p('gI_basal', 0.2, '–', 'Dai 2016 (fewer active ribosomes when growth is slow)', 'D', 'initiation factor g_I = hin·(gI_basal + (1 − gI_basal)·χ)');
+  p('b_lacA', 0.5, '–', 'LEVELS.md R-E13 (translated less than lacZ; Soupene 2003: LacA activity ≈50× below LacZ)', 'D', 'relative ribosome-binding strength of the third lac cistron');
+  p('b_lacI', 0.1, '–', 'Yu 2006 via Roussel & Zhu 2006 (≈4 proteins per mRNA for a lac-repressed gene)', 'PV', 'weak lacI ribosome-binding site');
+  p('k_on', 1.757e-4, 'fL/s per free ribosome per b·mRNA', 'calibrated to k_init 0.151 /s; Zong 2010; Kennell & Riezman via Roussel & Zhu 2006 (0.1–0.12 /s)', 'D', '');
+  p('gI_basal', 0.1, '–', 'Dai 2016 (fewer active ribosomes when growth is slow); Jacobson 1970 (protein synthesis 10–15% of exponential during the diauxic lag)', 'D', 'initiation factor g_I = hin·(gI_basal + (1 − gI_basal)·χ)');
   p('v_max', 18, 'aa/s', 'Young & Bremer 1976; Dai 2016 (9–17)', 'V', 'reference running speed 11.65 aa/s');
   p('K_aa', 1.0e6, '/fL', 'calibrated', 'D', '1.66 mM; amino-acid limitation of elongation');
   p('K_E', 0.10, 'E', 'research note (K ≈10% of normal)', 'G', 'sharp stall threshold for ribosomes');
   p('K_in', 0.03, 'E', 'design', 'D', 'initiation stalls only when E collapses');
   p('K_chiA', 2.0e6, '/fL', 'design', 'D', '3.3 mM; ppGpp-like signal χ, Hill 2');
-  p('K_chiE', 0.5, 'E', 'design', 'D', 'ppGpp-like signal χ, Hill 2');
+  p('K_chiE', 0.81, 'E', 'Walker-Simmons & Atkinson 1977; Chapman 1971 (growth needs a charge ≳ 0.8)', 'D',
+    'half-point of the energy leg of χ; set so χ at the reference state is unchanged (0.47, v1.0 value)');
+  p('n_chiE', 12, '–', 'Atkinson response curves: steepest above E ≈ 0.7, half-maximal at 0.8–0.9 (Walker-Simmons & Atkinson 1977)', 'D',
+    'Hill coefficient of the energy leg of χ: ribosome synthesis and initiation give way before ATP runs down (v1.1)');
   p('thetaMax', 0.98, '–', 'Dai 2016 (mechanism)', 'D', 'fraction of ribosomes stalled at full chloramphenicol dose');
 
   // --- Energy ------------------------------------------------------------------
@@ -100,6 +111,17 @@
   p('chi_C', 0.8, 'hexose/aa', 'carbon balance (≈4.8 C per residue)', 'D', 'research value 0.5 is unverified; both listed');
   p('m_V', 2.40e5, 'ATP/s/fL × hm(E)', 'Klamt 2018 anaerobic non-growth 2.8 mmol glucose/gDW/h × 2 ATP', 'PV', '5.6 mmol ATP/gDW/h at E = 0.9');
   p('K_m', 0.30, 'E', 'design', 'D', 'upkeep falls under energy stress');
+  p('upkeepBasal', 0.0002, '–', 'Biselli 2020, citing Hoehler & Jørgensen 2013 (growth-phase maintenance overestimates what non-growing cells spend)', 'D',
+    'share of upkeep that energy shortage does not cut; the rest is gated by s_up (v1.1). Sets how slowly a starving cell loses its ATP (hours)');
+  p('K_up', 0.6, 'E', 'Walker-Simmons & Atkinson 1977 (charge held near 0.8 while cells adapt); Chapman 1971', 'D',
+    'upkeep gate s_up(E) = E^n/(E^n + K^n): the regulated share of upkeep, sector Q and P transcription and amino-acid synthesis shut down first when energy is short (v1.1)');
+  p('n_up', 12, '–', 'design', 'D', 'Hill coefficient of the upkeep gate; s_up ≈ 0.99 at a growing cell\'s charge');
+  p('K_tx', 0.45, 'E', 'Jacobson 1970 (RNA synthesis falls to ≈7% in the diauxic lag; lac mRNA is spared); design', 'D',
+    'promoter gate s_tx(E): unregulated player promoters fire less below this charge, so a starving cell does not spend its trickle on transcripts it cannot translate; the lac promoter is not gated (cAMP–CRP) (v1.1)');
+  p('n_tx', 8, '–', 'design', 'D', 'Hill coefficient of the promoter gate; s_tx ≈ 1 at a growing cell\'s charge and ≈ 0.9 in a cell starving on the backup route (R-E7)');
+  p('K_el', 0.3, 'E', 'Chapman 1971 (starving cells keep a charge near 0.5); design', 'D',
+    'elongation gate s_el(E): running ribosomes pause, promoters fire less and idle ribosomes hibernate (basal initiation) below this charge; paused ribosomes are rescued (v1.1)');
+  p('n_el', 8, '–', 'design', 'D', 'Hill coefficient of the elongation gate; s_el ≈ 1 at a growing cell\'s charge');
   p('fermYield', 2, 'ATP/hexose', 'Hasona 2004; Wang 2010 (2–3)', 'V', 'teaching value; majors note 2–3');
   p('K_pi', 0.05, 'E', 'design', 'G', 'priming: the PTS needs PEP and PFK needs ATP');
   p('s0', 0.01, 'E', 'design', 'G', 'priming seed; stands for PEP and phosphorylated intermediates (0 in level 1.3)');
@@ -126,6 +148,28 @@
   p('k_Z', 60, '/s per monomer site', 'estimate', 'U', 'verify in β-galactosidase reviews');
   p('K_Z', 1, 'mM', 'estimate', 'U', '');
 
+  // --- Lac operon regulation (strain m2-lac; btc-regulation.js) ------------------
+  p('tau_search', 300, 's', 'Elf 2007 (one repressor finds an operator in ≤ 354 s; estimate < 270 s)', 'V',
+    'a free operator is found at rate (active LacI tetramers)/tau_search');
+  p('lacIRef', 10, 'tetramers', 'Gilbert & Müller-Hill 1966', 'V', 'repressor level at which the repression factor below holds');
+  p('rep_lac', 1000, '×', 'Oehler 1990 (1,300× with all three operators; LEVELS.md R-E13 uses ≈1,000)', 'V',
+    'fold repression of the wild-type design at lacIRef tetramers: half from rare complete release, half from the leak while bound');
+  p('lacLeak', 0.0005, '×', 'Choi 2008 (basal expression comes from partial release of the looped repressor)', 'PV',
+    'transcription from an operator copy while the repressor is bound, as a share of the free rate');
+  p('K_ind', 1.3, 'µM', 'Gilbert & Maxam 1973 (repressor binds IPTG with K ≈ 1.3 µM); allolactose taken as equal', 'PV',
+    'inducer bound to free repressor, Hill n_ind');
+  p('n_ind', 2, '–', 'Kuhlman 2007 (IPTG response Hill ≈ 2)', 'PV', 'integer');
+  p('K_indOp', 40, 'µM', 'Choi 2008 citing Barkley 1975 (operator-bound repressor binds inducer 20–100× more weakly)', 'PV',
+    'inducer that frees an operator-bound repressor, Hill n_ind');
+  p('k_rel', 0.05, '/s', 'Elf 2007 (repressors leave the operator within ≈40 s of saturating IPTG)', 'PV', 'release rate of an inducer-bound repressor');
+  p('f_allo', 0.5, '–', 'Huber 1976 via Suyama 1986 (≈50% of lactose turned over becomes allolactose)', 'PV',
+    'allolactose made per lactose split by LacZ (a signal pool; its carbon is counted as split at once)');
+  p('K_allo', 1, 'mM', 'estimate', 'U', 'LacZ hydrolyses allolactose with rate k_Z·LacZ/(K_allo·N_mM·V) per molecule');
+  p('K_crp', 1.3e5, 'glucose/s/fL', 'design; Kuhlman 2007 (glucose lowers induced lac ≈3×; > 50× without CRP)', 'D',
+    'glucose import capacity per fL at which cAMP is half its no-glucose level; 10 mM glucose leaves ≈15% (crpFactor)');
+  p('IEmax', 0, '–', 'Görke & Stülke 2008 (inducer exclusion causes the glucose–lactose diauxie)', 'U',
+    'largest share of LacY blocked by EIIA-Glc while glucose flows in; 0 = inducer exclusion not modelled (LEVELS.md §8.3)');
+
   // --- Medium and drug presets ------------------------------------------------
   p('glucoseHigh', 10, 'mM', '≈0.2% sugar', 'G', 'the "High" glucose preset');
   p('glucoseLow', 0.005, 'mM', 'design', 'G',
@@ -133,6 +177,7 @@
     '0.05 mM would change almost nothing, because glycolysis, not PtsG, limits flux at the reference state');
   p('lactosePresent', 5, 'mM', 'design', 'G', '');
   p('aminoAcidsPresent', 2, 'mM', 'design', 'G', '');
+  p('iptgPresent', 1, 'mM', 'Kuhlman 2007 (1 mM IPTG saturates)', 'G', 'the gratuitous inducer IPTG (m2-lac; enters by diffusion within seconds)');
   p('drugLow', 0.3, 'dose', 'design', 'G', 'the "Low" drug preset; "Full" is 1');
 
   // --- Reference constants for the facts layer (observe-only) ----------------

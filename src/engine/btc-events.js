@@ -35,6 +35,9 @@
     ARREST: 0.05,            // λ < 0.05·λ_ref for GROWTH_TICKS → growth_arrest
     RESUME: 0.2,             // λ > 0.2·λ_ref for GROWTH_TICKS → growth_resumed
     GROWTH_TICKS: 60,
+    FUNCTION_SHARE: 0.10,    // function_seen: the protein carries ≥ 10% of its class …
+    FUNCTION_MIN: 1000,      // … and ≥ 1,000 /s (lactose split: ≥ 500 lactose/s, i.e. 1,000 hexose/s) …
+    FUNCTION_TICKS: 30,      // … for 30 consecutive ticks
   });
 
   function newEpisode() {
@@ -55,8 +58,33 @@
       lastDivisionTick: null,
       lastGene: null,          // id of the gene of the most recent applied gene command (facts.lastCommandedGene)
       genes,
+      fnRun: new Array(nGenes).fill(0),          // function_seen: consecutive ticks meeting the condition
+      fnSeen: new Array(nGenes).fill(false),     // … and whether it has fired (once per cell)
     };
   }
+
+  /**
+   * What gene g's protein contributes to its role's flux this tick, and the class total it is
+   * compared with (spec §11.4 function_seen). Returns false for roles that never fire.
+   */
+  function roleShare(cell, g, out) {
+    const f = cell.flux, p = cell.p;
+    switch (g.role) {
+      case 'glucose-import': {
+        const pts = g.P * g.activity * p.k_pts, other = cell.uBasal * cell.k.V;
+        out.total = f.glucoseIn;
+        out.part = pts + other > 0 ? f.glucoseIn * pts / (pts + other) : 0;
+        return true;
+      }
+      case 'glycolysis': out.total = out.part = f.hexoseToGlycolysis; return true;
+      case 'aa-synthesis': out.total = f.aaMade + f.aaImported; out.part = f.aaMade; return true;
+      case 'aa-import': out.total = f.aaMade + f.aaImported; out.part = f.aaImported; return true;
+      case 'lactose-import': out.total = out.part = f.lactoseIn; return true;
+      case 'lactose-split': out.total = f.hexoseToGlycolysis; out.part = 2 * f.lactoseSplit; return true;
+      default: return false;   // 'none' (flagellin) and 'lac-repressor' never fire
+    }
+  }
+  const SHARE = { part: 0, total: 0 };
 
   /** Opens an on- or off-episode for gene g at tick T (called when a command or config changes its on/off state). */
   function openEpisode(st, g, on, T) {
@@ -116,8 +144,18 @@
 
     if (cell.lastDivision.tick === T) st.lastDivisionTick = T;
 
-    // Gene episodes
+    // function_seen: once per cell, when a protein has visibly done its job for 30 ticks.
     const genes = cell.genes;
+    for (let i = 0; i < genes.length; i++) {
+      if (st.fnSeen[i]) continue;
+      const g = genes[i];
+      if (!roleShare(cell, g, SHARE)) continue;
+      const ok = SHARE.total > 0 && SHARE.part >= TH.FUNCTION_SHARE * SHARE.total && SHARE.part >= TH.FUNCTION_MIN;
+      st.fnRun[i] = ok ? st.fnRun[i] + 1 : 0;
+      if (st.fnRun[i] >= TH.FUNCTION_TICKS) { st.fnSeen[i] = true; cell.emit('function_seen', { gene: g.id }); }
+    }
+
+    // Gene episodes
     for (let i = 0; i < genes.length; i++) {
       const g = genes[i], ep = st.genes[i];
       if (ep.kind === 'on') {
@@ -137,5 +175,60 @@
 
   const cloneState = (st) => JSON.parse(JSON.stringify(st));
 
-  return { THRESHOLDS: TH, createState, openEpisode, commandApplied, detect, cloneState };
+  // ---------------------------------------------------------------------------
+  // Watchers (spec §11.2, grammar in §20): 'group.field' or 'genes.<geneId>.field',
+  // resolved through the view (view.geneById for genes). Edge-triggered.
+  // ---------------------------------------------------------------------------
+  const WATCH_GROUPS = Object.freeze(['energy', 'cell', 'clock', 'aminoAcids', 'lactose', 'ribosomes', 'flux', 'lac']);
+  const WATCH_OPS = Object.freeze(['>=', '<=', '>', '<']);
+
+  /** A JSON-safe watcher from a spec, or {error, path, message} if the spec is not valid. */
+  function compileWatcher(cell, spec, existing) {
+    const bad = (path, message) => ({ error: 'bad-value', path, message });
+    if (!spec || typeof spec !== 'object') return bad('', 'a watcher needs {field, op, value}');
+    if (WATCH_OPS.indexOf(spec.op) < 0) return bad('op', 'op must be one of ' + WATCH_OPS.join(' '));
+    if (typeof spec.value !== 'number' || spec.value !== spec.value) return bad('value', 'value must be a number');
+    if (typeof spec.field !== 'string') return bad('field', 'field must be a string');
+    const path = spec.gene !== undefined ? 'genes.' + spec.gene + '.' + spec.field : spec.field;
+    const parts = path.split('.');
+    const view = cell.observe();
+    let gene = null, group = null, field;
+    if (parts[0] === 'genes') {
+      if (parts.length !== 3 || !Object.prototype.hasOwnProperty.call(view.geneById, parts[1])) return bad('field', 'unknown gene in ' + path);
+      gene = parts[1]; field = parts[2];
+      if (typeof view.geneById[gene][field] !== 'number') return bad('field', path + ' is not a number in the view');
+    } else {
+      if (parts.length !== 2 || WATCH_GROUPS.indexOf(parts[0]) < 0 || !view[parts[0]]) return bad('field', 'unknown view group in ' + path);
+      group = parts[0]; field = parts[1];
+      if (typeof view[group][field] !== 'number') return bad('field', path + ' is not a number in the view');
+    }
+    let id = spec.id;
+    if (id === undefined) {
+      let n = existing.length + 1;
+      const taken = (x) => existing.some((w) => w.id === x);
+      while (taken('w' + n)) n++;
+      id = 'w' + n;
+    }
+    if (typeof id !== 'string' || id.length === 0 || id.length > 40) return bad('id', 'id must be a string of 1–40 characters');
+    if (existing.some((w) => w.id === id)) return bad('id', 'a watcher ' + id + ' exists');
+    return { id, path, gene, group, field, op: spec.op, value: spec.value + 0, on: false };
+  }
+
+  function holds(x, op, v) {
+    return op === '>=' ? x >= v : op === '<=' ? x <= v : op === '>' ? x > v : x < v;
+  }
+
+  /** After a step (tick T): fires 'watch' {id, value} for every condition that became true. */
+  function checkWatchers(cell, T) {
+    const view = cell.observe(), ws = cell.watchers;
+    for (let i = 0; i < ws.length; i++) {
+      const w = ws[i];
+      const x = w.gene !== null ? view.geneById[w.gene][w.field] : view[w.group][w.field];
+      const on = holds(x, w.op, w.value);
+      if (on && !w.on) cell.emit('watch', { id: w.id, value: x }, T);
+      w.on = on;
+    }
+  }
+
+  return { THRESHOLDS: TH, WATCH_GROUPS, WATCH_OPS, createState, openEpisode, commandApplied, detect, cloneState, compileWatcher, checkWatchers };
 });

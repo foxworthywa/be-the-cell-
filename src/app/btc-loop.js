@@ -71,8 +71,10 @@
 
   class Loop {
     /**
-     * opts: {now(), raf(fn), caf(id), getCell(), onEvents(events), render(dtReal, stepped), onError(err)?, speed}
+     * opts: {now(), raf(fn), caf(id), getCell(), onEvents(events), render(dtReal, stepped), onError(err)?, speed, halt()?}
      * An error thrown inside a frame stops the loop (running becomes false) and goes to onError.
+     * halt() (levels) is asked after every step; true stops the loop at that tick, so a level run
+     * ends exactly where its monitor ended it.
      */
     constructor(opts) {
       this.now = opts.now;
@@ -82,6 +84,7 @@
       this.onEvents = opts.onEvents || (() => {});
       this.render = opts.render || (() => {});
       this.onError = opts.onError || null;
+      this.halt = opts.halt || null;
       this.speed = opts.speed || 60;
       this.running = false;
       this.acc = 0;
@@ -122,14 +125,17 @@
         this.acc += dtReal * this.speed;
         const want = Math.floor(this.acc / cell.dt);
         const t0 = this.now();
-        let done = 0;
+        let done = 0, halted = false;
         while (done < want) {
+          if (this.halt && this.halt()) { halted = true; break; }
           cell.step();
           done++;
+          if (this.halt && this.halt()) { halted = true; break; }
           if (this.now() - t0 > ENGINE_BUDGET_MS) break;
         }
         this.acc -= done * cell.dt;
-        if (done < want) { this.acc = 0; this.stats.behindFrames++; }   // drop the remainder; never spiral
+        if (halted) { this.acc = 0; this.running = false; this.rafId = 0; }
+        else if (done < want) { this.acc = 0; this.stats.behindFrames++; }   // drop the remainder; never spiral
         this.lastDone = done;
         this.stats.record(done, this.now() - t0, dtReal, cell.dt, this.speed);
         this.onEvents(cell.takeEvents());

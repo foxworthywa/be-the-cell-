@@ -84,21 +84,26 @@
   }
 
   /**
-   * openSheet({title, build(body, close), onClose, className}) → {close, body}.
+   * openSheet({title, build(body, close), onClose, className, closable, backdropClass, label}) → {close, body, sheet, title}.
    * Only one sheet is open at a time; opening another closes the first.
+   * closable: false (level sheets) drops the close button and ignores the backdrop and Escape:
+   * the sheet's own buttons move on. Without a title the header is left out (label names the dialog).
    */
   function openSheet(opts) {
     if (openSheetState) openSheetState.close();
     const root = document.getElementById('sheets');
     const opener = document.activeElement;
     const titleId = 'sheet-title-' + (++sheetCount);
+    const closable = opts.closable !== false;
     const body = h('div', { class: 'sheet-body' });
-    const closeBtn = h('button', { class: 'btn icon-btn sheet-close', 'aria-label': C.sheets.close }, '✕');
-    const sheet = h('div', { class: 'sheet ' + (opts.className || ''), role: 'dialog', 'aria-modal': 'true', 'aria-labelledby': titleId }, [
-      h('div', { class: 'sheet-head' }, [h('h2', { id: titleId, text: opts.title }), closeBtn]),
-      body,
-    ]);
-    const backdrop = h('div', { class: 'sheet-backdrop' }, sheet);
+    const closeBtn = closable ? h('button', { class: 'btn icon-btn sheet-close', 'aria-label': C.sheets.close }, '✕') : null;
+    const titleEl = h('h2', { id: titleId, text: opts.title || '' });
+    const head = opts.title ? h('div', { class: 'sheet-head' }, [titleEl, closeBtn]) : null;
+    const sheet = h('div', {
+      class: 'sheet ' + (opts.className || ''), role: 'dialog', 'aria-modal': 'true',
+      'aria-labelledby': opts.title ? titleId : null, 'aria-label': opts.title ? null : (opts.label || null),
+    }, [head, body]);
+    const backdrop = h('div', { class: 'sheet-backdrop ' + (opts.backdropClass || '') }, sheet);
     let closed = false;
     function close() {
       if (closed) return;
@@ -110,7 +115,7 @@
       if (opener && opener.focus && document.contains(opener)) opener.focus();
     }
     function onKey(e) {
-      if (e.key === 'Escape') { e.preventDefault(); close(); return; }
+      if (e.key === 'Escape') { e.preventDefault(); if (closable) close(); return; }
       if (e.key !== 'Tab') return;
       const f = focusables(sheet);
       if (!f.length) return;
@@ -119,15 +124,19 @@
       else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
       else if (!sheet.contains(document.activeElement)) { e.preventDefault(); first.focus(); }
     }
-    closeBtn.addEventListener('click', close);
-    backdrop.addEventListener('click', (e) => { if (e.target === backdrop) close(); });
+    if (closeBtn) closeBtn.addEventListener('click', close);
+    backdrop.addEventListener('click', (e) => { if (e.target === backdrop && closable) close(); });
     document.addEventListener('keydown', onKey, true);
     opts.build(body, close);
     root.appendChild(backdrop);
-    closeBtn.focus({ preventScroll: true });
-    openSheetState = { close, body, sheet };
+    const first = closeBtn || focusables(sheet)[0];
+    if (first) first.focus({ preventScroll: true });
+    openSheetState = { close, body, sheet, backdrop, title: titleEl, key: opts.key || null };
     return openSheetState;
   }
+
+  /** The open sheet ({close, body, sheet, key, …}) or null. */
+  function currentSheet() { return openSheetState; }
 
   function closeSheet() { if (openSheetState) openSheetState.close(); }
 
@@ -173,5 +182,5 @@
     return layout;
   }
 
-  return { classify, isShort, TABS, mapTab, h, setText, openSheet, closeSheet, question, toast, hideToast, applyToBody };
+  return { classify, isShort, TABS, mapTab, h, setText, openSheet, closeSheet, currentSheet, question, toast, hideToast, applyToBody };
 });

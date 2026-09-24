@@ -90,18 +90,57 @@
   function downloadRun(app) {
     const record = app.cell.runRecord();
     const json = JSON.stringify({ ui: { build: app.build, layout: app.layout, speedHistory: app.speedHistory }, record });
-    const name = 'be-the-cell-run-t' + app.cell.tick + '.json';
+    deliverFile(json, 'be-the-cell-run-t' + app.cell.tick + '.json', C.pwa.shareTitle);
+  }
+
+  /** Hands a JSON file to the student: the share sheet where it works, else a download (LAB_UI §4.5). */
+  function deliverFile(json, name, title) {
     const blob = new Blob([json], { type: 'application/json' });
     let file = null;
     try { file = new File([blob], name, { type: 'application/json' }); } catch (e) { file = null; }
     if (file && navigator.canShare && navigator.canShare({ files: [file] })) {
-      navigator.share({ files: [file], title: C.pwa.shareTitle }).catch((err) => {
+      navigator.share({ files: [file], title }).catch((err) => {
         if (err && err.name === 'AbortError') return;       // the student closed the sheet
         anchorDownload(blob, name);
       });
       return;
     }
     anchorDownload(blob, name);
+  }
+
+  /**
+   * Copies text (LEVELS §10.3): the clipboard API; else a read-only input and execCommand('copy');
+   * else the visible text in selectEl is selected for a long press. Resolves 'copied' or 'failed'.
+   */
+  function copyText(text, selectEl) {
+    const fallback = () => {
+      let ok = false;
+      try {
+        const inp = document.createElement('input');
+        inp.readOnly = true; inp.value = text;
+        inp.style.position = 'fixed'; inp.style.top = '0'; inp.style.left = '-1000px'; inp.style.fontSize = '16px';
+        document.body.appendChild(inp);
+        inp.focus({ preventScroll: true }); inp.select(); inp.setSelectionRange(0, text.length);
+        ok = document.execCommand && document.execCommand('copy');
+        inp.remove();
+      } catch (e) { ok = false; }
+      if (ok) return 'copied';
+      try {
+        if (selectEl) {
+          const range = document.createRange();
+          range.selectNodeContents(selectEl);
+          const sel = window.getSelection();
+          sel.removeAllRanges(); sel.addRange(range);
+        }
+      } catch (e) { /* nothing more to try */ }
+      return 'failed';
+    };
+    try {
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        return navigator.clipboard.writeText(text).then(() => 'copied', () => fallback());
+      }
+    } catch (e) { /* fall through */ }
+    return Promise.resolve(fallback());
   }
 
   function anchorDownload(blob, name) {
@@ -113,5 +152,5 @@
     setTimeout(() => { URL.revokeObjectURL(url); a.remove(); }, 0);
   }
 
-  return { register, autosave, loadAutosave, downloadRun };
+  return { register, autosave, loadAutosave, downloadRun, deliverFile, copyText };
 });

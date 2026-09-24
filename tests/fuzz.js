@@ -10,10 +10,11 @@ const R = BTC.prng;
  * 2–12 random commands at random ticks. Checks the invariants on every tick and
  * returns the first violation as a string, or null.
  */
-function fuzzSequence(index) {
+function fuzzSequence(index, opts) {
   const s = R.seedStream(index, 'm2-fuzz');
-  const c = new H.Cell({ seed: index + 1, start: 'steady' });
-  const ticks = 6 * HOUR;
+  const o = opts || {};
+  const c = new H.Cell({ seed: index + 1, start: 'steady', strain: o.strain, design: o.design });
+  const ticks = o.ticks || 6 * HOUR;
   const nCommands = 2 + Math.floor(R.uniform(s) * 11);
   const at = [];
   for (let i = 0; i < nCommands; i++) at.push(Math.floor(R.uniform(s) * ticks));
@@ -21,7 +22,12 @@ function fuzzSequence(index) {
   let next = 0;
   const bad = (msg) => `sequence ${index}, tick ${c.tick}: ${msg}`;
   for (let tick = 0; tick < ticks; tick++) {
-    while (next < at.length && at[next] === tick) { c.command(randomCommand(s)); next++; }
+    while (next < at.length && at[next] === tick) {
+      const cmd = randomCommand(s);
+      if (o.iptg && cmd.type === 'setMedium') cmd.iptg_mM = R.uniform(s) < 0.5 ? 0 : 1;
+      c.command(cmd);
+      next++;
+    }
     const AA0 = c.AA, M0 = c.mass, gen0 = c.gen;
     c.step();
     if (!(c.E > 0 && c.E < 1)) return bad(`E = ${c.E}`);

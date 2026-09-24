@@ -105,31 +105,48 @@ test('events: a gene switched on goes through tx_start, first_mrna and first_pro
   assert.ok(c.observe().geneById.lacZ.madeSinceOff > 0, 'ribosomes already on the mRNA finish their chains after switch-off');
 });
 
-test('events: glucose removal gives energy_low, energy_none, growth_arrest and dormant; refeeding gives revived, energy_ok, growth_resumed', () => {
+test('events: glucose removal gives energy_low and growth_arrest at once, but no energy_none: a starving cell keeps a little charge (v1.1)', () => {
   const c = warm(4);
   c.command({ type: 'setMedium', glucose_mM: 0 });
   const at = {};
   const collect = () => { for (const e of c.takeEvents()) if (!(e.type in at)) at[e.type] = e.tick; };
   for (let i = 0; i < 1200; i++) { c.step(); collect(); }
   const t0 = 3600;
-  assert.ok(at.energy_low - t0 <= 5 && at.energy_none - t0 <= 10, JSON.stringify(at));
+  assert.ok(at.energy_low - t0 <= 5, JSON.stringify(at));
+  assert.ok(at.growth_arrest - t0 >= 60 && at.growth_arrest - t0 <= 80, JSON.stringify(at));
+  assert.ok(!('energy_none' in at) && !('dormant' in at), `E ${c.E}: ${JSON.stringify(at)}`);
+  const f = OBS.facts(c);
+  assert.deepEqual([f.medium, f.carbon, f.energy, f.growth, f.limiting], ['none', 'none', 'low', 'arrested', 'no-carbon']);
+});
+
+test('events: when ATP runs out, energy_none, then dormant 10 min later; refeeding gives revived, energy_ok, growth_resumed', () => {
+  // Test-only: a larger basal upkeep runs a starving cell's ATP down in minutes instead of hours (g5).
+  const c = warm(4, { params: { upkeepBasal: 0.03 } });
+  c.command({ type: 'setMedium', glucose_mM: 0 });
+  const at = {};
+  const collect = () => { for (const e of c.takeEvents()) if (!(e.type in at)) at[e.type] = e.tick; };
+  for (let i = 0; i < 1800; i++) { c.step(); collect(); }
+  const t0 = 3600;
+  assert.ok(at.energy_low - t0 <= 5 && at.energy_none - t0 <= 600, JSON.stringify(at));
   assert.ok(at.growth_arrest - t0 >= 60 && at.growth_arrest - t0 <= 80, JSON.stringify(at));
   assert.ok(at.dormant - at.energy_none >= 599 && at.dormant - at.energy_none <= 601, JSON.stringify(at));
   const f = OBS.facts(c);
   assert.deepEqual([f.medium, f.carbon, f.energy, f.growth, f.limiting], ['none', 'none', 'none', 'arrested', 'no-carbon']);
   c.command({ type: 'setMedium', glucose_mM: 10 });
   for (let i = 0; i < 1200; i++) { c.step(); collect(); }
-  assert.ok(at.revived <= at.energy_ok && at.energy_ok - 4800 <= 10, JSON.stringify(at));
+  assert.ok(at.revived <= at.energy_ok && at.energy_ok - 5400 <= 10, JSON.stringify(at));
   assert.ok(at.growth_resumed > at.energy_ok, JSON.stringify(at));
   assert.equal(OBS.facts(c).growth, 'normal');
 });
 
-test('facts: schema 1.2 fields, word values only, and a reused output object', () => {
+test('facts: schema 1.3 fields, word values only, and a reused output object', () => {
   const c = warm(5);
   const out = OBS.createFacts();
   const f = OBS.facts(c, out);
   assert.equal(f, out);
-  assert.equal(OBS.FACTS_SCHEMA, '1.2');
+  assert.equal(OBS.FACTS_SCHEMA, '1.3');
+  // 1.3 (LEVELS.md R-E16): the lac fields are null in a strain without the regulation module.
+  assert.deepEqual([f.lacOperator, f.inducer, f.crp], [null, null, null]);
   assert.deepEqual(
     { drug: f.drug, medium: f.medium, glucoseLevel: f.glucoseLevel, carbon: f.carbon, glucoseImport: f.glucoseImport,
       glucoseStep: f.glucoseStep === 'import' || f.glucoseStep === 'enzymes', energy: f.energy,

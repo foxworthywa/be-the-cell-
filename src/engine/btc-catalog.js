@@ -24,7 +24,7 @@
   const v = (id) => P.byId[id].value;
 
   // Roles are what the metabolism reads; a protein counts toward its role's capacity.
-  const ROLES = ['glucose-import', 'glycolysis', 'aa-synthesis', 'aa-import', 'lactose-import', 'lactose-split', 'none'];
+  const ROLES = ['glucose-import', 'glycolysis', 'aa-synthesis', 'aa-import', 'lactose-import', 'lactose-split', 'lac-repressor', 'none'];
 
   function gene(slot, id, o) {
     return Object.freeze({
@@ -36,8 +36,8 @@
       length: o.length,                // protein length L (aa); mRNA is 3L + 60 nt
       location: o.location,
       role: o.role,
-      rRefParam: 'rRef_' + id,         // promoter strength at ×1 (/s per copy)
-      rbsParam: 'b_' + id,
+      rRefParam: o.rRefParam || 'rRef_' + id,   // promoter strength at ×1 (/s per copy)
+      rbsParam: o.rbsParam || 'b_' + id,
       defaultLevel: o.defaultLevel,
       kinetics: o.kinetics,            // parameter ids the role uses
       uniprot: o.uniprot || null,
@@ -71,6 +71,37 @@
   // Slot 7 is free: reserved for level 1.1 decoys and the level 1.7 repressor LacI.
   const RESERVED_SLOTS = Object.freeze([{ slot: 7, reservedFor: 'level 1.1 decoys and 1.7 LacI' }]);
 
+  // --- Strain 'm2-l11' (level 1.1): the lab strain plus a decoy -----------------------
+  // araE, the arabinose–proton symporter: a membrane transporter whose sugar is never in the
+  // medium, so it never does visible work (role 'none'). Promoter and RBS as lacY's; default off.
+  const L11_GENES = Object.freeze(GENES.concat([
+    gene(7, 'araE', { name: 'arabinose–proton symporter AraE', length: 472, location: 'membrane', role: 'none',
+      defaultLevel: 0, kinetics: [], uniprot: 'P0AE24', rRefParam: 'rRef_lacY', rbsParam: 'b_lacY' }),
+  ]));
+
+  // --- Strain 'm2-lac' (level 1.7): the regulated lac operon (spec §13.3) ------------------
+  // Slots 0–6 are the lab genes; lacZ, lacY and lacA are the three cistrons of one
+  // polycistronic transcript (unit 'tu_lac') made from one promoter, which the repressor
+  // LacI (slot 7, its own weak constitutive promoter) blocks through the operator and
+  // cAMP–CRP activates. lacA (galactoside acetyltransferase) has no job here (role 'none').
+  const M2_GENES = Object.freeze([
+    GENES[0], GENES[1], GENES[2], GENES[3],
+    gene(4, 'lacY', { name: 'lactose permease LacY', length: 417, location: 'membrane', role: 'lactose-import',
+      defaultLevel: 1, kinetics: ['k_Y', 'K_Y', 'L_max', 'c_Y'], uniprot: 'P02920', rRefParam: 'rRef_lac' }),
+    gene(5, 'lacZ', { name: 'β-galactosidase LacZ', length: 1024, location: 'cytoplasm', role: 'lactose-split',
+      defaultLevel: 1, oligomer: 4, kinetics: ['k_Z', 'K_Z'], uniprot: 'P00722', rRefParam: 'rRef_lac' }),
+    GENES[6],
+    gene(7, 'lacI', { name: 'lac repressor LacI', length: 360, location: 'cytoplasm', role: 'lac-repressor',
+      defaultLevel: 1, oligomer: 4, kinetics: ['tau_search', 'K_ind'], uniprot: 'P03023' }),
+    gene(8, 'lacA', { name: 'galactoside acetyltransferase LacA', length: 203, location: 'cytoplasm', role: 'none',
+      defaultLevel: 1, oligomer: 3, kinetics: [], uniprot: 'P07464', rRefParam: 'rRef_lac' }),
+  ]);
+  // Transcription units with more than one cistron (every other gene is its own unit), in
+  // order from the promoter. Offsets along the mRNA follow from the cistron lengths.
+  const M2_TUS = Object.freeze([
+    Object.freeze({ id: 'tu_lac', cistrons: Object.freeze(['lacZ', 'lacY', 'lacA']), regulation: 'lac' }),
+  ]);
+
   // Background sectors: the rest of the proteome, not player-controlled in M1 (§5.2).
   const SECTORS = Object.freeze([
     Object.freeze({ id: 'R', name: 'ribosomes', standsFor: '55 r-proteins plus rRNA', lengthParam: 'L_R', rbs: 1 }),
@@ -101,9 +132,30 @@
 
   const STRAINS = Object.freeze({
     'm1-lab': Object.freeze({
-      id: 'm1-lab', genes: GENES, reservedSlots: RESERVED_SLOTS, sectors: SECTORS, coldStart: COLD_START, maxGenes: 16,
+      id: 'm1-lab', genes: GENES, tus: Object.freeze([]), regulation: null,
+      reservedSlots: RESERVED_SLOTS, sectors: SECTORS, coldStart: COLD_START, maxGenes: 16, preset: 'm1-lab-glucose',
+    }),
+    'm2-l11': Object.freeze({
+      id: 'm2-l11', genes: L11_GENES, tus: Object.freeze([]), regulation: null,
+      reservedSlots: Object.freeze([]), sectors: SECTORS, coldStart: COLD_START, maxGenes: 16, preset: 'm2-l11-glucose',
+      presetFrom: 'm1-lab',        // its presets are the lab strain's, with araE added empty
+    }),
+    'm2-lac': Object.freeze({
+      id: 'm2-lac', genes: M2_GENES, tus: M2_TUS, regulation: 'lac',
+      reservedSlots: Object.freeze([]), sectors: SECTORS, coldStart: COLD_START, maxGenes: 16, preset: 'm2-lac-glucose',
     }),
   });
 
-  return { ROLES, STRAINS, LEVELS, MEDIUM_PRESETS, DRUG_PRESETS };
+  // The student's lac design (config.design, level 1.7; fixed for the run). Defaults = wild type.
+  const DESIGN_DEFAULTS = Object.freeze({
+    lac: Object.freeze({ promoter: 1, operator: true, crpSite: true }),
+    lacI: Object.freeze({ allele: 'wt', promoter: 1 }),
+  });
+  const DESIGN_CHOICES = Object.freeze({
+    'lac.promoter': Object.freeze([0.5, 1, 2, 4]), 'lac.operator': Object.freeze([true, false]),
+    'lac.crpSite': Object.freeze([true, false]), 'lacI.allele': Object.freeze(['wt', 'deleted', 'Is']),
+    'lacI.promoter': Object.freeze([1, 10]),
+  });
+
+  return { ROLES, STRAINS, LEVELS, MEDIUM_PRESETS, DRUG_PRESETS, DESIGN_DEFAULTS, DESIGN_CHOICES };
 });

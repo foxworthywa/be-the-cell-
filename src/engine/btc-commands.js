@@ -22,11 +22,13 @@
 })(typeof self !== 'undefined' ? self : this, function () {
   'use strict';
 
-  const TYPES = Object.freeze(['setPromoter', 'setRBS', 'setKnockout', 'setMedium', 'setDrug', 'setMRNAHalfLife', 'setDegradation']);
+  const TYPES = Object.freeze(['setPromoter', 'setRBS', 'setKnockout', 'setMedium', 'setDrug', 'setMRNAHalfLife', 'setDegradation', 'setControls']);
   const CODES = Object.freeze(['unknown-type', 'unknown-gene', 'bad-value', 'locked', 'not-available', 'tick-in-past']);
   const SOURCES = Object.freeze(['user', 'schedule', 'lesson']);
   const GENE_COMMANDS = Object.freeze({ setPromoter: true, setRBS: true, setKnockout: true, setMRNAHalfLife: true, setDegradation: true });
-  const MEDIUM_FIELDS = Object.freeze(['glucose_mM', 'lactose_mM', 'aminoAcids_mM']);
+  const MEDIUM_FIELDS = Object.freeze(['glucose_mM', 'lactose_mM', 'aminoAcids_mM', 'iptg_mM']);   // IPTG: v1.1 (does nothing without LacI)
+  // Commands that set how a gene is transcribed; a regulated gene's transcription is fixed by its operon.
+  const TRANSCRIPTION_COMMANDS = Object.freeze({ setPromoter: true, setKnockout: true, setMRNAHalfLife: true });
   const LEVELS = Object.freeze([0, 0.25, 0.5, 1, 2, 4]);   // 0 is the dial's "off" (the 1/1,000 leak)
 
   const isNum = (x) => typeof x === 'number' && x === x && x !== Infinity && x !== -Infinity;
@@ -81,8 +83,17 @@
     if (GENE_COMMANDS[type] && !(typeof args.gene === 'string' && has(cell.geneById, args.gene))) {
       return bad('unknown-gene', 'no gene ' + args.gene);
     }
+    // flags.userGenes limits which genes the student's commands may name (LEVELS.md R-E12).
+    if (source === 'user' && GENE_COMMANDS[type] && cell.userGenes !== null && cell.userGenes.indexOf(args.gene) < 0) {
+      return bad('locked', 'this level does not let you change ' + args.gene);
+    }
     // A level can lock the student's controls and still run its own program.
     const locked = cell.controls === 'locked' && source === 'user';
+    if (TRANSCRIPTION_COMMANDS[type]) {
+      const g = cell.geneById[args.gene];
+      if (g.regulated) return bad('not-available', args.gene + ' is transcribed from a regulated promoter; its settings are fixed in config.design');
+      if (!g.isLeader) return bad('not-available', args.gene + ' shares the ' + g.d.tu + ' promoter and mRNA; set its first gene');
+    }
     switch (type) {
       case 'setPromoter':
         if (locked) return bad('locked', 'the controls are locked');
@@ -120,6 +131,11 @@
       case 'setDegradation':
         if (!isNum(args.perS) || args.perS < 0 || args.perS > 0.01) return bad('bad-value', 'perS must be in [0, 0.01]');
         return OK;
+      case 'setControls':
+        // The level's own program locks and frees the student's dials (LEVELS.md R-E11).
+        if (source === 'user') return bad('locked', 'only the level can lock or free the controls');
+        if (args.controls !== 'locked' && args.controls !== 'free') return bad('bad-value', 'controls must be locked or free');
+        return OK;
     }
     return bad('unknown-type', 'unknown command ' + type);
   }
@@ -134,10 +150,11 @@
       case 'setPromoter': return { level: levelName(g), rate_perS: g.rate };
       case 'setRBS': return { rbs: g.rbs };
       case 'setKnockout': return { knockout: g.knockout };
-      case 'setMedium': return { glucose_mM: cell.env.glucose_mM, lactose_mM: cell.env.lactose_mM, aminoAcids_mM: cell.env.aminoAcids_mM };
+      case 'setMedium': return { glucose_mM: cell.env.glucose_mM, lactose_mM: cell.env.lactose_mM, aminoAcids_mM: cell.env.aminoAcids_mM, iptg_mM: cell.env.iptg_mM };
       case 'setDrug': return { drug: args.drug, dose: args.drug === 'rifampicin' ? cell.rifDose : cell.cmDose };
       case 'setMRNAHalfLife': return { s: g.halfLife };
       case 'setDegradation': return { perS: g.kdeg };
+      case 'setControls': return { controls: cell.controls };
     }
     return null;
   }
@@ -156,18 +173,20 @@
         if (args.glucose_mM !== undefined) cell.env.glucose_mM = args.glucose_mM;
         if (args.lactose_mM !== undefined) cell.env.lactose_mM = args.lactose_mM;
         if (args.aminoAcids_mM !== undefined) cell.env.aminoAcids_mM = args.aminoAcids_mM;
+        if (args.iptg_mM !== undefined) cell.env.iptg_mM = args.iptg_mM;
         break;
       case 'setDrug':
         if (args.drug === 'rifampicin') cell.rifDose = args.dose; else cell.cmDose = args.dose;
         break;
       case 'setMRNAHalfLife': g.halfLife = args.s; break;
       case 'setDegradation': g.kdeg = args.perS; break;
+      case 'setControls': cell.controls = args.controls; break;
     }
     cell.refreshDerived();
   }
 
   return {
-    TYPES, CODES, SOURCES, GENE_COMMANDS, MEDIUM_FIELDS, LEVELS,
+    TYPES, CODES, SOURCES, GENE_COMMANDS, TRANSCRIPTION_COMMANDS, MEDIUM_FIELDS, LEVELS,
     levelValue, levelName, isOn, canonicalArgs, validate, control, apply,
   };
 });

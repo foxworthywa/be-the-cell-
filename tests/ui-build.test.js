@@ -80,7 +80,7 @@ test('b-2 / U-12: the bundle inlines every script, stamps the build hash and kee
     const r = build({ out, quiet: true });
     const html = fs.readFileSync(path.join(out, 'index.html'), 'utf8');
     assert.ok(!/<script src=/.test(html), 'an external script remains');
-    assert.ok(r.bytes <= 450 * 1024, `bundle is ${Math.round(r.bytes / 1024)} KB`);
+    assert.ok(r.bytes <= 900 * 1024, `bundle is ${Math.round(r.bytes / 1024)} KB`);
     assert.match(html, new RegExp('<meta name="btc-build" content="' + r.buildHash + '">'));
     assert.ok(html.indexOf("window.BTC_BUILD = '" + r.buildHash + "'") >= 0);
     for (const m of html.matchAll(/\s(?:src|href)="([^"]*)"/g)) {

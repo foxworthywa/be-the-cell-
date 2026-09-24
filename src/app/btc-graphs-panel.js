@@ -72,7 +72,9 @@
       // Gene chips.
       this.chips = {};
       const chipRow = h('div', { class: 'chip-row', role: 'group', 'aria-label': G.genesLabel });
+      const gv = app.labConfig.genesVisible;
       for (const id of app.BTC.content.GENE_IDS) {
+        if (gv !== 'all' && Array.isArray(gv) && gv.indexOf(id) < 0) continue;     // background genes get no chip
         const w = C.geneWords(id, app.labConfig.showNames);
         const b = h('button', { class: 'chip gene-toggle', type: 'button', 'aria-pressed': 'false', 'data-gene': id, onclick: () => app.toggleGraphGene(id) }, [
           h('span', { class: 'chip-dot', style: { background: 'var(--g-' + id + ')' } }), h('span', { class: 'sym-plain', text: w.tag }),

@@ -1,5 +1,5 @@
 {
-  "engineVersion": "1.0.0",
+  "engineVersion": "1.1.0",
   "about": "Golden hash (engine spec d-4): steady preset, seed 1, these commands submitted at these ticks, then stepped to `ticks`.",
   "config": {
     "seed": 1,
@@ -117,6 +117,6 @@
     }
   ],
   "ticks": 10000,
-  "presetHash": "7a6e5e1d51cc212b",
-  "hash": "76a483440856cb9e"
+  "presetHash": "3aa3d7ccffd0673e",
+  "hash": "2a00ef8a0cbafc18"
 }

@@ -59,24 +59,43 @@
       };
       const e = this.el;
       e.play = h('button', { class: 'play', type: 'button', 'aria-pressed': 'false', onclick: () => app.togglePause() }, [e.playIcon, e.playWord]);
+      // Levels (LEVELS §4.5, §9 item 9): a "Levels" button at the left end, and the level title in wide.
+      e.levels = h('button', { class: 'btn levels-btn', type: 'button', hidden: true, 'aria-label': C.game.levelsLabel, onclick: () => app.leaveLevel() },
+        [h('span', { class: 'levels-icon', 'aria-hidden': 'true' }), h('span', { class: 'levels-word', text: C.game.levels })]);
+      e.title = h('span', { class: 'st-level-title', hidden: true });
+      root.appendChild(e.levels);
       e.speed = h('button', { class: 'speed-chip', type: 'button', onclick: () => this.openSpeed() }, [e.spMain, e.spSub]);
       e.atp = h('div', { class: 'st-atp', onclick: () => app.showPlot('atp') }, [
         h('span', { class: 'atp-label', text: S.atp }), h('span', { class: 'gauge', 'aria-hidden': 'true' }, e.gaugeFill), e.atpWord]);
       e.growthBox = h('div', { class: 'st-growth', onclick: () => app.showPlot('growth') }, e.growth);
       root.appendChild(e.play);
       root.appendChild(h('div', { class: 'st-time' }, [h('span', { class: 'st-t', text: S.tPrefix }), e.clock, h('span', { class: 'st-sep', text: ' · ' }), e.gen]));
+      root.appendChild(e.title);
       root.appendChild(e.speed);
       root.appendChild(h('div', { class: 'st-row2' }, [e.atp, e.growthBox, e.limit]));
+      this.root = root;
+    }
+
+    /** Level mode: shows the Levels button and the level title (null: the free-play lab). */
+    setLevel(title) {
+      const e = this.el, on = title !== null && title !== undefined;
+      e.levels.hidden = !on;
+      e.title.hidden = !on;
+      LY.setText(e.title, on ? title : '');
+      this.root.classList.toggle('has-levels', on);
+      this.lastRunning = null;
     }
 
     update(view, facts) {
       const app = this.app, e = this.el, speed = app.speed();
       const running = app.isRunning();
-      if (this.lastRunning !== running) {
-        this.lastRunning = running;
+      const can = app.canRun ? app.canRun() : true;
+      if (this.lastRunning !== running || this.lastCan !== can) {
+        this.lastRunning = running; this.lastCan = can;
         e.play.setAttribute('aria-pressed', running ? 'true' : 'false');
         e.play.setAttribute('aria-label', running ? S.pauseLabel : S.playLabel);
         e.play.classList.toggle('is-running', running);
+        e.play.disabled = !can && !running;
         LY.setText(e.playWord, running ? S.running : S.paused);
       }
       LY.setText(e.clock, F.clock(view.t_s, speed <= 10));
@@ -110,7 +129,7 @@
         build: (body, close) => {
           body.appendChild(h('p', { class: 'sheet-note', text: C.speedSheet.note }));
           const list = h('div', { class: 'speed-list', role: 'radiogroup', 'aria-label': C.speedSheet.title });
-          C.speeds.forEach((sp, i) => {
+          (app.speedList ? app.speedList() : C.speeds).forEach((sp, i) => {
             const on = sp.s === app.speed();
             list.appendChild(h('button', {
               class: 'btn row-btn speed-row' + (on ? ' is-current' : ''), type: 'button', role: 'radio',

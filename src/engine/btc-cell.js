@@ -1,4 +1,4 @@
-// @deps btc-math btc-prng btc-params btc-catalog btc-presets btc-genome btc-queue btc-expression btc-metabolism btc-growth btc-commands btc-events btc-observe
+// @deps btc-math btc-prng btc-params btc-catalog btc-presets btc-genome btc-queue btc-regulation btc-expression btc-metabolism btc-growth btc-commands btc-events btc-observe
 /*
  * Be the Cell: the cell. Owns all simulation state and runs the fixed step
  * pipeline of engine spec §7:
@@ -21,25 +21,25 @@
   if (typeof module === 'object' && module.exports) {
     module.exports = factory(require('./btc-math.js'), require('./btc-prng.js'), require('./btc-params.js'),
       require('./btc-catalog.js'), require('./btc-presets.js'), require('./btc-genome.js'), require('./btc-queue.js'),
-      require('./btc-expression.js'), require('./btc-metabolism.js'), require('./btc-growth.js'),
+      require('./btc-regulation.js'), require('./btc-expression.js'), require('./btc-metabolism.js'), require('./btc-growth.js'),
       require('./btc-commands.js'), require('./btc-events.js'), require('./btc-observe.js'));
   } else {
     var B = root.BTC || (root.BTC = {});
-    var api = factory(B.math, B.prng, B.params, B.catalog, B.presets, B.genome, B.queue, B.expression, B.metabolism, B.growth,
-      B.commands, B.events, B.observe);
+    var api = factory(B.math, B.prng, B.params, B.catalog, B.presets, B.genome, B.queue, B.regulation, B.expression, B.metabolism,
+      B.growth, B.commands, B.events, B.observe);
     B.Cell = api.Cell;
     B.ConfigError = api.ConfigError;
     B.ENGINE_VERSION = api.ENGINE_VERSION;
   }
-})(typeof self !== 'undefined' ? self : this, function (M, R, P, C, PRESETS, GENOME, Q, X, MB, GR, CMD, EV, OBS) {
+})(typeof self !== 'undefined' ? self : this, function (M, R, P, C, PRESETS, GENOME, Q, REG, X, MB, GR, CMD, EV, OBS) {
   'use strict';
 
-  const ENGINE_VERSION = '1.0.0';
-  const STATE_SCHEMA = 1;
+  const ENGINE_VERSION = '1.1.0';
+  const STATE_SCHEMA = 2;               // v1.1: IPTG in the medium, transcription units, lac regulation
   const SNAPSHOT_SCHEMA = 1;
   const MRNA_CAPACITY = 512;
   const NASCENT_CAPACITY = 512;
-  const PRESET_ID = 'm1-lab-glucose';
+  const PRESET_ID = 'm1-lab-glucose';     // the lab strain's preset (each strain names its own in the catalog)
   const CHECKPOINT_EVERY = 600;       // ticks between automatic checkpoint hashes (run records, replay.verify)
 
   class ConfigError extends Error {
@@ -61,7 +61,14 @@
       this.slot = d.slot;
       this.index = d.index;
       this.L = d.length;                  // protein length (aa)
-      this.nt = d.mRNALength;             // mRNA length (nt)
+      this.nt = d.mRNALength;             // mRNA length (nt) of the whole transcription unit
+      // Transcription unit: the leader (first cistron) owns the promoter, transcripts and mRNA;
+      // other cistrons share them (linked after construction) and keep their own ribosomes and protein.
+      this.isLeader = d.leader === d.index;
+      this.leader = this;
+      this.tuSize = d.tuSize;
+      this.offset = d.cistronOffset;      // nt from the transcription start to this cistron
+      this.regulated = d.regulation !== null || d.role === 'lac-repressor';
       this.rRef = d.rRef;                 // promoter strength at ×1 (/s per copy)
       this.role = d.role;
       // Controls (hashed)
@@ -72,6 +79,8 @@
       this.halfLife = p.mRNAHalfLife;
       this.kdeg = 0;
       this.activity = d.activity;
+      this.promoterScale = 1;             // design strength of a promoter (config.design: lac ×0.5–4, lacI ×1 or ×10), else 1
+      this.tlCopies = 0;                  // mRNA copies ribosomes can load this tick (per tick, not hashed)
       // Molecules (hashed)
       this.mature = new Q.MoleculeList(MRNA_CAPACITY);
       this.nascent = new Q.NascentQueue(NASCENT_CAPACITY);
@@ -94,6 +103,7 @@
       this.mDecayed = 0;
       this.pCompleted = 0;
       this.newestInitTick = 0;            // start tick of the newest transcript that finished
+      this.degraded = 0;                  // protein degraded this tick (monomers)
     }
 
     refresh(p) {
@@ -132,8 +142,8 @@
 
   // Scratch of the last tick that is not hashed but is kept in snapshots, so a
   // restored cell's view shows the same fluxes (spec §6). Written as float64.
-  const K_SCRATCH = ['M', 'V', 'e0', 'hin', 'xa', 'chi', 'rifF', 'cmF', 'bgTx0', 'W', 'Rtot', 'Rfree', 'gI', 'kInit', 'Relong',
-    'fR', 'Nnasc', 'U', 'Cgly', 'SynCap', 'ImpCap', 'YCap', 'ZMax', 'NA', 'Cin', 'dD', 'vInt', 'lambda', 'Mend'];
+  const K_SCRATCH = ['M', 'V', 'e0', 'hin', 'xa', 'chi', 'sUp', 'sTx', 'sEl', 'rifF', 'cmF', 'bgTx0', 'W', 'Rtot', 'Rfree', 'gI', 'kInit', 'Relong',
+    'fR', 'Nnasc', 'U', 'Cgly', 'SynCap', 'ImpCap', 'YRaw', 'YCap', 'ZMax', 'NA', 'Cin', 'dD', 'vInt', 'lambda', 'Mend', 'lacTx', 'rescued'];
   const FLUX_SCRATCH = ['aaPolymerised', 'aaMade', 'aaImported', 'aaRecycled', 'glucoseIn', 'lactoseIn', 'lactoseSplit',
     'hexoseToGlycolysis', 'hexoseFermented', 'vRun'];
   const LEDGER_SCRATCH = ['supply', 'floor', 'spent', 'supply_perS', 'floor_perS', 'spent_perS'];
@@ -151,11 +161,16 @@
     ['genes[].P', 'f64'], ['genes[].initiations', 'f64'], ['genes[].mMade', 'f64'], ['genes[].pMade', 'f64'],
     ['sectors[].m', 'f64'], ['sectors[].cohorts', 'list'], ['sectors[].mass', 'f64'],
     ['nextMRNAId', 'int'],
-    ['env.glucose_mM', 'f64'], ['env.lactose_mM', 'f64'], ['env.aminoAcids_mM', 'f64'], ['rifDose', 'f64'], ['cmDose', 'f64'],
+    ['env.glucose_mM', 'f64'], ['env.lactose_mM', 'f64'], ['env.aminoAcids_mM', 'f64'], ['env.iptg_mM', 'f64'], ['rifDose', 'f64'], ['cmDose', 'f64'],
     ['s0', 'f64'], ['backupUptake', 'bool'], ['controls', 'enum'],
     ['genes[].txStream', 'stream'], ['genes[].decayStream', 'stream'], ['divisionStream', 'stream'],
     ['ledger.cumulative', 'f64x6'], ['ledger.cumulativeSupply', 'f64'], ['ledger.cumulativeFloor', 'f64'],
     ['seqNext', 'int'], ['pending', 'pending'],
+  ].map(([path, type]) => Object.freeze({ path, type })));
+
+  /** Extra hashed fields of a strain with the regulated lac operon (m2-lac), written after the division stream. */
+  const LAC_STATE_LAYOUT = Object.freeze([
+    ['lac.op', 'int8x2'], ['lac.allo', 'f64'], ['lac.stream', 'stream'],
   ].map(([path, type]) => Object.freeze({ path, type })));
 
   // ---------------------------------------------------------------------------
@@ -181,20 +196,29 @@
     }
     const strain = cfg.strain === undefined ? 'm1-lab' : cfg.strain;
     if (!C.STRAINS[strain]) throw new ConfigError('bad-value', 'strain', 'unknown strain ' + strain);
-    if (cfg.variant !== undefined && cfg.variant !== null) {
-      throw new ConfigError('not-available', 'variant', 'per-student variants are not available in M1');
-    }
-    const medium = Object.assign({ glucose_mM: C.MEDIUM_PRESETS.glucose.high, lactose_mM: 0, aminoAcids_mM: 0, oxygen: false }, plainCopy(cfg.medium) || {});
+    const variant = normalizeVariant(cfg.variant);
+    const design = normalizeDesign(cfg.design, C.STRAINS[strain]);
+    const medium = Object.assign({ glucose_mM: C.MEDIUM_PRESETS.glucose.high, lactose_mM: 0, aminoAcids_mM: 0, iptg_mM: 0, oxygen: false }, plainCopy(cfg.medium) || {});
     if (medium.oxygen) throw new ConfigError('not-available', 'medium.oxygen', 'oxygen is not available in M1');
-    for (const key of ['glucose_mM', 'lactose_mM', 'aminoAcids_mM']) {
+    for (const key of Object.keys(medium)) {
+      if (key !== 'oxygen' && CMD.MEDIUM_FIELDS.indexOf(key) < 0) throw new ConfigError('bad-value', 'medium.' + key, 'unknown medium field ' + key);
+    }
+    for (const key of CMD.MEDIUM_FIELDS) {
       if (!isNum(medium[key]) || medium[key] < 0) throw new ConfigError('bad-value', 'medium.' + key, key + ' must be ≥ 0');
     }
     const drugs = Object.assign({ rifampicin: 0, chloramphenicol: 0 }, plainCopy(cfg.drugs) || {});
     for (const key of ['rifampicin', 'chloramphenicol']) {
       if (!isNum(drugs[key]) || drugs[key] < 0 || drugs[key] > 1) throw new ConfigError('bad-value', 'drugs.' + key, 'dose must be in [0, 1]');
     }
-    const flags = Object.assign({ controls: 'free', backupGlucoseUptake: false, primingSeed: P.byId.s0.value }, plainCopy(cfg.flags) || {});
+    const flags = Object.assign({ controls: 'free', backupGlucoseUptake: false, primingSeed: P.byId.s0.value, userGenes: null }, plainCopy(cfg.flags) || {});
     if (flags.controls !== 'free' && flags.controls !== 'locked') throw new ConfigError('bad-value', 'flags.controls', 'controls must be free or locked');
+    // flags.userGenes (LEVELS.md R-E12): the only genes a 'user' gene command may name; null = all.
+    if (flags.userGenes !== null) {
+      const ids = C.STRAINS[strain].genes.map((g) => g.id);
+      if (!Array.isArray(flags.userGenes) || flags.userGenes.some((id) => ids.indexOf(id) < 0)) {
+        throw new ConfigError('bad-value', 'flags.userGenes', 'userGenes must be null or a list of gene ids of strain ' + strain);
+      }
+    }
     if (!isNum(flags.primingSeed) || flags.primingSeed < 0) throw new ConfigError('bad-value', 'flags.primingSeed', 'primingSeed must be ≥ 0');
     const params = plainCopy(cfg.params) || {};
     for (const id of Object.keys(params)) {
@@ -203,13 +227,61 @@
     }
     let start = cfg.start === undefined ? 'steady' : cfg.start;
     if (isSnapshot(start)) start = plainCopy(start);
-    else if (start !== 'steady' && start !== 'cold') throw new ConfigError('bad-value', 'start', "start must be 'steady', 'cold' or a Snapshot");
+    else if (start !== 'steady' && start !== 'birth' && start !== 'cold') throw new ConfigError('bad-value', 'start', "start must be 'steady', 'birth', 'cold' or a Snapshot");
     const schedule = plainCopy(cfg.schedule) || [];
     if (!Array.isArray(schedule)) throw new ConfigError('bad-value', 'schedule', 'schedule must be an array of {tick, cmd}');
     return {
       engineVersion: ENGINE_VERSION, seed, strain, start, medium, genes: plainCopy(cfg.genes) || {}, drugs, flags, params,
-      schedule, variant: null,
+      schedule, variant, design,
     };
+  }
+
+  /**
+   * config.variant (LEVELS.md R-E3): null, or an opaque JSON-safe object of at most 2 KB. It is
+   * folded into configHash and carried into snapshots and run records; the physics never reads
+   * it (levels draw their variants outside the engine).
+   */
+  function normalizeVariant(v) {
+    if (v === undefined || v === null) return null;
+    if (typeof v !== 'object' || Array.isArray(v)) throw new ConfigError('bad-value', 'variant', 'variant must be null or a plain object');
+    let text;
+    try { text = M.canonicalJSON(JSON.parse(JSON.stringify(v))); } catch (err) { throw new ConfigError('bad-value', 'variant', 'variant must be JSON-safe'); }
+    if (M.utf8(text).length > 2048) throw new ConfigError('bad-value', 'variant', 'variant must be at most 2 KB as canonical JSON');
+    return JSON.parse(text);
+  }
+
+  /**
+   * config.design (LEVELS.md R-E14; strain m2-lac): the student's lac region, fixed for the run.
+   * {lac: {promoter: 0.5|1|2|4, operator: bool, crpSite: bool}, lacI: {allele: 'wt'|'deleted'|'Is',
+   * promoter: 1|10}}; missing fields take the wild-type defaults. Other strains accept only null.
+   */
+  function normalizeDesign(d, strain) {
+    if (!strain.regulation) {
+      if (d !== undefined && d !== null) throw new ConfigError('not-available', 'design', 'strain ' + strain.id + ' has no designable operon');
+      return null;
+    }
+    const src = plainCopy(d) || {};
+    if (typeof src !== 'object' || Array.isArray(src)) throw new ConfigError('bad-value', 'design', 'design must be an object');
+    const out = {};
+    for (const part of Object.keys(src)) {
+      if (!(part in C.DESIGN_DEFAULTS)) throw new ConfigError('bad-value', 'design.' + part, 'unknown design part ' + part);
+    }
+    for (const part of Object.keys(C.DESIGN_DEFAULTS)) {
+      const given = src[part] || {};
+      if (typeof given !== 'object' || Array.isArray(given)) throw new ConfigError('bad-value', 'design.' + part, part + ' must be an object');
+      out[part] = {};
+      for (const key of Object.keys(given)) {
+        if (!(key in C.DESIGN_DEFAULTS[part])) throw new ConfigError('bad-value', 'design.' + part + '.' + key, 'unknown design field ' + key);
+      }
+      for (const key of Object.keys(C.DESIGN_DEFAULTS[part])) {
+        const v = given[key] === undefined ? C.DESIGN_DEFAULTS[part][key] : given[key];
+        if (C.DESIGN_CHOICES[part + '.' + key].indexOf(v) < 0) {
+          throw new ConfigError('bad-value', 'design.' + part + '.' + key, part + '.' + key + ' must be one of ' + C.DESIGN_CHOICES[part + '.' + key].join(', '));
+        }
+        out[part][key] = typeof v === 'number' ? v + 0 : v;
+      }
+    }
+    return out;
   }
 
   function deriveParams(cfg) {
@@ -218,6 +290,10 @@
     if (!(p.substeps >= 1 && Math.floor(p.substeps) === p.substeps)) throw new ConfigError('bad-value', 'params.substeps', 'substeps must be a positive integer');
     if (!(p.dt / p.substeps <= 0.25)) throw new ConfigError('bad-value', 'params.substeps', 'substep h = dt/substeps must be ≤ 0.25 s (keeps the amino-acid update positive, §7.13)');
     if (!(p.m_V > 0)) throw new ConfigError('bad-value', 'params.m_V', 'upkeep must be > 0 (keeps E below 1, §7.13)');
+    if (!(p.upkeepBasal > 0 && p.upkeepBasal <= 1)) throw new ConfigError('bad-value', 'params.upkeepBasal', 'upkeepBasal must be in (0, 1] (keeps E below 1, §7.13)');
+    for (const id of ['n_chiE', 'n_up', 'n_el']) {
+      if (!(p[id] >= 1 && p[id] <= 16 && Math.floor(p[id]) === p[id])) throw new ConfigError('bad-value', 'params.' + id, id + ' must be an integer 1–16');
+    }
     return Object.freeze(p);
   }
 
@@ -244,6 +320,15 @@
       this.genes = this.layout.genes.map((d) => new GeneState(d, this.p));
       this.geneById = {};
       for (const g of this.genes) this.geneById[g.id] = g;
+      // Cistrons of one transcription unit share its transcripts and mRNA molecules.
+      for (const g of this.genes) {
+        if (g.isLeader) continue;
+        g.leader = this.genes[g.d.leader];
+        g.mature = g.leader.mature;
+        g.nascent = g.leader.nascent;
+        g.halfLife = g.leader.halfLife;
+      }
+      this.lac = this.layout.regulation === 'lac' ? REG.createLac(this, cfg.design) : null;
       this.sectors = this.layout.sectors.map((d) => new SectorState(d));
       this.divisionStream = new Int32Array(4);
 
@@ -262,12 +347,13 @@
       this.N = 0;          // transcription odometer (nt travelled by RNA polymerase)
       this.Rbusy = 0;      // ribosomes busy after last tick's initiation (recycled one tick later)
       this.nextMRNAId = 1;
-      this.env = { glucose_mM: 0, lactose_mM: 0, aminoAcids_mM: 0, oxygen: false };
+      this.env = { glucose_mM: 0, lactose_mM: 0, aminoAcids_mM: 0, iptg_mM: 0, oxygen: false };
       this.rifDose = 0;
       this.cmDose = 0;
       this.s0 = cfg.flags.primingSeed;
       this.backupUptake = !!cfg.flags.backupGlucoseUptake;
       this.controls = cfg.flags.controls;
+      this.userGenes = cfg.flags.userGenes;       // genes a 'user' command may name (null = all); config, not state
       // Derived from the above (refreshDerived)
       this.rho = 0;        // rifampicin occupancy
       this.theta = 0;      // chloramphenicol-stalled ribosome fraction
@@ -289,8 +375,10 @@
         emaFactor: 1 - M.detExp(-this.p.dt / this.p.emaTau),
         M: 0, V: 0, e0: 0, hin: 0, xa: 0, chi: 0, rifF: 1, cmF: 1, bgTx0: 0,
         W: 0, Rtot: 0, Rfree: 0, gI: 0, kInit: 0, Relong: 0, fR: 0, Nnasc: 0,
-        U: 0, Cgly: 0, SynCap: 0, ImpCap: 0, YCap: 0, ZMax: 0, NA: 0, Cin: 0,
-        dD: 0, vInt: 0, lambda: 0, Mend: 0,
+        U: 0, Cgly: 0, SynCap: 0, ImpCap: 0, YRaw: 0, YCap: 0, ZMax: 0, NA: 0, Cin: 0,
+        dD: 0, vInt: 0, lambda: 0, Mend: 0, lacTx: 0, rescued: 0,
+        // Hill constants K^n, fixed for the run (the parameters are frozen).
+        KchiEn: M.powInt(this.p.K_chiE, this.p.n_chiE), KupN: M.powInt(this.p.K_up, this.p.n_up), KelN: M.powInt(this.p.K_el, this.p.n_el), KtxN: M.powInt(this.p.K_tx, this.p.n_tx), sUp: 0, sTx: 0, sEl: 0,
       };
       this.lastDivision = divisionRecord(this.genes.length, this.sectors.length);
 
@@ -301,6 +389,7 @@
       this.events = [];
       this.eventState = EV.createState(this.genes.length);
       this.checkpoints = [];
+      this.watchers = [];                  // cell.watch(): edge-triggered conditions on view paths (not hashed)
       this.recorders = [];
       this._view = null;
       this._writer = new M.ByteWriter(32768);
@@ -308,9 +397,11 @@
       if (internal && internal.snapshot) {
         this.fromSnapshot(internal.snapshot);
       } else {
-        if (cfg.start === 'steady') {
-          const preset = PRESETS[PRESET_ID];
-          if (!preset) throw new ConfigError('no-preset', 'start', 'preset ' + PRESET_ID + ' is missing: run tools/make-presets.js');
+        if (cfg.start === 'steady' || cfg.start === 'birth') {
+          // 'birth': the steady preset advanced to just after its first division (V ≈ 1 fL, one gene copy).
+          const presetId = this.layout.preset + (cfg.start === 'birth' ? '-birth' : '');
+          const preset = PRESETS[presetId];
+          if (!preset) throw new ConfigError('no-preset', 'start', 'preset ' + presetId + ' is missing: run tools/make-presets.js');
           this.startFrom(preset.state);
           this._presetHash = preset.hash;
         } else if (cfg.start === 'cold') {
@@ -348,6 +439,11 @@
         s.m = init[0];
         s.mass = init[1] * p.rho;
       }
+      if (this.lac) {
+        const gI = this.genes[this.lac.lacI];
+        gI.P = 4 * p.lacIRef;                  // a cell starts with its usual ≈10 repressor tetramers, operators bound
+        REG.reset(this.lac, true);
+      }
       this.Vbirth = 1;
       this.seedStreams();
     }
@@ -364,8 +460,10 @@
       this.tick = 0;
       this.birthTick += offset;
       for (const g of this.genes) {
-        g.mature.shiftTicks(offset);
-        g.nascent.shiftTicks(offset);
+        if (g.isLeader) {
+          g.mature.shiftTicks(offset);
+          g.nascent.shiftTicks(offset);
+        }
         g.initiations = 0; g.mMade = 0; g.pMade = 0;
       }
       this.gen = 0;
@@ -384,19 +482,31 @@
         R.seedStream(seed, 'decay:' + g.id, g.decayStream);
       }
       R.seedStream(seed, 'division', this.divisionStream);
+      if (this.lac) REG.seed(this, seed);
     }
 
     applyConfig() {
       const cfg = this.config;
-      Object.assign(this.env, { glucose_mM: cfg.medium.glucose_mM, lactose_mM: cfg.medium.lactose_mM, aminoAcids_mM: cfg.medium.aminoAcids_mM });
+      Object.assign(this.env, { glucose_mM: cfg.medium.glucose_mM, lactose_mM: cfg.medium.lactose_mM, aminoAcids_mM: cfg.medium.aminoAcids_mM,
+        iptg_mM: cfg.medium.iptg_mM });
       this.rifDose = cfg.drugs.rifampicin;
       this.cmDose = cfg.drugs.chloramphenicol;
       this.s0 = cfg.flags.primingSeed;
       this.backupUptake = !!cfg.flags.backupGlucoseUptake;
       this.controls = cfg.flags.controls;
+      this.userGenes = cfg.flags.userGenes;
       for (const id of Object.keys(cfg.genes)) {
         const g = this.geneById[id], o = cfg.genes[id], path = 'genes.' + id;
         if (!g) throw new ConfigError('unknown-gene', path, 'no gene ' + id);
+        // A regulated gene's transcription is set by its design (config.design), not by a dial.
+        for (const key of ['level', 'rate_perS', 'mRNAHalfLife_s', 'knockout']) {
+          if (o[key] !== undefined && (g.regulated || !g.isLeader)) {
+            throw new ConfigError('not-available', path + '.' + key, id + ' is transcribed from ' + (g.regulated ? 'a regulated promoter' : 'the ' + g.d.tu + ' promoter') + '; use config.design');
+          }
+        }
+        if (o.initial && o.initial.mRNA !== undefined && !(g.isLeader && g.tuSize === 1)) {
+          throw new ConfigError('not-available', path + '.initial.mRNA', id + ' shares the ' + g.d.tu + ' mRNA');
+        }
         const wasOn = CMD.isOn(g);
         if (o.level !== undefined) {
           if (levelValue(o.level) < 0) throw new ConfigError('bad-value', path + '.level', 'level must be off, 0, 0.25, 0.5, 1, 2 or 4');
@@ -411,7 +521,10 @@
           g.rbs = o.rbs + 0;
         }
         if (o.knockout !== undefined) g.knockout = !!o.knockout;
-        if (g.knockout) this.clearGeneProducts(g);
+        const init0 = o.initial || {};
+        if (init0.clear !== undefined && typeof init0.clear !== 'boolean') throw new ConfigError('bad-value', path + '.initial.clear', 'clear must be true or false');
+        // A knocked-out strain never had the gene; initial.clear empties it without a knockout (R-E6).
+        if (g.knockout || init0.clear === true) this.clearGeneProducts(g);
         if (o.mRNAHalfLife_s !== undefined) {
           if (!isNum(o.mRNAHalfLife_s) || o.mRNAHalfLife_s <= 0) throw new ConfigError('bad-value', path + '.mRNAHalfLife_s', 'half-life must be > 0');
           g.halfLife = o.mRNAHalfLife_s + 0;
@@ -436,7 +549,25 @@
         const on = CMD.isOn(g);
         if (on !== wasOn) EV.openEpisode(this.eventState, g, on, this.tick);
       }
+      if (this.lac) this.applyDesign();
       this.refreshDerived();
+    }
+
+    /**
+     * The student's lac design (config.design), applied at tick 0 on top of the preset:
+     * lacI 'deleted' removes the repressor gene with its protein and mRNA; 'Is' keeps LacI but
+     * it never binds inducer (btc-regulation.js); no operator means nothing blocks the promoter;
+     * the promoter strengths scale the lac and lacI promoters (refreshDerived).
+     */
+    applyDesign() {
+      const lac = this.lac, gI = this.genes[lac.lacI];
+      if (lac.deleted) {
+        gI.knockout = true;
+        this.clearGeneProducts(gI);
+        gI.P = 0;
+      }
+      if (lac.deleted || !lac.operator) REG.reset(lac, false);
+      else for (let c = 0; c < REG.MAX_COPIES; c++) if (lac.op[c] !== 0 && lac.op[c] !== 1) lac.op[c] = 0;
     }
 
     /**
@@ -445,16 +576,18 @@
      * The setKnockout command, by contrast, only stops transcription.
      */
     clearGeneProducts(g) {
-      g.mature.count = 0;
-      g.nascent.len = 0;
-      g.nascent.head = 0;
+      if (g.tuSize === 1) {                     // a cistron of a longer unit shares the unit's mRNA, which stays
+        g.mature.count = 0;
+        g.nascent.len = 0;
+        g.nascent.head = 0;
+      }
       this.Rbusy -= g.cohorts.nSum;
       if (this.Rbusy < 0) this.Rbusy = 0;
       while (g.cohorts.len > 0) g.cohorts.popHead();
     }
 
     addMRNA(g, birthTick) {
-      g.mature.add(this.nextMRNAId, birthTick);
+      g.leader.mature.add(this.nextMRNAId, birthTick);
       this.nextMRNAId = (this.nextMRNAId + 1) | 0;
     }
 
@@ -464,7 +597,21 @@
       this.rho = this.rifDose;
       this.theta = p.thetaMax * this.cmDose;
       this.uBasal = this.backupUptake ? p.uBasal_backup : 0;
+      if (this.lac) {
+        this.genes[this.lac.leader].promoterScale = this.lac.design.lac.promoter;
+        this.genes[this.lac.lacI].promoterScale = this.lac.design.lacI.promoter;
+      }
       for (const g of this.genes) g.refresh(p);
+      for (const t of this.layout.tus) {         // a longer unit is silent only when all its cistrons are knocked out
+        let all = true;
+        for (const m of t.members) if (!this.genes[m].knockout) all = false;
+        if (all) this.genes[t.leader].rate = 0;
+      }
+      for (const g of this.genes) {
+        if (g.isLeader) continue;
+        g.halfLife = g.leader.halfLife;          // cistrons of one unit share its mRNA and its half-life
+        g.pDecay = g.leader.pDecay;
+      }
     }
 
     // --- time ---------------------------------------------------------------
@@ -475,13 +622,16 @@
       const T = this.tick;
       this.applyPending(T);                 // §7.1
       this.deriveStart();                   // §7.2
+      if (this.lac) REG.step(this);         // operators, inducer, cAMP–CRP (v1.1)
       X.initiateTranscription(this);        // §7.3
       X.sectorTranscription(this);          // §7.4
       X.initiateTranslation(this);          // §7.5
       MB.capacities(this);                  // §7.6
       if (this.stub) MB.stubPools(this, this.stub);
       else MB.fastPools(this);              // §7.7
+      if (this.lac) REG.afterPools(this);   // allolactose
       X.completeChains(this);               // §7.8
+      X.rescueStalled(this);                // §7.8b stalled ribosomes on decayed mRNA are released (v1.1)
       X.playerMRNA(this);                   // §7.9
       X.sectorMRNA(this);                   // §7.10
       X.degradeProteins(this);              // §7.11
@@ -489,6 +639,7 @@
       else { this.k.lambda = 0; this.k.Mend = GR.mass(this); }
       EV.detect(this);                      // §11.4, stamped with tick T
       this.tick = T + 1;
+      if (this.watchers.length) EV.checkWatchers(this, T);   // read the view after the step; events stamped T
       if (this.tick % CHECKPOINT_EVERY === 0) this.checkpoints.push({ tick: this.tick, hash: this.hash() });
       for (let i = 0; i < this.recorders.length; i++) this.recorders[i].onTick(this);
     }
@@ -513,8 +664,17 @@
       k.xa = this.AA / k.V / p.K_chiA;
       const xa2 = k.xa * k.xa;
       const chiA = xa2 / (1 + xa2);
-      const chiE = e0 * e0 / (e0 * e0 + p.K_chiE * p.K_chiE);
+      // Energy leg: steep near the growing cell's charge (Hill n_chiE), so ribosome synthesis and
+      // initiation give way as soon as supply falls short, before ATP runs down (v1.1).
+      const chiE = M.hill(e0, k.KchiEn, p.n_chiE);
       k.chi = chiA * chiE;                   // ppGpp-like signal: high when amino acids and energy are plentiful
+      // Energy gates (v1.1), in the order they close as the charge falls: χ (above), then s_up
+      // (regulated upkeep, sector Q and P transcription, amino-acid synthesis), s_tx (unregulated
+      // player promoters), then s_el (ribosome elongation, promoter firing; idle ribosomes
+      // hibernate). Demand falls to what supply allows before ATP runs down.
+      k.sUp = M.hill(e0, k.KupN, p.n_up);
+      k.sTx = M.hill(e0, k.KtxN, p.n_tx);
+      k.sEl = M.hill(e0, k.KelN, p.n_el);
       k.rifF = 1 - this.rho;
       k.cmF = 1 - this.theta;
       this.flux.aaRecycled = 0;
@@ -603,8 +763,9 @@
     getLog() { return copyJSON(this.log); }
 
     // --- events (spec §11.4) --------------------------------------------------
-    emit(type, extra) {
-      const ev = { tick: this.tick, tEnd_s: (this.tick + 1) * this.p.dt, type };
+    emit(type, extra, atTick) {
+      const tick = atTick === undefined ? this.tick : atTick;
+      const ev = { tick, tEnd_s: (tick + 1) * this.p.dt, type };
       if (extra) Object.assign(ev, extra);
       this.events.push(ev);
     }
@@ -618,6 +779,29 @@
 
     attachRecorder(rec) { this.recorders.push(rec); }
     detachRecorder(rec) { const i = this.recorders.indexOf(rec); if (i >= 0) this.recorders.splice(i, 1); }
+
+    // --- watchers (spec §11.2, §20 grammar; v1.1) ------------------------------
+    /**
+     * Registers an edge-triggered watcher and returns its id: a 'watch' event {id, value} fires
+     * at the end of every tick in which the condition becomes true (first check after
+     * registration included). spec: {id?, field, op, value, gene?}; field is a view path
+     * 'group.field' or 'genes.<geneId>.field' (or give gene and a plain field).
+     * Watchers read the view, never the physics; they are kept in snapshots, not hashed.
+     */
+    watch(spec) {
+      const w = EV.compileWatcher(this, spec, this.watchers);
+      if (w.error) throw new ConfigError(w.error, 'watch.' + w.path, w.message);
+      this.watchers.push(w);
+      return w.id;
+    }
+
+    /** Removes a watcher; returns true if it existed. */
+    unwatch(id) {
+      for (let i = 0; i < this.watchers.length; i++) {
+        if (this.watchers[i].id === id) { this.watchers.splice(i, 1); return true; }
+      }
+      return false;
+    }
 
     // --- the view (spec §11.5) ------------------------------------------------
     /** The read-only view: one object, reused, refreshed when the tick has moved on. */
@@ -645,8 +829,10 @@
       w.i32(this.genes.length);
       for (const g of this.genes) {
         w.f64(g.level); w.f64(g.rateOverride); w.f64(g.knockout ? 1 : 0); w.f64(g.rbs); w.f64(g.halfLife); w.f64(g.kdeg); w.f64(g.activity);
-        g.mature.write(w);
-        g.nascent.write(w);
+        if (g.isLeader) {                      // a unit's transcripts and mRNA are written once, with its leader
+          g.mature.write(w);
+          g.nascent.write(w);
+        }
         g.cohorts.write(w);
         w.f64(g.P); w.f64(g.initiations); w.f64(g.mMade); w.f64(g.pMade);
       }
@@ -654,7 +840,7 @@
       for (const s of this.sectors) { w.f64(s.m); s.cohorts.write(w); w.f64(s.mass); }
       w.i32(this.nextMRNAId);
       if (!physicsOnly) {
-        w.f64(this.env.glucose_mM); w.f64(this.env.lactose_mM); w.f64(this.env.aminoAcids_mM);
+        w.f64(this.env.glucose_mM); w.f64(this.env.lactose_mM); w.f64(this.env.aminoAcids_mM); w.f64(this.env.iptg_mM);
         w.f64(this.rifDose); w.f64(this.cmDose);
       }
       // flags
@@ -665,6 +851,7 @@
         for (let i = 0; i < 4; i++) w.i32(g.decayStream[i]);
       }
       for (let i = 0; i < 4; i++) w.i32(this.divisionStream[i]);
+      if (this.lac) REG.write(w, this.lac);    // operator copies, allolactose, operator stream
       // ledger (cumulative)
       for (let i = 0; i < 6; i++) w.f64(this.ledger.cumulative[i]);
       w.f64(this.ledger.cumulativeSupply); w.f64(this.ledger.cumulativeFloor);
@@ -687,14 +874,16 @@
       if (r.i32() !== this.genes.length) throw new ConfigError('bad-state', 'state', 'gene count differs');
       for (const g of this.genes) {
         g.level = r.f64(); g.rateOverride = r.f64(); g.knockout = r.f64() === 1; g.rbs = r.f64(); g.halfLife = r.f64(); g.kdeg = r.f64(); g.activity = r.f64();
-        g.mature.read(r);
-        g.nascent.read(r);
+        if (g.isLeader) {
+          g.mature.read(r);
+          g.nascent.read(r);
+        }
         g.cohorts.read(r);
         g.P = r.f64(); g.initiations = r.f64(); g.mMade = r.f64(); g.pMade = r.f64();
       }
       for (const s of this.sectors) { s.m = r.f64(); s.cohorts.read(r); s.mass = r.f64(); }
       this.nextMRNAId = r.i32();
-      this.env.glucose_mM = r.f64(); this.env.lactose_mM = r.f64(); this.env.aminoAcids_mM = r.f64();
+      this.env.glucose_mM = r.f64(); this.env.lactose_mM = r.f64(); this.env.aminoAcids_mM = r.f64(); this.env.iptg_mM = r.f64();
       this.rifDose = r.f64(); this.cmDose = r.f64();
       this.s0 = r.f64(); this.backupUptake = r.f64() === 1; this.controls = r.f64() === 1 ? 'locked' : 'free';
       for (const g of this.genes) {
@@ -702,6 +891,7 @@
         for (let i = 0; i < 4; i++) g.decayStream[i] = r.i32();
       }
       for (let i = 0; i < 4; i++) this.divisionStream[i] = r.i32();
+      if (this.lac) REG.read(r, this.lac);
       for (let i = 0; i < 6; i++) this.ledger.cumulative[i] = r.f64();
       this.ledger.cumulativeSupply = r.f64(); this.ledger.cumulativeFloor = r.f64();
       this.seqNext = r.f64();
@@ -746,8 +936,9 @@
       for (let i = 0; i < FLUX_SCRATCH.length; i++) w.f64(f[FLUX_SCRATCH[i]]);
       for (let i = 0; i < 6; i++) { w.f64(led.tick[i]); w.f64(led.perS[i]); w.f64(led.fractions[i]); }
       for (let i = 0; i < LEDGER_SCRATCH.length; i++) w.f64(led[LEDGER_SCRATCH[i]]);
-      for (const g of this.genes) { w.f64(g.txStarted); w.f64(g.mCompleted); w.f64(g.mDecayed); w.f64(g.pCompleted); w.f64(g.newestInitTick); }
+      for (const g of this.genes) { w.f64(g.txStarted); w.f64(g.mCompleted); w.f64(g.mDecayed); w.f64(g.pCompleted); w.f64(g.newestInitTick); w.f64(g.degraded); }
       for (const s of this.sectors) { w.f64(s.sigma0); w.f64(s.sigInt); w.f64(s.made); }
+      if (this.lac) for (let i = 0; i < REG.SCRATCH.length; i++) w.f64(this.lac[REG.SCRATCH[i]]);
     }
 
     readScratch(r) {
@@ -756,8 +947,9 @@
       for (let i = 0; i < FLUX_SCRATCH.length; i++) f[FLUX_SCRATCH[i]] = r.f64();
       for (let i = 0; i < 6; i++) { led.tick[i] = r.f64(); led.perS[i] = r.f64(); led.fractions[i] = r.f64(); }
       for (let i = 0; i < LEDGER_SCRATCH.length; i++) led[LEDGER_SCRATCH[i]] = r.f64();
-      for (const g of this.genes) { g.txStarted = r.f64(); g.mCompleted = r.f64(); g.mDecayed = r.f64(); g.pCompleted = r.f64(); g.newestInitTick = r.f64(); }
+      for (const g of this.genes) { g.txStarted = r.f64(); g.mCompleted = r.f64(); g.mDecayed = r.f64(); g.pCompleted = r.f64(); g.newestInitTick = r.f64(); g.degraded = r.f64(); }
       for (const s of this.sectors) { s.sigma0 = r.f64(); s.sigInt = r.f64(); s.made = r.f64(); }
+      if (this.lac) for (let i = 0; i < REG.SCRATCH.length; i++) this.lac[REG.SCRATCH[i]] = r.f64();
     }
 
     // --- snapshot, restore, fork, run record (spec §11.2) ---------------------
@@ -773,7 +965,7 @@
         pending: copyJSON(this.pending),
         log: this.getLog(),
         eventState: EV.cloneState(this.eventState),
-        watchers: [], marks: [],                 // reserved (deferred, spec §20)
+        watchers: copyJSON(this.watchers), marks: [],   // marks are still deferred (spec §20)
         checkpoints: copyJSON(this.checkpoints),
       };
     }
@@ -789,6 +981,7 @@
       this.log = copyJSON(snap.log || []);
       if (snap.eventState) this.eventState = EV.cloneState(snap.eventState);
       this.checkpoints = copyJSON(snap.checkpoints || []);
+      this.watchers = copyJSON(snap.watchers || []);
     }
 
     /** The same cell, with common random numbers from here on (restore of a snapshot). */
@@ -824,7 +1017,8 @@
   Cell.ENGINE_VERSION = ENGINE_VERSION;
   Cell.PRESET_ID = PRESET_ID;
   Cell.STATE_LAYOUT = STATE_LAYOUT;
+  Cell.LAC_STATE_LAYOUT = LAC_STATE_LAYOUT;
   Cell.CHECKPOINT_EVERY = CHECKPOINT_EVERY;
 
-  return { Cell, ConfigError, ENGINE_VERSION, STATE_SCHEMA, STATE_LAYOUT, CHECKPOINT_EVERY };
+  return { Cell, ConfigError, ENGINE_VERSION, STATE_SCHEMA, STATE_LAYOUT, LAC_STATE_LAYOUT, CHECKPOINT_EVERY };
 });

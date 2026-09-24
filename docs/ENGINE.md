@@ -6,6 +6,8 @@
 
 **M1 scope trim.** Items marked *(deferred)* are listed in §20 "Deferred to M1.x (not implemented now)". They are kept in this document as the target design, but M1 does not implement or test them. Everything else in this document is in scope for the first student test.
 
+**Engine 1.1.0** (§22 and §21.1) adds energy homeostasis, transcription units, the regulated lac operon (strain `m2-lac`), the decoy strain `m2-l11`, newborn presets and the level hooks of `docs/LEVELS.md` §8. Where §22 and §7 or §11 differ, §22 wins.
+
 **Normative words:** MUST, MUST NOT and SHOULD. "Proto" marks a value measured with the calibration prototype (§17). Every proto value was produced by the equations in this document, run in Node 22 with seeded runs.
 
 ---
@@ -311,6 +313,7 @@ V   = M/ρ                                                      (fL), ρ = 6.0e8
 e0  = E ;  a0 = AA/V
 hin = e0/(e0+K_in)
 x_a = a0/K_χa ;  χ_a = x_a²/(1+x_a²) ;  χ_e = e0²/(e0²+K_χe²) ;  χ = χ_a·χ_e     (proto χ ≈ 0.47)
+                                                  // v1.1: χ_e = hill(e0, 0.81, 12) and the gates s_up, s_tx, s_el (§22.1)
 rifF = 1 − ρ_rif ;  cmF = 1 − θ
 ```
 
@@ -343,6 +346,7 @@ W       = Σ_i b_i·(m_i + n_i) + Σ_s b_s·m_s          (nascent transcripts co
 R_tot   = mass_R/7336 ;  R_free = max(0, R_tot − Rbusy)     // Rbusy = R_elong right after last tick's push (before its completions):
                                                        // a ribosome that finishes in tick T binds again from T+2 (prototype m.js; §21 row 26)
 g_I     = hin·(0.2 + 0.8·χ)                          (ppGpp/hibernation stand-in; Dai 2016)
+                                                     // v1.1: hin·(0.1·s_el + 0.9·χ), k_on 1.757e-4 (§22.1)
 κ       = k_on·g_I·W/V
 n_bind  = R_free·cmF·(1 − detExp(−κ·dt))
 unit u receives n_u = n_bind·b_u·(m_u+n_u)/W  (players) or n_bind·b_s·m_s/W (sectors)
@@ -684,11 +688,12 @@ const cell = new BTC.Cell(config);            // throws BTC.ConfigError {code, p
 
 ```js
 config = {
-  engineVersion: '1.0.0',                     // optional; if present must equal BTC.ENGINE_VERSION
+  engineVersion: '1.1.0',                     // optional; if present must equal BTC.ENGINE_VERSION
   seed: 20270115,                             // uint32, required
-  strain: 'm1-lab',
-  start: 'steady',                            // 'steady' (preset, reseeded) | 'cold' | Snapshot
-  medium: { glucose_mM: 10, lactose_mM: 0, aminoAcids_mM: 0, oxygen: false },
+  strain: 'm1-lab',                           // v1.1: | 'm2-l11' | 'm2-lac' (§22.5, §22.6)
+  start: 'steady',                            // 'steady' (preset, reseeded) | 'birth' (v1.1, newborn preset) | 'cold' | Snapshot
+  medium: { glucose_mM: 10, lactose_mM: 0, aminoAcids_mM: 0, iptg_mM: 0 /* v1.1 */, oxygen: false },
+  design: null,                               // v1.1, m2-lac only: the lac design (§22.5)
   genes: {                                    // optional per-gene overrides, applied at tick 0 (not logged as commands)
     fliC: { level: 0 /* 'off'|0|0.25|0.5|1|2|4 */, rate_perS: undefined, rbs: 2, knockout: false,
             mRNAHalfLife_s: 180, kdeg_perS: 0, initial: { mRNA: undefined, protein: undefined } }
@@ -697,7 +702,7 @@ config = {
   flags: { controls: 'free' /* | 'locked' */, backupGlucoseUptake: false, primingSeed: 0.01 },
   params: {},                                 // { paramId: value } whitelist = btc-params ids; folded into paramsHash
   schedule: [],                               // [{tick, cmd}] designer/level programs; applied and logged with source:'schedule'
-  variant: null                               // deferred (§20): must be null or absent in M1, otherwise ConfigError
+  variant: null                               // v1.1: opaque JSON ≤ 2 KB, hashed, never read by physics (§22.7)
 }
 ```
 
@@ -727,8 +732,8 @@ config = {
 | `cell.schedule(tick, cmd)` | same shape; tick ≥ cell.tick; for lessons and tests |
 | `cell.getLog()` | a copy of the LogEntry[] |
 | `cell.takeEvents()` | drains Event[] |
-| `cell.watch({id, gene?, field, op, value})` | *(deferred, §20)* registers an edge-triggered watcher; returns id. `op` ∈ `>=`, `<=`, `>`, `<`; `field` is a numeric path in the view using gene ids (grammar in §20) |
-| `cell.unwatch(id)` | *(deferred, §20)* |
+| `cell.watch({id, gene?, field, op, value})` | *(implemented in v1.1, §22.7)* registers an edge-triggered watcher; returns id. `op` ∈ `>=`, `<=`, `>`, `<`; `field` is a numeric path in the view using gene ids (grammar in §20) |
+| `cell.unwatch(id)` | *(implemented in v1.1)* |
 | `cell.observe()` | the View (§11.5); one reused object, refreshed lazily when `view.tick !== cell.tick` |
 | `cell.ledgerSinceMark(label)` | *(deferred, §20)* per-category ATP totals since the `mark` command with that label |
 | `cell.snapshot()` | Snapshot (JSON-safe, exact) |
@@ -741,7 +746,7 @@ config = {
 | `cell.presetHash` (getter) | 16 hex characters, or `null` (§11.1) |
 | `cell.attachRecorder(rec)` / `detachRecorder(rec)` | the engine calls `rec.onTick(cell)` after each step; not hashed |
 | `cell.runRecord()` | `{engineVersion, configHash, presetHash, config, log, finalTick, checkpoints:[{tick, hash}], finalHash}`; checkpoints every 600 ticks, taken automatically |
-| `BTC.replay.run(record \| {config, log}, toTick)` | Cell. Refuses on an engineVersion or configHash mismatch. Skips log entries with `source:'schedule'`; they come from the config |
+| `BTC.replay.run(record \| {config, log}, toTick, {attach}?)` | Cell. Refuses on an engineVersion or configHash mismatch. Skips log entries with `source:'schedule'`; they come from the config. v1.1: `attach(cell)` is called once before the first step (R-E18) |
 | `BTC.replay.verify(record)` | `{ok, mismatchTick?, expected?, got?, finalHash}` |
 
 **Snapshot format:**
@@ -765,7 +770,8 @@ config = {
 | `setPromoter` | `{gene, level}` with level ∈ {'off', 0, 0.25, 0.5, 1, 2, 4}, or `{gene, rate_perS}` with 0 ≤ rate ≤ 0.3 (majors; not offered in the M1 UI) | rejected with `locked` when controls = 'locked' **and** the command's source is `'user'`; the log stores the resolved per-copy rate. Switching from off/knockout to on opens an **on-episode**; switching to off opens an **off-episode** |
 | `setRBS` | `{gene, rbs}` with 0 < rbs ≤ 16 | majors; implemented, not offered in the M1 UI; `locked` rule applies (source `'user'` only) |
 | `setKnockout` | `{gene, knockout: bool}` | designer/tests; knockout does not delete existing protein or mRNA (it stops transcription). A knockout in `config.genes` describes a strain that never had the gene: its mRNA, transcripts in progress and ribosomes on its mRNA are cleared at construction, and `initial.protein` sets the protein (§21 row 31) |
-| `setMedium` | any of `{glucose_mM, lactose_mM, aminoAcids_mM}` ≥ 0 | `oxygen` → rejected `not-available` |
+| `setMedium` | any of `{glucose_mM, lactose_mM, aminoAcids_mM, iptg_mM}` ≥ 0 | `oxygen` → rejected `not-available`; `iptg_mM` is v1.1 (does nothing without LacI) |
+| `setControls` | `{controls: 'locked'\|'free'}` | v1.1 (R-E11): source `'lesson'` or `'schedule'` only; a `'user'` submission is rejected `locked` |
 | `setDrug` | `{drug:'rifampicin'\|'chloramphenicol', dose: 0..1}` | |
 | `setMRNAHalfLife` | `{gene, s}` with 30 ≤ s ≤ 1800 | implemented; hidden until level 1.5 |
 | `setDegradation` | `{gene, perS}` with 0 ≤ perS ≤ 0.01 | implemented; hidden until level 1.4 |
@@ -798,7 +804,7 @@ Every event is `{tick, tEnd_s: (tick+1)·dt, type, gene?, value?, id?}`, stamped
 | `first_mrna {gene}` | first mature mRNA whose `initTick` ≥ episode start |
 | `first_protein {gene}` | after `first_mrna` of the episode, proteins completed since episode start reach the oligomer size (lacZ 4, others 1) |
 | `mrna_gone {gene}` | in an off-episode, the first tick with m = 0 and no nascent transcripts |
-| `function_seen {gene}` | *(deferred, §20)* once per cell. The protein's role contribution is ≥ 10% of its class total **and** ≥ 1,000 /s, for 30 consecutive ticks. Classes: glucose-import share of glucose in; glycolysis: hexose to glycolysis; aa-synthesis and aa-import: shares of aa supply; lactose-import: lactose in; lactose-split: 2·J_Z/hexose to glycolysis (≥ 500 lactose/s). fliC never fires |
+| `function_seen {gene}` | *(implemented in v1.1)* once per cell. The protein's role contribution is ≥ 10% of its class total **and** ≥ 1,000 /s, for 30 consecutive ticks. Classes: glucose-import share of glucose in; glycolysis: hexose to glycolysis; aa-synthesis and aa-import: shares of aa supply; lactose-import: lactose in; lactose-split: 2·J_Z/hexose to glycolysis (≥ 500 lactose/s). fliC never fires |
 | `replication` | dosage step |
 | `division {gen}` | |
 | `energy_low` | E < 0.30; re-armed at E > 0.45 |
@@ -809,7 +815,7 @@ Every event is `{tick, tEnd_s: (tick+1)·dt, type, gene?, value?, id?}`, stamped
 | `aa_low` | a < 0.5×10⁶/fL |
 | `growth_arrest` | λ < 0.05·λ_ref for 60 ticks, λ_ref = 1.18×10⁻⁴ /s |
 | `growth_resumed` | λ > 0.2·λ_ref for 60 ticks |
-| `watch {id}` | *(deferred, §20)* a watcher's condition becomes true (edge) |
+| `watch {id, value}` | *(implemented in v1.1)* a watcher's condition becomes true (edge) |
 
 Test d-2 compares the `command_applied` / `command_rejected` stream of the replay (every field above) with the live run's.
 
@@ -874,7 +880,7 @@ view.scale      { dt_s, substeps }
 5. `'amino-acids'` (s_aa < 0.5)
 6. `'ribosomes'`
 
-**`BTC.observe.facts(cell, out)`** fills `out` (a reused object) with the fields in the table below. **Facts schema 1.2** (`BTC.observe.FACTS_SCHEMA = '1.2'`). Facts contain no numbers: only strings, booleans, `null` and gene ids. They are observe-only, so no physics and no hash depend on them. Every value is computed from the state at the end of the last completed tick, from the last tick's fluxes, and from the event detectors' flags.
+**`BTC.observe.facts(cell, out)`** fills `out` (a reused object) with the fields in the table below. **Facts schema 1.2** (`BTC.observe.FACTS_SCHEMA = '1.2'`; engine 1.1.0 is schema 1.3, which adds `lacOperator`, `inducer` and `crp`, §22.7). Facts contain no numbers: only strings, booleans, `null` and gene ids. They are observe-only, so no physics and no hash depend on them. Every value is computed from the state at the end of the last completed tick, from the last tick's fluxes, and from the event detectors' flags.
 
 **Reference constants** (btc-params, conf. D, §8): λ_ref = 1.18×10⁻⁴ /s; F_ref = 5.8×10⁵ hexose/s (reference flux into glycolysis, §9.1); U_ref = 1.1×10⁶ glucose/s (13,700 PtsG × 80 /s, the reference import capacity at saturation); lacY_ref = 1.0×10⁴ and lacZ_ref = 2.0×10⁴ monomers (the ×1 steady states in glucose, proto 10,460 and 19,460).
 
@@ -966,17 +972,17 @@ A module is `{id, capacities(cell, caps), terms: [{id, kind, category}], rates(c
 
 ### 13.3 Hooks by level
 
-Several of these hooks use items deferred to M1.x (§20): watchers, marks, `function_seen`, `variant.slotOrder`, `runUntil` and the schema compiler. They are built when their level is built, not in M1.
+Several of these hooks use items deferred to M1.x (§20): watchers, marks, `function_seen`, `variant.slotOrder`, `runUntil` and the schema compiler. They are built when their level is built, not in M1. Engine 1.1.0 built watchers, `function_seen`, opaque variants, transcription units and the 1.7 module (§22); `docs/LEVELS.md` §8 is the level contract where it differs from this table (for example, display order is UI, not `variant.slotOrder`).
 
 | Level | What attaches |
 |---|---|
 | 1.1 Starving next to a feast | `variant.slotOrder` shuffles display slots from the `variant` stream; physics reads roles, so nothing leaks; decoys go in the free slot; `function_seen` drives name reveal; counted experiments = counted `setPromoter` commands |
 | 1.2 One gene, many copies | watcher `genes.ptsG.protein >= 500` plus a deadline; sketch scored against the Recorder (deterministic, replayable); `madeSinceOff` shows the continued rise |
-| 1.3 Price of a protein | `flags.primingSeed = 0` (a real threshold, about 30% of default capacity, §14 g6); low starting gly/ptsG; optional finite medium pool (`medium.mode:'finite'`, reserved) |
+| 1.3 Price of a protein | `flags.primingSeed = 0` (a real threshold, about 30% of default capacity, §14 g6; **gone in v1.1**: the energy gates let even 5% restart, §21.1 row 6); low starting gly/ptsG; optional finite medium pool (`medium.mode:'finite'`, reserved) |
 | 1.4 Nothing lasts | `setDegradation` (ssrA-like tag); band watcher; steady state = synthesis/(λ + k_deg) (test d3) |
 | 1.5 Shape is function | allele compiler → {L_eff, activity, kdeg}; `btc-fold.js` (pure HP lattice) sets missense activity; nonsense truncates L (cheaper) with activity 0; frameshift gives activity 0; `setMRNAHalfLife` |
 | 1.6 Hijacked | `injectGenome` adds a replicon with integer dosage; phage mRNAs join W (takeover emerges); early host-shutoff protein multiplies host promoters; restriction enzyme cuts unmethylated DNA at a rate ∝ its count (seeded); lysis threshold gives a terminal state |
-| 1.7 Nobody's in charge | `btc-regulation.js`: operator occupancy per promoter; LacI as a low-copy integer species (reserved flag `stochasticTranslation` for Poisson ribosome initiation on player mRNAs); seeded bind/unbind, search ≈6 min ÷ copies; allolactose as a LacZ side product from Lin; CRP–cAMP from PTS flux; `controls:'locked'` plus `schedule`; truth table (Oehler 1990): wild type ≈1,300×, O1 only ≈20×, lacI null constitutive. **Decision needed** (§15): diauxie framing |
+| 1.7 Nobody's in charge | `btc-regulation.js`: operator occupancy per promoter; LacI as a low-copy integer species (reserved flag `stochasticTranslation` for Poisson ribosome initiation on player mRNAs); seeded bind/unbind, search ≈6 min ÷ copies; allolactose as a LacZ side product from Lin; CRP–cAMP from PTS flux; `controls:'locked'` plus `schedule`; truth table (Oehler 1990): wild type ≈1,300×, O1 only ≈20×, lacI null constitutive. **Decision needed** (§15): diauxie framing. **Built in v1.1** (§22.5): one operator per copy with a leak, integer tetramers, search 300 s ÷ tetramers, allolactose, IPTG, CRP–cAMP; wild type 1,000× |
 | 1.8 Breathing room | `setMedium {oxygen}` enabled; a respiration gene set (membrane, large L); a SUPPLY row at ≈20–24 ATP/glucose (Kukurugya 2024); membrane-area budget ∝ V^(2/3); narrator: "2 vs about 20; textbooks say about 30 for mitochondria" |
 | 1.9 Machines that build machines | R becomes a player tile (σ_R set by the player, no longer by χ); both growth laws already emerge (L1, L2) |
 | Bridge | two Cell instances; drugs carry a target tag (bacterial RNAP, 70S) |
@@ -1009,23 +1015,23 @@ Several of these hooks use items deferred to M1.x (§20): watchers, marks, `func
 | d1 | Doubling promoter strength roughly doubles steady-state protein | 2×/1× concentration ratio, set C, for fliC, ptsG, lacZ: each in [1.7, 2.15]; mean ≥ 1.75 [1.77–1.99] |
 | d2 | Steady state = synthesis/removal | synthesis_perS/(λ·count) = 1 ± 0.07 for fliC ×1, ptsG, lacZ ×1 [0.97–1.02] |
 | d3 | Adding degradation lowers the steady state as predicted | kdeg = λ_ref halves fliC ×1: ratio 0.43–0.57 [0.49–0.51] |
-| e1 | Translation is the largest ATP expense of a growing cell | reference: translation is the largest category and ≥ 1.25× the next [40.9 vs 27.6; 1.48×]; transcription ≤ 6% [3.0]; total spend 7×10⁵–1.3×10⁶ /s [1.00×10⁶]. With fliC ×4 and with ptsG ×0.25, translation is still the largest [38.0, 37.6] |
+| e1 | Translation is the largest ATP expense of a growing cell (v1.1: with ptsG ×0.25 upkeep catches up, §21.1 row 8) | reference: translation is the largest category and ≥ 1.25× the next [40.9 vs 27.6; 1.48×]; transcription ≤ 6% [3.0]; total spend 7×10⁵–1.3×10⁶ /s [1.00×10⁶]. With fliC ×4 and with ptsG ×0.25, translation is still the largest [38.0, 37.6] |
 | e2 | The ATP budget closes every tick | fermentation + floor − Σ spend − N_A·ΔE ≤ 1e−9·max(fermentation, Σspend, 1) on every tick of a 24 h run with random commands |
 | e3 | Upkeep dominates when growth is blocked | cm dose 1: upkeep is the largest category |
 | f1 | A useless protein slows growth | fliC ×1 (3.5% of proteome): −4 to −10% [−6.5]; ×4 (11.5%): −16 to −27% [−21.6] |
 | f2 | Growth falls about linearly with the useless fraction | fliC fractions 3–40% (rate overrides; b up to 16 in the test only): slope 1.6–2.4 per unit fraction [1.89–2.08]; linear-fit R² ≥ 0.98 [≈10% slower per 5%] |
 | f3 | Unneeded lac enzymes cost growth | lacY + lacZ ×1 without lactose (2.9%): −3 to −9% [−5.6] (Dekel & Alon −4.5% at 2.2%) |
-| g1 | No glucose → no ATP → everything stalls | glucose to 0: E < 0.3 within 5 s [0.004 at 5 s]; λ < 0.05 λ0 within 10 s [0]; while E < 1e−3, initiation rates < 1% of before; total mRNA ≤ 0.2 of before at 10 min [0.10]. **Stall window:** starts once E < 1e−3 has held for 60 consecutive ticks (so chains already in flight have finished) and lasts 20 min; over the window every player protein has \|ΔP_i\| < 1 molecule and every `pMade_i` rises by < 1. (Exact equality is not required: at the energy floor the odometer still creeps by about 1e−7 aa/s.) |
+| g1 | No glucose → no ATP → everything stalls (v1.1 criterion: §21.1 row 3) | glucose to 0: E < 0.3 within 5 s [0.004 at 5 s]; λ < 0.05 λ0 within 10 s [0]; while E < 1e−3, initiation rates < 1% of before; total mRNA ≤ 0.2 of before at 10 min [0.10]. **Stall window:** starts once E < 1e−3 has held for 60 consecutive ticks (so chains already in flight have finished) and lasts 20 min; over the window every player protein has \|ΔP_i\| < 1 molecule and every `pMade_i` rises by < 1. (Exact equality is not required: at the energy floor the odometer still creeps by about 1e−7 aa/s.) |
 | g2 | Refeeding recovers with the proteins that already exist | after 20 min: E > 0.8 within 10 s [5 s]; λ ≥ 0.8 λ0 by 5 min [0.85] and ≥ 0.9 by 15 min [1.10] |
-| g3 | Transporter death spiral | ptsG off, no backup: λ(1 h) ≥ 0.9 λ0 [1.01]; λ(6 h) ≤ 0.5 λ0 [0.28]; E(6 h) < 0.5 [0.14]; λ(20 h) ≤ 0.15 λ0 [0.07] |
+| g3 | Transporter death spiral (v1.1: E(6 h) ≥ 0.55, §21.1 row 4) | ptsG off, no backup: λ(1 h) ≥ 0.9 λ0 [1.01]; λ(6 h) ≤ 0.5 λ0 [0.28]; E(6 h) < 0.5 [0.14]; λ(20 h) ≤ 0.15 λ0 [0.07] |
 | g4 | Recovery depends on how much transporter is left | time to 0.5 λ0 after ptsG back on: 20 h-off > 10 h-off > 6 h-off [2.08 > 1.43 > 0.70 h] |
-| g5 | No transporter at all means no recovery | ptsG knockout with initial protein 0, glucose 10. Window starts once E < 1e−3 has held for 60 ticks and lasts 24 h: E ≤ 1e−6 throughout; every player protein has \|ΔP_i\| < 1 molecule and every `pMade_i` rises by < 1 over the window |
-| g6 | Bootstrapping threshold (priming) | starve 20 min, then scale P_ptsG and P_gly by f before refeeding. With s0 = 0: f = 0.2 → no recovery in 4 h (E at floor); f = 0.5 → λ ≥ 0.8 λ0 within 30 min [0.97]. Lab s0 = 0.01: f = 0.15 recovers to ≥ 0.9 λ0 within 6 h [1.02 at 4 h] |
+| g5 | No transporter at all means no recovery (v1.1 criterion: §21.1 row 5) | ptsG knockout with initial protein 0, glucose 10. Window starts once E < 1e−3 has held for 60 ticks and lasts 24 h: E ≤ 1e−6 throughout; every player protein has \|ΔP_i\| < 1 molecule and every `pMade_i` rises by < 1 over the window |
+| g6 | Bootstrapping threshold (priming) (v1.1: the threshold is gone, §21.1 row 6) | starve 20 min, then scale P_ptsG and P_gly by f before refeeding. With s0 = 0: f = 0.2 → no recovery in 4 h (E at floor); f = 0.5 → λ ≥ 0.8 λ0 within 30 min [0.97]. Lab s0 = 0.01: f = 0.15 recovers to ≥ 0.9 λ0 within 6 h [1.02 at 4 h] |
 | g7 | Backup transporters match the ΔptsG phenotype | backupGlucoseUptake on, ptsG off, after 16 h: λ 0.10–0.18 /h [≈0.14; 0.111 at 1.5e5, 0.155 at 2e5] |
-| g8 | Low glucose halves growth (the Low preset does something) | glucose 0.005 mM (the UI's Low), 8 h settle then 12 h average, set C: λ between 0.35 and 0.65 of λ0 [0.47; Td 209 min, E 0.29]; `facts.glucoseLevel = 'low'` and `facts.growth = 'slow'` |
-| h1 | Lactose needs both LacY and LacZ | preinduced 4 h, then lactose only: Y+Z ×1 → Td 90–130 min [104], E > 0.8 [0.87]. The missing gene in each other arm is a **knockout with initial protein 0** (`genes.<id>.knockout: true, initial.protein: 0`), so no leak protein exists: Y only (lacZ knocked out), Z only (lacY knocked out), neither (both knocked out) → λ < 0.01 λ0 and E < 0.01 within 1 h [≈1e−9] |
+| g8 | Low glucose halves growth (the Low preset does something) and (v1.1) the charge stays ≥ 0.7 | glucose 0.005 mM (the UI's Low), 8 h settle then 12 h average, set C: λ between 0.35 and 0.65 of λ0 [0.47; Td 209 min, E 0.29]; `facts.glucoseLevel = 'low'` and `facts.growth = 'slow'` |
+| h1 | Lactose needs both LacY and LacZ (v1.1 energy criterion: §21.1 row 9) | preinduced 4 h, then lactose only: Y+Z ×1 → Td 90–130 min [104], E > 0.8 [0.87]. The missing gene in each other arm is a **knockout with initial protein 0** (`genes.<id>.knockout: true, initial.protein: 0`), so no leak protein exists: Y only (lacZ knocked out), Z only (lacY knocked out), neither (both knocked out) → λ < 0.01 λ0 and E < 0.01 within 1 h [≈1e−9] |
 | h2 | LacY without LacZ: lactose gets in but is not split | Y only (lacY ×1 preinduced, lacZ knockout with initial protein 0): Lin > 0.5 mM within 60 s [1.31 mM]; `flux.lactoseSplit` = 0 exactly (ZMax = 0); `facts.lactoseBlock = 'no-lacZ'`. Leak arm (lacZ left at its default "off", leak only, never switched on): cumulative lactoseSplit over the first hour < 1% of the Y+Z ×1 arm's, and `facts.lactoseBlock` is still `'no-lacZ'` |
-| h3 | (documented gap) a basal-lac cell cannot adapt to lactose alone without oxygen | uninduced cell in lactose only: λ < 0.01 λ0 after 10 h; `facts.lactoseBlock = 'no-lacY'` [LacY 6.4, LacZ 2.0 monomers]. Asserts the current behaviour and links §15 item 1 |
+| h3 | (replaced in v1.1 by h3/h3b/h3c, §21.1 row 10) a basal-lac cell cannot adapt to lactose alone without oxygen | uninduced cell in lactose only: λ < 0.01 λ0 after 10 h; `facts.lactoseBlock = 'no-lacY'` [LacY 6.4, LacZ 2.0 monomers]. Asserts the current behaviour and links §15 item 1 |
 | h4 | Negative control: lactose outside does nothing without LacY | two cells, same seed, `start:'cold'`, lacY knockout with initial protein 0 (`genes.lacY: {knockout: true, initial: {protein: 0}}`), lactose 5 mM vs 0, glucose 10: after 20,000 ticks the **physics digests** (§6: hash without env, drugs and pending commands) are identical, and Lin stays exactly 0 on every tick of both runs [proto with a true knockout: identical]. The full `hash()` differs, because `env.lactose_mM` is hashed state; that is expected. (The v1.0 proto run that printed "identical? false" used warm cells with lacY merely "off", whose 1/1000 leak makes a few LacY; that is not a knockout.) |
 | i1 | Rifampicin signature | total mRNA at 10 min ≤ 0.2 [0.10]; translation at 5 min ≥ 0.6 [0.84] and at 20 min ≤ 0.15 [0.08]; λ(5 min) > 0.5 λ0 [0.81]; an on-gene mid-rise keeps rising ≥ 3 min, then changes < 1% between 25 and 40 min [+29.5%, then flat]; ATP use at 5 min ≥ 0.8 [0.89] and at 20 min ≤ 0.5 [0.35] |
 | i2 | Chloramphenicol signature | translation ≤ 0.03 of before from the next tick [0.020]; λ ≤ 0.05 λ0 [0.019]; mRNA at 10 min in [0.8, 1.2] [1.02] and at 40 min in [0.8, 1.3] (plateau) [1.01]; ATP use falls ≥ 40% within 1 tick [−67%; the model overshoots the ≈50% in the literature, disclosed]; E ≥ E_before [0.95] |
@@ -1081,6 +1087,7 @@ Several of these hooks use items deferred to M1.x (§20): watchers, marks, `func
 1. **Adapting to lactose from basal lac without oxygen.** The model predicts no adaptation (h3). Koch 1975 measured 25–65 min lags, but aerobically.
    - Decide before level 1.7: frame the level as glucose + lactose diauxie (glucose pays for building LacY and LacZ), add a small glycogen reserve, or add CRP/ppGpp reallocation.
    - MUST NOT be "fixed" by weakening upkeep, because that would break criterion g.
+   - **Engine 1.1.0** took the CRP/ppGpp option (energy gates, §22.1; the lac promoter spared, §22.5). A glucose-grown m2-lac cell with a few basal LacY adapts after 125–146 min (12 seeds); growing cells' upkeep is unchanged. Still open: (a) LEVELS.md RT-2 asks 20–60 min; the lag here is set by 2 ATP per hexose (half the lactose growth rate needs most of the induced LacY, since upkeep takes ≈30% of the lactose supply) and by the first full lac mRNA taking 45–50 min at a charge near 0.12. Real single cells lag < 50 min to 3 h (Julou 2020); (b) a cell with no LacY never adapts, and the m2-lac preset is chosen to carry a few (§22.6); (c) a glycogen/RNA-turnover reserve holding starving cells near 0.5 (Chapman 1971) is the candidate for both, together with preferential lac initiation in the lag (Rickenberg 1955; Jacobson 1970). Decision for the instructor and the level designer: accept 2-h lags in level 1.7 (L phases ≥ 3·lagP90 ≈ 7 h under LEVELS.md §7.7.3), start L phases after both-sugar phases (lag 64–71 min), or ask for the reserve in a later engine.
 2. **Values to verify before the spring release:**
    - UniProt lengths;
    - 7,336 aa per ribosome;
@@ -1180,9 +1187,9 @@ Its numbers are the acceptance targets that the production engine MUST reproduce
 15. **Unverified values** are flagged in the parameter table (§15 item 2).
 16. **Always shown on screen:** the time compression, the molecules per dot for every species, and the "stands for ~N genes" badges.
 17. **Protein degradation** (hidden until level 1.4) returns the amino acids to the pool; the ATP that proteases spend is not charged.
-18. **ATP under carbon limitation.** With too little carbon the energy charge falls much further here than in real cells (glucose Low: E ≈ 0.04 at 30 min, 0.28 at 4 h; a starved cell reaches the E floor, 3.5·10⁻⁹ mM of ATP, shown as "< 0.01 mM"). Real cells keep their charge high from stored reserves (glycogen) and by slowing their ribosomes (ppGpp). Planned for spring: translation demand gives way to low E sooner.
-19. **No lactose adaptation.** Real *E. coli* moved to lactose adapts after a lag. Here a cell that is switched to lactose with too little LacY and LacZ runs out of ATP and stops (LacY import needs ATP, so the fall feeds itself). The About sheet gives the recipe that works (LacY and LacZ ×4 for an hour with glucose present); adding glucose back restarts a stopped cell. BIOLOGY.md open item 1 lists the options for spring.
-20. **Diauxie.** Real *E. coli* keeps its lac genes nearly off while glucose is present (catabolite repression, inducer exclusion). Here the student sets them, so glucose and lactose can be used together.
+18. **ATP under carbon limitation** (v1.0 text; resolved in v1.1). With too little carbon the energy charge fell much further than in real cells (glucose Low: E ≈ 0.04 at 30 min, 0.28 at 4 h; a starved cell at the floor). Engine 1.1.0 gates demand by the charge (§22.1): Low glucose keeps E 0.73, a starving cell holds ≈0.1 for about an hour and runs down over hours. The gates respond to the charge only; real ppGpp and cAMP also respond to carbon flux, and real reserves (glycogen) are not modelled (BIOLOGY.md simplification 4).
+19. **Lactose adaptation** (v1.1). A lab-strain cell switched to lactose with a few LacY and LacZ now pauses and adapts; the m2-lac wild type adapts after ≈2 h, longer than oxygen-breathing cells (§15 item 1). A cell with no LacY at all cannot start. The About sheet's v1.0 recipe ("×4 for an hour") is out of date.
+20. **Diauxie.** In the lab strain the student sets the lac genes, so glucose and lactose can be used together. Strain m2-lac (level 1.7) has catabolite repression through CRP–cAMP (§22.5); inducer exclusion is off by default. BIOLOGY.md simplification 18 lists the lac operon's simplifications.
 21. **Drug names.** The drugs are "rifampicin-type" and "chloramphenicol-type": each acts only as §7.14 describes (instant, no uptake, no resistance).
 
 ---
@@ -1219,11 +1226,11 @@ These items are **out of scope for the first student test**. M1 MUST NOT impleme
 
 | Item | Where it is specified | What M1 keeps |
 |---|---|---|
-| Watchers: `cell.watch`, `cell.unwatch`, the `watch` event | §11.2, §11.4 | snapshot field `watchers: []` (always empty) |
+| Watchers: `cell.watch`, `cell.unwatch`, the `watch` event | §11.2, §11.4 | **built in v1.1** (§22.7) |
 | Marks: the `mark` command and `cell.ledgerSinceMark` | §11.2, §11.3 | snapshot field `marks: []`; `mark` is rejected `unknown-type` |
-| `function_seen` event | §11.4 | `view.genes[i].functionSeen`, always `false` |
-| `variant.slotOrder` and the `variant` PRNG stream | §4, §11.1, §13.3 | `config.variant` must be `null` or absent |
-| The full genome-schema compiler (replicons, polycistronic TUs, operator sites, alleles, compartments) | §13.1 | the inert catalog fields of §5.1; `btc-genome.js` compiles the flat catalog only |
+| `function_seen` event | §11.4 | **built in v1.1** |
+| `variant.slotOrder` and the `variant` PRNG stream | §4, §11.1, §13.3 | v1.1: `config.variant` is opaque JSON (hashed, never read); `slotOrder` stays unbuilt (display order is UI; LEVELS.md §8.2) and the stream unused |
+| The full genome-schema compiler (replicons, polycistronic TUs, operator sites, alleles, compartments) | §13.1 | v1.1 compiles polycistronic TUs and the lac regulation (§22.4); replicons, alleles and compartments stay unbuilt |
 | `cell.runUntil(pred, maxTicks)` | §11.2 | – (tests use `advance`/`advanceTo` and loops) |
 | `setRBS` and `setPromoter {rate_perS}` **in the UI** | §11.3 | the engine commands stay implemented and tested (b1, f2); the UI never offers them |
 
@@ -1282,3 +1289,137 @@ Critique items are numbered in the order of `critique.json` (1–29). "Coordinat
 | 41 | Shared-module details: `BTC.dots.pos(key, index, epoch, rect?, out?)` returns (u, v) in [0,1)² when `rect` is null, plus `hash01` (membrane positions) and `polysomeScale` (1 → 10 above 400, back below 320); Recorder channels are `{name, read(cell, view)}` with `BTC.Recorder.labChannels(cell)` for the 27 lab channels, and thinning keeps samples on multiples of the doubled interval; `BTC.narrate.createMemory({phrases, showNames, dt})` carries a default phrase table (the app passes `BTC.content.genes`) | §12 | implementation |
 
 **Not applied in this document:** critique 26 ("commit `dist/index.html`") is rejected by coordinator decision 8. The published Pages site serves the single-file bundle as its `index.html`, so a student or instructor who needs the offline file saves that page (README explains how); committing a generated file would add a freshness check to every commit and a second copy that can drift from the source. The UI-only items (10, 21, 22, 27, 29 and the UI halves of 4, 5, 6, 9, 11, 23) are applied in LAB_UI.md v1.1.
+
+### 21.1 Engine 1.1.0 (behaviour changes and the tests changed on purpose)
+
+Engine 1.1.0 implements §22. Every test whose claim or number changed on purpose is listed here; the old criterion is in §14 and the new one in the test title (the test file prints the measured value).
+
+| # | Change | Where | Why |
+|---|---|---|---|
+| 1 | `ENGINE_VERSION` 1.1.0, `STATE_SCHEMA` 2 (lac state, transcription units); presets and golden hash regenerated (golden `2a00ef8a0cbafc18`) | §22, d-4, d-7 | LEVELS.md R-E1 |
+| 2 | Energy homeostasis: χ energy leg Hill 12 at 0.81 (was Hill 2 at 0.5); gates s_up, s_tx, s_el; basal upkeep share; rescue of paused ribosomes; `gI_basal` 0.2 → 0.1 with `k_on` 1.6×10⁻⁴ → 1.757×10⁻⁴ (reference k_init unchanged) | §22.1–22.3 | task 1: carbon-limited cells keep E high |
+| 3 | g1: no longer "E < 1e−3, then a 20-min stall window at the floor". Now: E < 0.3 within 5 s, initiation < 1% of before after the first minute, and a 20-min window (10–30 min) with E in [0.05, 0.2] and no protein made | §14.1 g1 | the cell keeps a little charge (§22.1) |
+| 4 | g3: E(6 h) < 0.5 → E(6 h) ≥ 0.55 (the charge stays up while growth spirals down) | §14.1 g3 | §22.1 |
+| 5 | g5: "E ≤ 1e−6 for 24 h" → E < 0.15 at 1 h, < 0.01 at 24 h, never rising, every protein changing < 1% | §14.1 g5 | ATP now runs down over hours |
+| 6 | g6: the priming threshold is gone. From E = 0 (set by the test), f = 0.2 restarts in 13 s without the seed and 6 s with it; asserted: slower without the seed, within 60 s | §14.1 g6, §15 | every large ATP user is gated, so supply wins from the floor |
+| 7 | g8: adds E ≥ 0.7 (measured 0.73; v1.0 0.29) | §14.1 g8 | task 1(a) |
+| 8 | e1: with ptsG ×0.25 upkeep (37%) now edges out translation (34%); asserted: upkeep share rises by > 5 points over the reference and the two lead | §14.1 e1 | homeostasis keeps upkeep at full rate while growth slows (Pirt) |
+| 9 | h1: "E < 0.01 within 1 h" holds only for LacY-without-LacZ (lactose killing, Dykhuizen & Hartl 1978); Z-only and neither hold E in [0.05, 0.2] | §14.1 h1 | §22.1 |
+| 10 | h3 (documented gap) replaced: h3 (m2-lac wild type adapts after 60–180 min, never dormant, set C), h3b (10× and 100× the lac proteins shorten the lag), h3c (the lab strain at its leak never adapts) | §14.1 h3 | task 2 |
+| 11 | events test split: glucose removal gives `energy_low` and `growth_arrest` but no `energy_none` in 20 min; the `energy_none`/`dormant`/`revived` sequence is checked with `params.upkeepBasal` 0.03 (test-only faster drain) | §11.4 | §22.1 |
+| 12 | facts schema 1.3 (`lacOperator`, `inducer`, `crp`; null without the module) | §11.5, §22.7 | LEVELS.md R-E16 |
+| 13 | LAB_UI U-4 scenarios: the dormancy, `gene.noatp` and `lac.toofew` scenarios use `params.upkeepBasal` 0.03 (0.3 for `lac.toofew`, with lac ×1 for 5 min) so ATP runs out; new m2-lac scenario covers the facts 1.3 values. UI check P4: the ATP word under starvation is "low", not "very low" | LAB_UI §P4, U-4 | §22.1 |
+| 14 | d-7 covers all six presets; p1 adds m2-lac (≥ 40,000 ticks/s) and a two-run 1.7 timing (≤ 2 s) | §14.3 | R-E2, R-E17 |
+| 15 | Bundle budget 450 KB → 900 KB (warn 750 KB) in build.js and b-2, per LEVELS.md §2 | §14.3 b-2 | the level framework |
+| 16 | RT-2 asserts the engine's lag (60–180 min on 12 seeds; measured 125–146), not LEVELS.md's 20–60 min; RT-1 "almost none" is checked on the seed-set mean (≤ 1%) with no seed above 2% (Is on lactose: one seed of four reaches 1.02%) | §22.8 | open item §15 item 1 |
+
+---
+
+## 22. Engine 1.1.0: energy homeostasis, the regulated lac operon and the level hooks
+
+This section is normative for engine 1.1.0 and overrides §7 where they differ. The reference cell (§9) is unchanged: Td 98.1 min, E 0.896, φ_R 9.5%, χ 0.474, k_init 0.154 /s, glucose 12.5 mmol/gDW/h, upkeep 25.8% of spending.
+
+### 22.1 Energy gates (ppGpp, hibernation and upkeep cuts as functions of the charge)
+
+`hill(x, K, n) = xⁿ/(xⁿ + Kⁿ)` (`BTC.math.hill`, with `powInt`; 0 for x ≤ 0). At the start of the tick (§7.2), from e0:
+
+```
+χ_e  = hill(e0, K_chiE = 0.81, n_chiE = 12)          (was e0²/(e0²+0.5²); χ_ref stays 0.47)
+s_up = hill(e0, K_up = 0.6, n_up = 12)                 regulated upkeep, σ_Q and σ_P, amino-acid synthesis
+s_tx = hill(e0, K_tx = 0.45, n_tx = 8)                 unregulated player promoters
+s_el = hill(e0, K_el = 0.3, n_el = 8)                  ribosome elongation, all promoter firing, basal initiation, rescue
+```
+
+The gates close in this order as E falls: χ (growth machinery, initiation), s_up, s_tx, s_el. Each is ≥ 0.99 at the reference charge, so the reference cell is unchanged.
+
+- §7.3: `μ_i = g_copies · r_i · hin · rifF · s_el · dt`, with `g_copies = dosage · s_tx` for an unregulated unit and `k.lacTx` (§22.5) for the lac unit (the lac promoter is not gated by s_tx: cAMP–CRP is high exactly when carbon is short; Jacobson 1970).
+- §7.4: `σ⁰_Q = k_M·m_Q*·rifF·s_up`, `σ⁰_P = β_P·g·f_P·rifF·s_up`.
+- §7.5: `g_I = hin·(gI_basal·s_el + (1 − gI_basal)·χ)`, gI_basal = 0.1 (hibernation of idle ribosomes; Jacobson 1970: protein synthesis 10–15% of exponential in the diauxic lag), k_on = 1.757×10⁻⁴ so that k_init at the reference state is unchanged.
+- §7.7, inside every substep, from the substep's e:
+  ```
+  s_E = hill(e, K_el, n_el) ;  s_U = hill(e, K_up, n_up)
+  ṽ   = v_max·s_aa·s_E/(e+K_E)                                   // running ribosomes pause
+  upkeep tilde = m_V·V/(e+K_m)·(upkeepBasal + (1 − upkeepBasal)·s_U)   // upkeepBasal = 2×10⁻⁴
+  J̃_syn = min(Syn0·s_U·e/((e+K_E)·u), F̃/K_syn)                  // amino-acid synthesis stops with housekeeping
+  ```
+  The MPE form, the ledger identity and the positivity argument (§7.13) are unchanged: every new factor is a non-negative multiplier of an existing demand term, evaluated at the substep's start.
+
+### 22.2 Rescue of paused ribosomes (§7.8b, after completions)
+
+A ribosome paused by s_el on an mRNA that is cut up is released by trans-translation and its unfinished chain is broken down. Each tick, from every cohort of every unit, the share `(1 − hill(E, K_el, n_el))·(1 − e^{−k_M·dt})` is released: `aaRecycled += share·nascentAA`, `Rbusy −= share·nSum`, `k.rescued` records the count. Mass and the amino-acid balance are conserved (m1); the ATP already spent is lost. In a growing cell the share is ≈ 0.
+
+### 22.3 LacY without energy (facilitated diffusion)
+
+`Yp = YRaw·(sat(L_out) − sat(L_in))·K_E/(e+K_E)` when the outside is higher (no ATP; LacY in a de-energised cell lets lactose run down its gradient). It adds to `lactoseIn` and Lin, not to the transport ledger.
+
+### 22.4 Transcription units (§13.1)
+
+The genome compiler builds transcription units from `C.STRAINS[s].tus`. The leader (first cistron) owns the promoter, the nascent ring, the mature mRNA list and its decay; followers share them. Cistron i starts at `offset_i = Σ_{j<i} 3·L_j` nt; the unit's mRNA is `Σ 3·L_j + utr` nt (m2-lac: lacZ 0, lacY 3,072, lacA 4,323; 4,992 nt). A follower's translatable copies are the mature molecules plus the transcripts whose polymerase has passed its offset. Division halves leaders only. Promoter, knockout and half-life commands on a follower or a regulated unit are rejected `not-available` ("use config.design").
+
+### 22.5 The lac regulation module (`btc-regulation.js`, strain m2-lac; LEVELS.md R-E13)
+
+State (hashed): operator copies `op[2]` (1 = repressor bound; copy 1 exists after replication and starts in copy 0's state), allolactose `allo` (molecules), stream `op:lac` (exactly two uniforms per tick). Per tick, after the derived quantities:
+
+```
+I       = allo_µM + 1000·iptg_mM                                   (µM)
+f_act   = Is ? 1 : 1 − hill(I, K_ind 1.3 µM, n_ind 2)               free repressor that can bind
+release = Is ? 0 : hill(I, K_indOp 40 µM, n_ind)                    inducer reaching a bound repressor
+T       = floor(P_lacI·activity/4)                                   whole tetramers (0 for 'deleted')
+k_on    = operator ? T·f_act/tau_search : 0 ;  tau_search = 300 s (Elf 2007)
+k_off   = k_off0 + k_rel·release ;  k_rel = 0.05 /s ;  k_off0 = (lacIRef/tau_search)·f/(1−f)
+          f = (1/rep_lac − lacLeak)/(1 − lacLeak) ;  rep_lac = 1000 (Oehler 1990 ≈1,300×), lacLeak = 5×10⁻⁴ (Choi 2008)
+for each copy slot c (always two draws): free → bound with 1−e^{−k_on dt}, bound → free with 1−e^{−k_off dt}
+u       = (P_ptsG·activity·k_pts + uBasal·V)·sat(G)/V ;  cAMP = 1 − u/(u + K_crp) ;  K_crp = 1.3×10⁵ /s/fL
+crpFactor = crpSite ? cAMP : 1 ;  exclusion = IEmax·u/(u+K_crp), IEmax = 0 (off)
+k.lacTx = crpFactor·(free copies) + lacLeak·(bound copies)           replaces the dosage for the lac unit
+after the fast pools: allo = (allo + f_allo·J_Z·dt)·e^{−k_h dt},  k_h = k_Z·P_lacZ·activity/(K_allo·N_mM·V)
+```
+
+The leak from a bound copy is not scaled by CRP (CRP also tightens the loop; Kuhlman 2007), so glucose lowers the induced level, not the repressed one. `inducerHalf_uM` (facts `inducer`) is the inducer level that frees half the operators at lacIRef tetramers (6.5 µM). IPTG is a medium field (`iptg_mM`, preset 1 mM) and enters at once.
+
+**Design** (`config.design`, LEVELS.md R-E14; fixed for the run, folded into `configHash`, applied at tick 0 on top of the preset): `{lac: {promoter: 0.5|1|2|4, operator: bool, crpSite: bool}, lacI: {allele: 'wt'|'deleted'|'Is', promoter: 1|10}}`; missing fields take the wild-type defaults; anything else is a `ConfigError` (`bad-value` with the field's path; `not-available` for a strain without the module). `deleted` clears LacI protein, mRNA, transcripts and ribosomes; `Is` keeps LacI blind to inducer; `promoter` scales the unit's rate (`promoterScale`).
+
+**Genes** (m2-lac, 9 slots): the lab strain's 7 (lacY and lacZ now cistrons of `tu_lac`, rRef `rRef_lac` = 1.6/min) plus lacI (slot 7, 360 aa, tetramer, `rRef_lacI` 0.05/min, b 0.1) and lacA (slot 8, 203 aa, trimer, b 0.5, role none). LEVELS.md R-E19 says "10 genes in m2-lac"; the strain has 9 (open question for the level designer).
+
+### 22.6 Strains and presets (LEVELS.md R-E2, R-E5)
+
+| preset | built by `tools/make-presets.js` |
+|---|---|
+| `m1-lab-glucose` | cold start, seed 0, 120,000 ticks |
+| `m1-lab-glucose-birth` | the same, run on to just after its next division (V 1.000 fL, dosage 1) |
+| `m2-lac-glucose` | cold start, seed 0, 120,000 ticks, then run on until the cell is between lac bursts (no lac mRNA, transcript or ribosome) with 2–6 LacY and 8–14 LacI tetramers: a typical glucose-grown cell (long-run means ≈3 LacY and ≈10 tetramers; Julou 2020 and Choi 2008: about half of glucose-grown cells carry a LacY). A cell without LacY cannot start on lactose alone in this model (BIOLOGY.md) |
+| `m2-lac-glucose-birth` | the steady m2-lac cell run on to just after its next division |
+| `m2-l11-glucose`, `…-birth` | the lab strain's presets transplanted into m2-l11 with araE empty (shared genes, streams and state copied by id) |
+
+`start: 'birth'` loads `<strain>-glucose-birth`, reseeded like `'steady'`; its presetHash is folded into `configHash`. From birth, replication comes 48.3–48.5 min and division 97.5–97.9 min later. m2-l11 adds araE (slot 7, 472 aa, P0AE24, role none, lacY's rRef and RBS, default off). PRNG streams are labelled by gene id, so the shared genes' draws are those of m1-lab.
+
+### 22.7 API additions (§11)
+
+- **Config:** `strain: 'm1-lab'|'m2-l11'|'m2-lac'`; `start: 'birth'`; `design` (§22.5); `variant`: any JSON-safe object ≤ 2 KB as canonical JSON, keys sorted, folded into `configHash`, carried in snapshots and run records, never read by physics (R-E3; `variant.slotOrder` is not implemented); `flags.userGenes: [ids] | null` (user gene commands for other genes are rejected `locked`; lessons and the schedule are not restricted; R-E12); `genes.<id>.initial.clear: true` (clears the gene's mRNA, transcripts and ribosomes without a knockout; R-E6); `medium.iptg_mM`.
+- **Commands:** `setControls {controls: 'locked'|'free'}` from source `'lesson'` or `'schedule'` only (a user submission is rejected `locked`); changes the hashed `controls`; logged and replayed (R-E11). `setMedium` accepts `iptg_mM`.
+- **Methods:** `cell.watch({id?, field, op, value, gene?})` / `unwatch(id)` are implemented (edge-triggered `watch {id, value}` events; kept in snapshots, not hashed); LEVELS.md does not need them (§8.2). `BTC.replay.run(record, toTick, {attach(cell)})` calls `attach` once before the first step (R-E18).
+- **Events:** `function_seen {gene}` as specified in §11.4 (role share ≥ 10% and ≥ 1,000 /s, lactose-split ≥ 500 lactose/s, 30 ticks, once per cell; never for role `none` or `lac-repressor`); its state is in the event state, so it survives restore (R-E4).
+- **View:** `view.genes[i]` adds `mRNAMade`, `proteinMade`, `initiations` (cumulative; a unit's cistrons share mRNA counts; R-E8), `degraded_perS` (R-E10), `tu`, and `functionSeen` is live; `view.tus[]` = `{id, cistrons, mRNA, mRNAIds, nascent, leader}`; `view.lac` = `{operatorCopies, operatorBound, lacITetramers, lacIFree, allolactose, allolactose_mM, cAMP, crpFactor, inducer_uM, iptg_uM, activeLacI, promoterActivity, exclusion, inducerHalf_uM, design}` or `null` (R-E16); `view.env.iptg_mM`; `geneState` adds `'repressed'`.
+- **Facts schema 1.3:** adds `lacOperator: 'bound'|'free'|'none'|null` (bound when any copy is bound; none without an operator), `inducer: 'none'|'some'|null` (some at or above `inducerHalf_uM`), `crp: 'low'|'high'|null` (cAMP below or above 0.5); all null without the module.
+
+### 22.8 Tests added in engine 1.1.0
+
+`tests/lac-operon.test.js`: RT-1…RT-6 (LEVELS.md §8.1; RT-2 with the engine's range, §21.1 row 16), the 1,000-fold repression and burst statistics, IPTG/Iq/Is, design validation and hashing, view and facts, determinism. `tests/level-engine.test.js`: R-E1, R-E2, R-E3, R-E4, R-E5/R-E19, R-E6, R-E7 (set C), R-E8/R-E9/R-E10, R-E11, R-E12, R-E18, watchers. `tests/golden.test.js`: d-7 for all presets, p1 for m2-lac and the 1.7 two-run timing (R-E17). `tests/lactose.test.js`: h3, h3b, h3c. `tests/narrate.test.js`: the m2-lac facts scenario.
+
+### 22.9 Numbers (engine 1.0.0 → 1.1.0)
+
+| | 1.0.0 | 1.1.0 |
+|---|---|---|
+| Reference: Td, E, φ_R, k_init | 97.8 min, 0.89, 9.5%, 0.151 | 98.1 min, 0.896, 9.5%, 0.154 |
+| Low glucose 0.005 mM: λ/λ0, E | 0.47, 0.29 | 0.47–0.50, 0.73 |
+| No glucose: E at 5 s / 10 s / 20 min | 0.004 / floor / floor | 0.22 / 0.19 / 0.11 (below 0.01 after ≈12 h) |
+| Refeed after 20 min: E > 0.8, λ at 5 / 15 min | 5 s, 0.85 / 1.10 | 2 s, 0.91 / 1.01 |
+| ptsG off (spiral): λ/λ0 at 1 / 6 / 20 h; E at 6 h | 1.01 / 0.28 / 0.07; 0.14 | 0.96 / 0.29 / 0.08; 0.64 |
+| Recovery to 0.5 λ0 after 6 / 10 / 20 h off | 0.70 / 1.43 / 2.08 h | 0.73 / 1.26 / 2.61 h |
+| m2-lac wild type, glucose → lactose: lag (LEVELS §7.7.5) | never | 125–146 min (12 seeds; p50 132, p90 143) |
+| same, with 10× / 100× the basal lac proteins | – | 81 / 59 min |
+| after 2 h in both sugars → lactose | – | 64–71 min (with CRP site); 0 min without it |
+| no repressor, no CRP site | – | 0 min |
+| RT-1 truth table (LacZ, % of induced; 4 seeds) | – | wt 0.01–0.5 / 53–70; ΔlacI and Oc 11–18 / 54–70; Is 0.01–0.5 / 0.1–1.0 |
+| RT-4 re-repression; RT-5 glucose first; RT-6 burden | – | < 5% after 25 s; 0.13 (no site 1.09); 6.0% slower |
+| R-E7 backup starving state; ptsG on | – | λ 0.35–0.37 λref, E 0.61; function_seen 6.7–10.3 min, 0.8 λref at 58–80 min |

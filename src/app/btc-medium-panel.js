@@ -27,25 +27,31 @@
     mount(root) {
       const h = LY.h, app = this.app;
       const presets = app.BTC.catalog.MEDIUM_PRESETS, doses = app.BTC.catalog.DRUG_PRESETS;
+      const lc = app.labConfig, controls = lc.controls || {}, rows = lc.mediumRows || {};
       this.rows = {};
-      root.appendChild(h('div', { class: 'pane-head' }, [h('h2', { text: C.medium.title }), h('span', { class: 'pane-note', text: C.medium.titleNote })]));
-      const med = h('div', { class: 'ctl-list' });
-      for (const field of ['glucose', 'lactose', 'aminoAcids']) {
-        const row = C.medium.rows[field];
-        const values = presets[field];
-        const options = row.options.map((o) => ({ key: o.key, label: o.label, sub: F.mM(values[o.key]) }));
-        const ctrl = app.makeControl({
-          key: field, label: row.label, options,
-          read: (view) => keyFor(values, view.env[field + '_mM']),
-          send: (key) => ({ type: 'setMedium', [field + '_mM']: values[key] }),
-        });
-        med.appendChild(h('div', { class: 'ctl-row', 'data-row': field }, [
-          h('div', { class: 'ctl-label', text: row.label }), ctrl.el, ctrl.note,
-          row.desc ? h('p', { class: 'ctl-desc', text: row.desc }) : null,
-        ]));
+      // A level may lock a row (shown, not changeable) or hide it; the lab has every row free (LEVELS §5.5.1).
+      const fields = ['glucose', 'lactose', 'aminoAcids'].filter((f) => controls.medium !== false && rows[f] !== 'hidden');
+      if (fields.length) {
+        root.appendChild(h('div', { class: 'pane-head' }, [h('h2', { text: C.medium.title }), h('span', { class: 'pane-note', text: C.medium.titleNote })]));
+        const med = h('div', { class: 'ctl-list' });
+        for (const field of fields) {
+          const row = C.medium.rows[field];
+          const values = presets[field];
+          const options = row.options.map((o) => ({ key: o.key, label: o.label, sub: F.mM(values[o.key]) }));
+          const ctrl = app.makeControl({
+            key: field, label: row.label, options, locked: rows[field] === 'locked',
+            read: (view) => keyFor(values, view.env[field + '_mM']),
+            send: (key) => ({ type: 'setMedium', [field + '_mM']: values[key] }),
+          });
+          med.appendChild(h('div', { class: 'ctl-row', 'data-row': field }, [
+            h('div', { class: 'ctl-label', text: row.label }), ctrl.el, ctrl.note,
+            row.desc ? h('p', { class: 'ctl-desc', text: row.desc }) : null,
+          ]));
+        }
+        med.appendChild(h('p', { class: 'pane-foot', text: C.medium.footer }));
+        root.appendChild(med);
       }
-      med.appendChild(h('p', { class: 'pane-foot', text: C.medium.footer }));
-      root.appendChild(med);
+      if (app.mode === 'level') { this.levelMode = true; return; }     // no drugs in any M2 level (§5.5.3); the level menu is on the task card
 
       root.appendChild(h('div', { class: 'pane-head' }, [h('h2', { text: C.drugs.title }), h('span', { class: 'pane-note', text: C.drugs.titleNote })]));
       const drugs = h('div', { class: 'ctl-list' });
@@ -81,6 +87,7 @@
       this.since += dtReal;
       if (!force && this.since < 0.25) return;
       this.since = 0;
+      if (this.levelMode) return;
       const view = this.app.cell.observe();
       this.rows.rifampicin.classList.toggle('is-on', view.drugs.rifampicin > 0);
       this.rows.chloramphenicol.classList.toggle('is-on', view.drugs.chloramphenicol > 0);

@@ -23,9 +23,13 @@
   const DEFAULTS = Object.freeze({
     tab: 'cell', speed: 60, focusGene: 'fliC', graphGenes: ['fliC', 'ptsG'], window: 3600,
     logScales: { mRNA: false, protein: false }, theme: 'system', reducedMotion: 'auto', plot4: 'size',
+    screen: 'home',
   });
 
-  /** URL parameters (pure): ?seed ?speed ?tab ?theme ?reset=1 ?test=1. ?instructor is ignored in M1. */
+  /**
+   * URL parameters (pure): ?seed ?speed ?tab ?theme ?reset=1 ?test=1, and for levels (LEVELS §5.11)
+   * ?lab=1, ?level=<id> and ?v=<variant seed, 6 base32 characters>. ?instructor is ignored.
+   */
   function parseParams(search) {
     const out = {};
     const s = (search || '').replace(/^\?/, '');
@@ -44,6 +48,9 @@
     if (out.theme === 'light' || out.theme === 'dark') r.theme = out.theme;
     r.reset = out.reset === '1';
     r.test = out.test === '1';
+    r.lab = out.lab === '1';
+    if (out.level && /^[\w.]{1,8}$/.test(out.level)) r.level = out.level;
+    if (out.v && /^[0-9A-Za-z]{6}$/.test(out.v)) r.v = out.v;
     return r;
   }
 

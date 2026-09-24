@@ -312,6 +312,17 @@
 
     setVisible(v) { this.visible = v; if (v) { this.dirty = true; this.resize(); } }
 
+    /**
+     * Genes outside labConfig.genesVisible keep running but are drawn in --muted, so colours stay
+     * reserved for the genes a level is about (LEVELS §5.5.1); the key says so.
+     */
+    updateBackground() {
+      const gv = this.app.labConfig.genesVisible;
+      this.background = GENE_IDS.map((id) => gv !== 'all' && Array.isArray(gv) && gv.indexOf(id) < 0);
+    }
+    geneColor(i) { return this.background && this.background[i] ? 'muted' : 'g-' + GENE_IDS[i]; }
+    isBackground(id) { return !!(this.background && this.background[GENE_IDS.indexOf(id)]); }
+
     // --- geometry from the view --------------------------------------------------
     fitGeom(view) {
       const c = view.cell;
@@ -328,6 +339,7 @@
       const epoch = view.clock.generation;
       plan(view, g, { focus: f, strandNt: this.strandNt }, p);
       this.n = 0; this.ng = 0;
+      this.updateBackground();
       const genes = view.genes;
 
       // Outside molecules: uniform over the stage, rejected (deterministic retry) where the rod is.
@@ -345,7 +357,7 @@
 
       // Loci (hit targets; drawn as gene-coloured ticks on the DNA).
       for (let i = 0; i < NG; i++) {
-        this.group(K.LOCUS, 'g-' + GENE_IDS[i], 1, 0);
+        this.group(K.LOCUS, this.geneColor(i), 1, 0);
         for (let l = 0; l < this.lobeCount; l++) {
           const j = l * NG + i;
           this.push(K.LOCUS, i, j, this.locusX[j], this.locusY[j], this.locusA[j], 0, 0);
@@ -356,7 +368,7 @@
       // Transcripts in progress, then mature mRNA (focus gene as long strands, others as short marks).
       for (let i = 0; i < NG; i++) {
         if (!genes[i].nascent) continue;
-        this.group(K.NASCENT, 'g-' + GENE_IDS[i], 1, 0);
+        this.group(K.NASCENT, this.geneColor(i), 1, 0);
         this.nascent(genes[i], i, i === f);
         this.endGroup();
       }
@@ -364,7 +376,7 @@
         const gi = genes[i];
         if (!gi.mRNA) continue;
         const isF = i === f;
-        this.group(isF ? K.MRNA_FOCUS : K.MRNA, 'g-' + GENE_IDS[i], 1, 0);
+        this.group(isF ? K.MRNA_FOCUS : K.MRNA, this.geneColor(i), 1, 0);
         for (let j = 0; j < gi.mRNA; j++) {
           const id = gi.mRNAIds[j];
           D.pos('m', id, epoch, null, this.tmp2);
@@ -391,7 +403,7 @@
         const n = p.protein[i] + p.hollow[i];
         this.geneRange[2 * i] = this.n;
         if (n > 0) {
-          this.group(K.PROT, 'g-' + GENE_IDS[i], p.hollow[i] ? 1 : 0, p.hollow[i]);
+          this.group(K.PROT, this.geneColor(i), p.hollow[i] ? 1 : 0, p.hollow[i]);
           this.inside(PKEY[i], n, epoch, K.PROT, i);
           this.endGroup();
         }
@@ -409,7 +421,7 @@
         const n = p.protein[i] + p.hollow[i];
         this.geneRange[2 * i] = this.n;
         if (n > 0) {
-          this.group(K.PROT, 'g-' + GENE_IDS[i], p.hollow[i] ? 1 : 0, p.hollow[i]);
+          this.group(K.PROT, this.geneColor(i), p.hollow[i] ? 1 : 0, p.hollow[i]);
           for (let k = 0; k < n; k++) {
             G.perimeter(D.hash01(PKEY[i], k, epoch), g, this.tmp);
             this.push(K.PROT, i, k, this.tmp.x, this.tmp.y, Math.atan2(this.tmp.ny, this.tmp.nx), 0, D.hash01('j', k, epoch));
@@ -951,7 +963,8 @@
       const ctrl = app.makePromoterControl(() => app.focusGene, 'focus');
       this.fb.ctrl = ctrl;
       el.appendChild(btn);
-      el.appendChild(h('div', { class: 'fb-row2' }, ctrl.el));
+      this.fb.row2 = h('div', { class: 'fb-row2' }, ctrl.el);
+      el.appendChild(this.fb.row2);
     }
 
     updateFocusBar(view) {
@@ -967,6 +980,10 @@
       if (this.fb.btn.getAttribute('aria-label') !== label) this.fb.btn.setAttribute('aria-label', label);
       const pl = F.fill(C.focus.promoterLabel, { name: words.name });
       if (this.fb.ctrl.el.getAttribute('aria-label') !== pl) this.fb.ctrl.el.setAttribute('aria-label', pl);
+      // The promoter row shows only when this level lets the student set the watched gene.
+      const mode = app.geneControlMode ? app.geneControlMode(id) : 'free';
+      const hide = mode !== 'free' && mode !== 'locked';
+      if (this.fb.row2.hidden !== hide) this.fb.row2.hidden = hide;
     }
 
     openPicker() {
@@ -976,7 +993,9 @@
         build: (body, close) => {
           body.appendChild(h('p', { class: 'sheet-note', text: C.focus.pickerNote }));
           const view = app.cell.observe();
+          this.updateBackground();
           for (const id of GENE_IDS) {
+            if (this.isBackground(id)) continue;
             const w = C.geneWords(id, app.labConfig.showNames);
             const st = C.geneState[view.geneById[id].geneState];
             body.appendChild(h('button', {
@@ -1063,7 +1082,9 @@
       const rows = [];
       const add = (draw, label, note) => rows.push(h('li', { class: 'key-row' }, [keyGlyph(draw, P), h('span', { class: 'key-label', text: label }), h('span', { class: 'key-n num', text: note || '' })]));
       const view = app.cell.observe();
+      this.updateBackground();
       for (let i = 0; i < NG; i++) {
+        if (this.background[i]) continue;
         const id = GENE_IDS[i], w = C.geneWords(id, app.labConfig.showNames), col = P['g-' + id], shape = PAL.shape[id];
         add((c) => {
           c.beginPath();
@@ -1074,6 +1095,7 @@
           c.fillStyle = col; c.fill();
         }, F.fill(K2.protein, { name: F.capital(w.protein) }), N(p.P));
       }
+      if (this.background.some(Boolean)) add((c) => { c.beginPath(); circle(c, 12, 12, SZ.prot); c.fillStyle = P.muted; c.fill(); }, K2.background, N(p.P));
       add((c) => { c.beginPath(); circle(c, 12, 12, SZ.prot); c.fillStyle = P['g-' + app.focusGene]; c.fill(); c.beginPath(); circle(c, 12, 12, 5.5); c.strokeStyle = P.accent; c.lineWidth = 1.5; c.stroke(); }, K2.proteinFocus, '');
       add((c) => { c.beginPath(); circle(c, 12, 12, SZ.prot); c.strokeStyle = P.muted; c.lineWidth = 1.3; c.stroke(); }, K2.hollow, '');
       add((c) => { c.beginPath(); wavy(c, 12, 12, 0, 18); c.strokeStyle = P['g-' + app.focusGene]; c.lineWidth = 2; c.stroke(); }, K2.mRNAFocus, N(1));

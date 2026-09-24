@@ -1,6 +1,10 @@
-// @deps btc-content btc-palette btc-format btc-prefs btc-layout btc-loop btc-controls btc-cellview btc-status btc-genes-panel btc-medium-panel btc-graphs-panel btc-narrator-ui btc-pwa
+// @deps btc-content btc-palette btc-format btc-prefs btc-layout btc-loop btc-controls btc-cellview btc-status btc-genes-panel btc-medium-panel btc-graphs-panel btc-narrator-ui btc-pwa btc-home btc-hud btc-prologue btc-level-ui
 /*
- * Be the Cell: bootstrap and wiring (LAB_UI §10.3–10.4).
+ * Be the Cell: bootstrap and wiring (LAB_UI §10.3–10.4), and the router
+ * (LEVELS §9 item 1): screens home, lab and level. The lab mounts as in M1;
+ * a level reuses the same lab screen on its own cell with its labConfig, a
+ * HUD and the level sheets. Only one cell loop runs at a time, and the lab's
+ * cell and autosave are left alone while a level is open.
  *
  * The engine owns the cell's state. The app reads cell.observe(), facts and
  * events, and changes the cell only through cell.command(); it never writes
@@ -8,7 +12,7 @@
  * commands. A new cell starts paused.
  *
  * window.__btc = {cell (a getter: reset replaces the cell), BTC, app}.
- * With ?test=1: app.test = {runTicks, pause, resume, setSpeed, stats, cellViewStats, narratorKey}.
+ * With ?test=1: app.test = {runTicks, pause, resume, setSpeed, stats, cellViewStats, narratorKey, level}.
  */
 (function (root, factory) {
   if (typeof module === 'object' && module.exports) {
@@ -32,6 +36,28 @@
   // Kinds of graph marker.
   const MK_DIVISION = 1, MK_COMMAND = 2, MK_RESUMED = 3;
 
+  // The free-play lab's labConfig: everything shown and free (LEVELS §5.5.1 defaults).
+  const LAB_CONFIG = Object.freeze({
+    showNames: true, revealed: {}, displayOrder: null, colorBy: 'gene', genesVisible: 'all',
+    controls: Object.freeze({ genes: true, medium: true, drugs: true }), lockedGenes: [], readOnlyGenes: false,
+    mediumRows: Object.freeze({ glucose: 'free', lactose: 'free', aminoAcids: 'free' }), allowedLevels: null,
+    speedOptions: null, defaultSpeed: 60, startPaused: true, tabs: ['cell', 'genes', 'medium', 'graphs'],
+    graphGenes: null, bands: null, yBand: null, hud: false, focusGene: null,
+  });
+  function localDate() {
+    const d = new Date();
+    const p = (n) => (n < 10 ? '0' : '') + n;
+    return d.getFullYear() + '-' + p(d.getMonth() + 1) + '-' + p(d.getDate());
+  }
+
+  /** A level's labConfig over the lab defaults. */
+  function levelConfig(lc) {
+    const out = Object.assign({}, LAB_CONFIG, lc || {});
+    out.controls = Object.assign({}, LAB_CONFIG.controls, (lc && lc.controls) || {});
+    out.mediumRows = Object.assign({}, LAB_CONFIG.mediumRows, (lc && lc.mediumRows) || {});
+    return out;
+  }
+
   function boot(BTC) {
     const C = BTC.content, LY = BTC.layout, PR = BTC.prefs, F = BTC.format;
     const $ = (id) => document.getElementById(id);
@@ -50,13 +76,11 @@
     if (!ui.logScales || typeof ui.logScales !== 'object') ui.logScales = Object.assign({}, PR.DEFAULTS.logScales);
 
     const app = {
-      BTC, params, ui,
+      BTC, params, ui, prefs: ui,          // ui: the current screen's settings; prefs: the lab's saved ones (and the theme)
       build: (typeof window !== 'undefined' && window.BTC_BUILD) || 'dev',
-      // Hooks reserved for levels (LAB_UI §12); inert in M1.
-      labConfig: {
-        showNames: true, genesVisible: 'all', controls: { genes: true, medium: true, drugs: true },
-        lockedGenes: [], allowedLevels: null, speedOptions: null, startPaused: true,
-      },
+      // The lab's labConfig (LAB_UI §12); a level brings its own (LEVELS §5.5.1).
+      labConfig: LAB_CONFIG,
+      mode: 'lab', screen: null, level: null,
       layout: 'compact', tab: 'cell', focusGene: ui.focusGene,
       cell: null, config: null, rec: null, recRecent: null, mem: null, gen0: 0,
       facts: BTC.observe.createFacts(),
@@ -68,6 +92,20 @@
       bandModel: { n: 0, t0: new Float64Array(BAND_CAP), t1: new Float64Array(BAND_CAP), color: new Array(BAND_CAP).fill('drug-rif'), label: new Array(BAND_CAP).fill('') },
       narrKey: '', narrTick: -1, lastTick: -1,
       sinceSlow: 1, sinceSave: 0, resumeOnShow: false, paintQueued: false,
+    };
+
+    // --- progress and local telemetry (LEVELS §4.4, §11); every storage access is guarded ------
+    const store = (() => { try { return typeof localStorage !== 'undefined' ? localStorage : null; } catch (e) { return null; } })();
+    app.progress = BTC.progress.create({
+      storage: store, today: localDate, randomU32: () => newSeed(),
+      deviceSeed: params.test && params.seed !== undefined ? params.seed : undefined,
+    });
+    app.tel = BTC.telemetry.create({ storage: store, now: () => performance.now(), session: BTC.telemetry.sessionId(window.crypto) });
+    /** Logs an app event with the open level (if any) as its context. */
+    app.logEvent = (type, d) => {
+      const r = app.mode === 'level' && app.level ? app.level.runner : null;
+      app.tel.setContext(r ? { lv: r.def.id, att: r.attempt, run: r.runs || null } : null);
+      app.tel.log(type, d || {}, { tick: app.cell && app.mode !== 'home' ? app.cell.tick : null });
     };
 
     // --- the cell -------------------------------------------------------------------
@@ -129,20 +167,36 @@
       (ui.reducedMotion === 'auto' && typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches);
     let focusIdx = C.GENE_IDS.indexOf(app.focusGene);
     app.focusIndex = () => focusIdx;
-    app.savePrefs = () => PR.saveUI(ui);
+    app.savePrefs = () => PR.saveUI(ui);     // the lab's preferences; a level's own settings are not saved
 
     app.setSpeed = (s) => {
       app.loop.setSpeed(s);
-      ui.speed = s;
+      app.ui.speed = s;
       app.savePrefs();
       logSpeed();
+      app.logEvent('speed', { s });
       app.requestPaint();
+    };
+    /** The speeds this screen offers (a level may limit them, LEVELS §5.5.3). */
+    app.speedList = () => {
+      const so = app.labConfig.speedOptions;
+      return so ? C.speeds.filter((x) => so.indexOf(x.s) >= 0) : C.speeds;
     };
     function logSpeed() {
       if (app.speedHistory.length < 500) app.speedHistory.push({ tick: app.cell.tick, speed: app.loop.speed, running: app.loop.running });
     }
-    app.pause = () => { app.loop.stop(); afterRunChange(); };
-    app.resume = () => { app.loop.start(); afterRunChange(); };
+    app.pause = () => { app.loop.stop(); afterRunChange(); app.logEvent('pause', {}); };
+    app.resume = () => {
+      if (!app.canRun()) return;
+      app.loop.start(); afterRunChange(); app.logEvent('resume', {});
+    };
+    /** Time may run: always in the lab; in a level only while its run (or epilogue, or live Prologue scene) is on. */
+    app.canRun = () => {
+      if (app.mode !== 'level' || !app.level) return true;
+      if (app.level.live) return true;
+      const r = app.level.runner;
+      return !!r.run && app.cell === r.run.cell && (r.phase === 'run' || r.phase === 'epilogue') && !r.halted();
+    };
     function afterRunChange() {
       logSpeed();
       views.status.update(app.cell.observe(), app.facts);     // the button answers the tap at once
@@ -152,10 +206,11 @@
     app.togglePause = () => (app.loop.running ? app.pause() : app.resume());
 
     app.setFocus = (id) => {
-      if (id === app.focusGene) return;
-      app.focusGene = id; focusIdx = C.GENE_IDS.indexOf(id); ui.focusGene = id;
-      const gg = ui.graphGenes;
+      if (id === app.focusGene || !app.geneVisible(id)) return;
+      app.focusGene = id; focusIdx = C.GENE_IDS.indexOf(id); app.ui.focusGene = id;
+      const gg = app.ui.graphGenes;
       if (gg.indexOf(id) < 0) { if (gg.length >= 3) gg.shift(); gg.push(id); }
+      app.logEvent('focus', { gene: id });
       app.savePrefs();
       views.genes.updateFocus();
       views.graphs.syncControls();
@@ -165,13 +220,28 @@
       app.requestPaint();
     };
     app.toggleGraphGene = (id) => {
-      const gg = ui.graphGenes, i = gg.indexOf(id);
+      const gg = app.ui.graphGenes, i = gg.indexOf(id);
       if (i >= 0) { if (gg.length > 1) gg.splice(i, 1); } else { gg.push(id); if (gg.length > 3) gg.shift(); }
       app.savePrefs();
       views.graphs.syncControls();
       views.graphs.redraw();
     };
-    app.setWindow = (s) => { ui.window = s; app.savePrefs(); views.graphs.syncControls(); views.graphs.redraw(); };
+    app.setWindow = (s) => { app.ui.window = s; app.savePrefs(); views.graphs.syncControls(); views.graphs.redraw(); };
+
+    // --- what a level lets the student see and change (LEVELS §5.5.1) --------------------
+    app.geneVisible = (id) => {
+      const gv = app.labConfig.genesVisible;
+      return gv === 'all' || !Array.isArray(gv) || gv.indexOf(id) >= 0;
+    };
+    /** 'free' | 'locked' (dial shown, disabled) | 'readonly' (set by the DNA) | 'none' (no gene controls, or a background gene). */
+    app.geneControlMode = (id) => {
+      const lc = app.labConfig;
+      if (!app.geneVisible(id)) return 'none';
+      if (lc.readOnlyGenes) return 'readonly';
+      if (lc.controls && lc.controls.genes === false) return 'none';
+      if (lc.lockedGenes && lc.lockedGenes.indexOf(id) >= 0) return 'locked';
+      return 'free';
+    };
 
     // --- commands and controls (LAB_UI §3.4) ---------------------------------------
     /** Sends a command; the control shows pending until the engine applies it. */
@@ -179,6 +249,7 @@
       const r = app.cell.command(cmd);
       if (r.ok) app.pending.set(key, r.seq, valueKey);
       else LY.toast(C.rejections[r.error] || C.rejections['bad-value']);
+      if (app.mode === 'level') app.levelChanged();
       app.refreshControls();
       app.requestPaint();
       return r;
@@ -189,7 +260,9 @@
 
     /** A promoter control for the gene getGene() returns (a card's own gene, or the focus gene). */
     app.makePromoterControl = (getGene, where) => {
-      const options = C.levels.map((l) => ({ key: l.key, label: l.label, spoken: C.levelSpoken[l.value] }));
+      const allowed = app.labConfig.allowedLevels;
+      const options = C.levels.filter((l) => !allowed || allowed.indexOf(l.value) >= 0)
+        .map((l) => ({ key: l.key, label: l.label, spoken: C.levelSpoken[l.value] }));
       const ctrl = BTC.controls.segmented({
         label: C.card.promoter, options,
         onSelect: (key) => {
@@ -199,7 +272,7 @@
         className: 'promoter',
       });
       app.registry.push({
-        ctrl, key: getGene, where,
+        ctrl, key: getGene, where, locked: () => app.geneControlMode(getGene()) === 'locked',
         read: (view) => levelKey(view.geneById[getGene()].level),
         defaultKey: () => {
           const lv = STRAIN_GENES[C.GENE_IDS.indexOf(getGene())].defaultLevel;
@@ -212,7 +285,7 @@
     /** A medium or drug control: key is the pending key, read(view) the current option, send(key) the command. */
     app.makeControl = (o) => {
       const ctrl = BTC.controls.segmented({ label: o.label, options: o.options, onSelect: (k) => app.send(o.send(k), o.key, k) });
-      app.registry.push({ ctrl, key: () => o.key, read: o.read, where: 'medium' });
+      app.registry.push({ ctrl, key: () => o.key, read: o.read, where: 'medium', locked: o.locked ? () => true : null });
       return ctrl;
     };
 
@@ -220,8 +293,13 @@
       const view = app.cell.observe(), running = app.loop.running;
       for (const r of app.registry) {
         const key = r.key(), pend = app.pending.get(key);
-        const note = pend && !running && r.where !== 'focus' ? C.card.pending : '';
+        const locked = r.locked ? r.locked() : false;
+        const note = locked ? C.card.locked : pend && !running && r.where !== 'focus' ? C.card.pending : '';
         r.ctrl.update(r.read(view), pend ? pend.value : null, note);
+        if (r.lastLocked !== locked) {
+          r.lastLocked = locked;
+          for (const b of r.ctrl.buttons) b.disabled = locked;
+        }
         if (r.defaultKey) {
           const dk = r.defaultKey();
           if (r.lastDefault !== dk) {
@@ -320,9 +398,9 @@
       if (tick !== app.narrTick) {
         app.narrTick = tick;
         BTC.observe.facts(app.cell, app.facts);
-        const out = BTC.narrate.narrate(app.facts, app.mem, tick);
+        const out = BTC.narrate.narrate(app.facts, app.mem, tick, app.levelRules || undefined);
         app.narrKey = out.key;
-        const rule = RULE[out.key];
+        const rule = RULE[out.key] || (app.levelRules && app.levelRules.find((x) => x.key === out.key));
         if (hold.offer(out.key, out.gene, out.text, rule ? rule.preempt : false)) showNarr();
       } else if (hold.poll()) showNarr();
     }
@@ -348,8 +426,9 @@
       }
       if (app.loop.running) {
         app.sinceSave += dtReal;
-        if (app.sinceSave >= AUTOSAVE_S) { app.sinceSave = 0; BTC.pwa.autosave(app); }
+        if (app.sinceSave >= AUTOSAVE_S) { app.sinceSave = 0; app.autosaveNow(); }
       }
+      if (app.mode === 'level') levelFrame(dtReal, force);
     };
 
     /** One repaint while paused (resize, tab, theme, focus gene); the loop itself does not idle. */
@@ -365,12 +444,27 @@
 
     // --- layout and tabs (LAB_UI §1) ---------------------------------------------------
     const views = {};
+    /** The tabs of this layout that the screen's labConfig.tabs allows. */
+    function tabsFor(L) {
+      const allowed = app.labConfig.tabs || LAB_CONFIG.tabs;
+      return LY.TABS[L].filter((t) => allowed.indexOf(t) >= 0);
+    }
+    function mapTab(tab, L) {
+      const list = tabsFor(L);
+      if (list.indexOf(tab) >= 0) return tab;
+      const m = LY.mapTab(tab, L);
+      return list.indexOf(m) >= 0 ? m : (list[0] || 'cell');
+    }
     function applyTab() {
       const L = app.layout, tab = app.tab;
       const compact = L === 'compact';
+      const allowed = app.labConfig.tabs || LAB_CONFIG.tabs;
+      // Only the cell (the Prologue's live scenes): no tab bar, the cell view takes the screen.
+      const cellOnly = compact ? tabsFor(L).length <= 1 : tabsFor(L).length === 0 && allowed.indexOf('graphs') < 0;
+      document.body.toggleAttribute('data-cellonly', cellOnly);
       $('stage-wrap').hidden = compact && tab !== 'cell';
       for (const name of ['genes', 'medium', 'graphs']) {
-        const on = tab === name || (name === 'graphs' && L === 'wide');
+        const on = allowed.indexOf(name) >= 0 && (tab === name || (name === 'graphs' && L === 'wide'));
         $('pane-' + name).hidden = !on;
       }
       document.querySelectorAll('[data-tab]').forEach((b) => {
@@ -378,8 +472,9 @@
         b.setAttribute('aria-selected', on ? 'true' : 'false');
         b.tabIndex = on ? 0 : -1;
         b.classList.toggle('is-on', on);
+        b.hidden = allowed.indexOf(b.getAttribute('data-tab')) < 0;
       });
-      document.querySelectorAll('#paneltabs [data-tab="graphs"]').forEach((b) => { b.hidden = L === 'wide'; });
+      document.querySelectorAll('#paneltabs [data-tab="graphs"]').forEach((b) => { b.hidden = L === 'wide' || allowed.indexOf('graphs') < 0; });
       views.cellView.setVisible(!$('stage-wrap').hidden);
       views.genes.setVisible(!$('pane-genes').hidden);
       views.medium.setVisible(!$('pane-medium').hidden);
@@ -387,9 +482,10 @@
       app.requestPaint();
     }
     app.setTab = (tab) => {
-      app.tab = LY.mapTab(tab, app.layout);
-      ui.tab = tab;
+      app.tab = mapTab(tab, app.layout);
+      app.ui.tab = tab;
       app.savePrefs();
+      app.logEvent('tab', { name: app.tab });
       applyTab();
     };
     app.showPlot = (key) => {
@@ -401,7 +497,7 @@
       const L = LY.applyToBody(w, h);
       const changed = L !== app.layout;
       app.layout = L;
-      app.tab = LY.mapTab(ui.tab, L);
+      app.tab = mapTab(app.ui.tab, L);
       if (changed || !relayout.done) {
         relayout.done = true;
         applyTab();
@@ -484,8 +580,309 @@
         }));
       } catch (e) { /* storage blocked or full: ignored */ }
       try { if (app.loop) app.loop.stop(); afterRunChange(); } catch (e) { /* the UI itself may be what failed */ }
-      LY.toast(C.pwa.error, { label: C.pwa.resumedAction, run: () => app.openStartOver() });
+      try { app.logEvent('error', { msg: String(err && err.message || err).slice(0, 200) }); } catch (e) { /* ignored */ }
+      LY.toast(C.pwa.error, app.mode === 'lab' ? { label: C.pwa.resumedAction, run: () => app.openStartOver() } : undefined);
     };
+
+    // --- screens: home, lab and level (LEVELS §5.1, §5.11, §9 item 1) ------------------------
+    const surfaces = () => ({ home: $('home'), prologue: $('prologue'), app: $('app') });
+    /** Which part of the page is shown: 'home', 'app' (the lab screen), 'prologue' (a drawing) or 'none'. */
+    function showSurface(name) {
+      const s = surfaces();
+      const wasHidden = s.app.hidden;
+      s.home.hidden = name !== 'home';
+      s.prologue.hidden = name !== 'prologue';
+      s.app.hidden = name !== 'app';
+      document.body.setAttribute('data-surface', name);
+      if (name === 'app' && wasHidden) { relayout.done = false; relayout(); views.cellView.resize(); }
+    }
+    function setScreen(name) {
+      if (app.screen === name) return;
+      app.screen = name;
+      ui.screen = name;
+      app.savePrefs();
+      app.logEvent('screen', { name });
+    }
+    app.autosaveNow = () => {
+      if (app.mode === 'lab') BTC.pwa.autosave(app);
+      else if (app.mode === 'level') saveLevelNow();
+    };
+    app.shouldHalt = () => app.mode === 'level' && !!app.level && !app.level.live && app.level.runner.halted();
+
+    /** The lab's cell, recorders, markers and pending controls stay as they are while a level is open. */
+    let labBundle = null;
+    function stashLab() {
+      if (app.mode !== 'lab' || !app.cell) return;
+      BTC.pwa.autosave(app);
+      const m = app.markers;
+      labBundle = {
+        cell: app.cell, config: app.config, rec: app.rec, recRecent: app.recRecent, mem: app.mem, gen0: app.gen0, facts: app.facts,
+        pending: app.pending, bandList: app.bandList.slice(), focusGene: app.focusGene,
+        markers: { n: m.n, tick: m.tick.slice(), kind: m.kind.slice(), prio: m.prio.slice(), label: m.label.slice() },
+      };
+    }
+    function unstashLab() {
+      const b = labBundle;
+      labBundle = null;
+      Object.assign(app, { cell: b.cell, config: b.config, rec: b.rec, recRecent: b.recRecent, mem: b.mem, gen0: b.gen0, facts: b.facts, pending: b.pending });
+      const m = app.markers;
+      m.n = b.markers.n; m.tick.set(b.markers.tick); m.kind.set(b.markers.kind); m.prio.set(b.markers.prio);
+      for (let i = 0; i < m.label.length; i++) m.label[i] = b.markers.label[i];
+      app.bandList.length = 0;
+      for (const x of b.bandList) app.bandList.push(x);
+      app.narrTick = -1; app.lastTick = -1;
+    }
+
+    /** Rebuilds the panels for the screen's labConfig (cards, rows, chips and dials come from it). */
+    function remountPanels() {
+      app.registry.length = 0;
+      for (const id of ['pane-genes', 'pane-medium', 'pane-graphs', 'focusbar']) $(id).textContent = '';
+      views.genes = new BTC.GenesPanel(app); views.genes.mount($('pane-genes'));
+      views.medium = new BTC.MediumPanel(app); views.medium.mount($('pane-medium'));
+      views.graphs = new BTC.GraphsPanel(app); views.graphs.mount($('pane-graphs'));
+      views.cellView.mountFocusBar($('focusbar'));
+      views.cellView.reset();
+      document.body.toggleAttribute('data-hud', !!app.labConfig.hud);
+      relayout.done = false;
+      relayout();
+      app.refreshControls();
+    }
+    function resetNarrator() { hold.reset(); narrView.key = null; }
+
+    app.enterLab = () => {
+      LY.closeSheet();
+      app.loop.stop();
+      if (app.level) { saveLevelNow(); closeLevel(); }
+      if (labBundle) unstashLab();
+      app.mode = 'lab';
+      app.labConfig = LAB_CONFIG;
+      app.levelRules = null;
+      app.ui = ui;
+      app.focusGene = ui.focusGene; focusIdx = C.GENE_IDS.indexOf(app.focusGene);
+      app.loop.setSpeed(ui.speed);
+      views.status.setLevel(null);
+      setScreen('lab');
+      showSurface('app');
+      remountPanels();
+      resetNarrator();
+      app.requestPaint();
+    };
+
+    app.enterHome = () => {
+      LY.closeSheet();
+      app.loop.stop();
+      if (app.mode === 'lab') stashLab();
+      if (app.level) { saveLevelNow(); closeLevel(); }
+      app.mode = 'home';
+      setScreen('home');
+      views.home.render();
+      showSurface('home');
+    };
+
+    const runnerOpts = () => ({ deviceSeed: app.progress.deviceSeed, telemetry: app.tel, speed: () => app.loop.speed });
+
+    /**
+     * Opens a level: its open attempt (resumed from the level autosave when it matches), a new
+     * attempt, or with opts.v (?v=) the think-aloud override, attempt 0. opts.fresh: Play again.
+     */
+    app.enterLevel = (id, opts) => {
+      const o = opts || {};
+      const def = BTC.levels.byId[id];
+      if (!def) { LY.toast(C.game.missing); if (app.screen !== 'home') app.enterHome(); return; }
+      LY.closeSheet();
+      app.loop.stop();
+      if (app.mode === 'lab') stashLab();
+      if (app.level) { saveLevelNow(); closeLevel(); }
+      const overrideSeed = o.v !== undefined && o.v !== null ? BTC.code.decodeSeed(String(o.v)) : null;
+      const ref = o.fresh ? app.progress.nextAttempt(id) : app.progress.attemptFor(id, overrideSeed);
+      let runner = null, resumed = false;
+      if (!o.fresh && overrideSeed === null && !ignoreLevelSave) {
+        const saved = app.progress.loadLevel(BTC.ENGINE_VERSION);
+        if (saved.status === 'mismatch') LY.toast(C.game.updated);
+        else if (saved.status === 'ok' && saved.save.levelId === id && saved.save.attempt === ref.attempt &&
+          (!def.scored || saved.save.variantSeed === ((ref.variantSeed >>> 0) & 0x3FFFFFFF))) {
+          try { runner = BTC.LevelRunner.restore(def, saved.save, runnerOpts()); resumed = true; } catch (e) { runner = null; }
+        }
+      }
+      ignoreLevelSave = false;
+      if (!runner) {
+        runner = new BTC.LevelRunner(Object.assign(runnerOpts(), { def, variantSeed: ref.variantSeed, attempt: ref.attempt, override: ref.override }));
+        runner.start();
+      }
+      app.progress.open(id, ref);
+      openLevel(def, runner);
+      if (resumed) LY.toast(F.fill(C.game.resumed, { id: BTC.HomeView.nameOf(def) }));
+    };
+    let ignoreLevelSave = !!params.reset;          // ?reset=1: the first level opened starts afresh
+
+    function openLevel(def, runner) {
+      app.mode = 'level';
+      app.level = { def, runner, live: false, lastEnd: null, sinceHud: 1, dirtyAt: null };
+      setScreen('level');
+      views.levelUI.bind(runner);
+      views.status.setLevel(views.levelUI.title());
+      saveLevelNow();
+      views.levelUI.sync();
+    }
+    function closeLevel() {
+      views.levelUI.unbind();
+      views.prologue.reset();
+      app.level = null;
+      app.levelRules = null;
+      views.status.setLevel(null);
+      document.body.removeAttribute('data-hud');
+    }
+
+    /** Start this level again (the level menu): the same attempt and variant, from the intro. */
+    app.restartLevel = () => {
+      const L = app.level;
+      if (!L) return;
+      app.loop.stop();
+      const r = L.runner;
+      const nr = new BTC.LevelRunner(Object.assign(runnerOpts(), { def: r.def, variantSeed: r.variantSeed, attempt: r.attempt, override: r.override }));
+      nr.start();
+      closeLevel();
+      openLevel(r.def, nr);
+    };
+    app.playAgain = () => { if (app.level) app.enterLevel(app.level.def.id, { fresh: true }); };
+    app.retryRun = () => {
+      const r = app.level && app.level.runner;
+      if (!r) return;
+      app.loop.stop();
+      if (r.retry().ok) views.levelUI.after();
+    };
+    /** The Levels button: during a run, first ask (§4.5). */
+    app.leaveLevel = () => {
+      const r = app.level && app.level.runner;
+      const go = () => {
+        if (r && r.phase === 'run' && r.run && !r.run.endReason) app.logEvent('run_end', { reason: 'leave', ticks: r.run.cell.tick });
+        saveLevelNow();
+        app.enterHome();
+      };
+      if (r && (r.phase === 'run' || r.phase === 'epilogue') && !r.halted()) views.levelUI.confirmLeave(go);
+      else go();
+    };
+
+    function saveLevelNow() {
+      const L = app.level;
+      if (!L) return;
+      L.dirtyAt = null;
+      if (L.runner.phase === 'complete') return;       // a finished attempt lives in progress, not in the autosave
+      app.progress.saveLevel(Object.assign(L.runner.save(), { engineVersion: BTC.ENGINE_VERSION, build: app.build }));
+    }
+    app.levelPhaseChanged = () => { saveLevelNow(); app.tel.flush(); };
+    app.saveLevel = () => saveLevelNow();          // a locked answer is saved at once (§4.4)
+    app.levelChanged = () => { if (app.level && app.level.dirtyAt === null) app.level.dirtyAt = performance.now(); };
+    app.levelCompleted = (r) => {
+      app.progress.complete(r.def.id, r.result);
+      app.progress.addCards(r.cards);
+      app.progress.clearLevel();
+      app.logEvent('code', { code: r.code, action: 'shown' });
+      app.tel.flush();
+    };
+    app.downloadLevelRun = () => {
+      const r = app.level && app.level.runner;
+      if (!r) return;
+      const file = r.runFile({ build: app.build, ui: { layout: app.layout, speedHistory: app.speedHistory }, telemetry: app.tel.forAttempt(r.def.id, r.attempt) });
+      BTC.pwa.deliverFile(JSON.stringify(file), r.fileName(), C.pwa.shareTitle);
+      app.logEvent('download', { kind: 'run' });
+    };
+    app.exportData = () => {
+      const file = { format: 'btc-export', v: 1, progress: app.progress.export(), telemetry: app.tel.all() };
+      BTC.pwa.deliverFile(JSON.stringify(file), 'be-the-cell-data-' + localDate() + '.json', C.home.exportTitle);
+      app.logEvent('download', { kind: 'export' });
+    };
+    app.setTheme = (k) => { ui.theme = k; app.savePrefs(); applyTheme(); };
+    app.setMotion = (k) => { ui.reducedMotion = k; app.savePrefs(); applyMotion(); };
+
+    /** Puts a level's cell on the lab screen with the level's labConfig (a run, a retry, the Prologue's live cell). */
+    function attachLevelCell(r, cell) {
+      app.loop.stop();
+      const lc = levelConfig(r.labConfig());
+      app.labConfig = lc;
+      app.levelRules = r.narratorRules();
+      app.pending = new BTC.controls.Pending();
+      attach(cell);
+      app.config = cell.config;
+      const visible = C.GENE_IDS.filter((id) => app.geneVisible(id));
+      const focus = lc.focusGene && visible.indexOf(lc.focusGene) >= 0 ? lc.focusGene : visible[0] || 'fliC';
+      app.ui = Object.assign({}, ui, {
+        speed: lc.defaultSpeed || 60, tab: 'cell', focusGene: focus, window: 600,
+        graphGenes: (lc.graphGenes || [focus]).filter((id) => visible.indexOf(id) >= 0).slice(0, 3),
+        logScales: Object.assign({}, PR.DEFAULTS.logScales),
+      });
+      if (!app.ui.graphGenes.length) app.ui.graphGenes = [focus];
+      app.focusGene = focus; focusIdx = C.GENE_IDS.indexOf(focus);
+      app.loop.setSpeed(app.ui.speed);
+      remountPanels();
+      resetNarrator();
+      logSpeed();
+      if (lc.startPaused === false && app.canRun()) app.resume();
+      app.requestPaint();
+    }
+
+    /** The surface behind the level sheets for the runner's state (LevelUI.sync calls it). */
+    app.showLevelScreen = (r) => {
+      const L = app.level;
+      if (!L) return;
+      if (r.phase === 'scenes') {
+        const info = r.sceneInfo();
+        if (info.scene.live) {
+          if (!L.live) {
+            L.live = true;
+            attachLevelCell(r, BTC.game.makeCell(r.def.config(r.variant, 'task', r.extra())));
+          }
+          showSurface('app');
+        } else {
+          if (L.live) { L.live = false; app.loop.stop(); }
+          views.prologue.show(info.scene, r.def, views.levelUI.title());
+          showSurface('prologue');
+        }
+        return;
+      }
+      if (L.live) { showSurface('app'); return; }        // the Prologue's bacterium stays behind its completion screen
+      const cell = r.run ? r.run.cell : null;
+      if (!cell) { showSurface('none'); return; }
+      if (app.cell !== cell) attachLevelCell(r, cell);
+      showSurface('app');
+      updateHud(true);
+      views.status.update(app.cell.observe(), app.facts);
+    };
+
+    function hudMode(r) {
+      if (r.phase === 'run' && r.run && r.run.endReason && r.goal) return 'met';
+      if (r.phase === 'epilogue' && r.epilogue.done) return 'continue';
+      return null;
+    }
+    function updateHud() {
+      const L = app.level;
+      if (!L || !app.labConfig.hud) return;
+      views.hud.update(L.runner.hud(), window.innerWidth, hudMode(L.runner));
+    }
+    /** The goal chip: the task card, or Continue once the run (or the epilogue) is over. */
+    function hudGoalTap() {
+      const r = app.level && app.level.runner;
+      if (!r) return;
+      if (hudMode(r)) { r.next(); views.levelUI.after(); }
+      else views.levelUI.task(true);
+    }
+    /** Per frame in a level: the end of a run, the HUD (≤ 4 Hz), the debounced autosave. */
+    function levelFrame(dtReal, force) {
+      const L = app.level;
+      if (!L) return;
+      const r = L.runner;
+      if (r.phase === 'run' && r.run && r.run.endReason && L.lastEnd !== r.run.endTick + ':' + r.runs) {
+        L.lastEnd = r.run.endTick + ':' + r.runs;
+        if (app.loop.running) app.loop.stop();
+        saveLevelNow();
+        views.status.update(app.cell.observe(), app.facts);
+        if (!r.goal) { r.next(); views.levelUI.after(); }    // a missed goal opens the result; a met one waits on the goal chip
+      }
+      if (r.phase === 'epilogue' && r.epilogue.done && app.loop.running) app.loop.stop();
+      L.sinceHud += dtReal;
+      if (force || L.sinceHud >= 0.25) { L.sinceHud = 0; updateHud(); }
+      if (L.dirtyAt !== null && performance.now() - L.dirtyAt >= 2000) saveLevelNow();
+    }
 
     // --- start -----------------------------------------------------------------------
     BTC.palette.apply(ui.theme);
@@ -520,8 +917,13 @@
       render: (dtReal, stepped) => app.render(dtReal, stepped, false),
       onError: (err) => app.onError(err),
       speed: ui.speed,
+      halt: () => app.shouldHalt(),
     });
     views.status = new BTC.StatusStrip(app);
+    views.home = new BTC.HomeView(app);
+    views.prologue = new BTC.PrologueView(app);
+    views.levelUI = new BTC.LevelUI(app);
+    views.hud = new BTC.Hud({ onGoal: () => hudGoalTap() });
     views.cellView = new BTC.CellView(app);
     views.genes = new BTC.GenesPanel(app);
     views.medium = new BTC.MediumPanel(app);
@@ -537,6 +939,9 @@
     views.genes.mount($('pane-genes'));
     views.medium.mount($('pane-medium'));
     views.graphs.mount($('pane-graphs'));
+    views.home.mount($('home'));
+    views.prologue.mount($('prologue'));
+    views.hud.mount($('hud'));
     narrView = new BTC.NarratorView($('narrator-text'));
 
     // Tabs: the bottom bar (compact) and the panel tabs (other layouts).
@@ -562,17 +967,19 @@
     // Laptop extras: Space runs or pauses; keys 1–5 choose a speed.
     document.addEventListener('keydown', (e) => {
       if (e.altKey || e.ctrlKey || e.metaKey || document.querySelector('.sheet-backdrop')) return;
+      if (app.screen === 'home' || $('app').hidden) return;
       const t = e.target, tag = t && t.tagName;
       if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
       if (e.key === ' ' && (tag === 'BODY' || tag === 'CANVAS' || !t)) { e.preventDefault(); app.togglePause(); }
-      const n = Number(e.key);
-      if (n >= 1 && n <= 5) app.setSpeed(C.speeds[n - 1].s);     // digits never activate a focused button
+      const n = Number(e.key), list = app.speedList();
+      if (n >= 1 && n <= list.length) app.setSpeed(list[n - 1].s);     // digits never activate a focused button
     });
 
     // Background tabs: stop and save; simulated time does not pass while hidden, and there is no catch-up.
     function hide() {
       if (app.loop.running) { app.resumeOnShow = true; app.loop.stop(); }
-      BTC.pwa.autosave(app);
+      app.autosaveNow();
+      app.tel.flush();
     }
     function show() {
       if (app.resumeOnShow) { app.resumeOnShow = false; app.loop.start(); }
@@ -588,8 +995,22 @@
       app.refreshControls();
       app.render(0, false, true, 0);
     } catch (err) { app.onError(err); }       // still register the worker and the debug hook below
+    app.logEvent('session_start', {
+      date: localDate(), build: app.build, engine: BTC.ENGINE_VERSION, layout: app.layout, w: window.innerWidth, h: window.innerHeight,
+      standalone: !!((typeof matchMedia === 'function' && matchMedia('(display-mode: standalone)').matches) || navigator.standalone === true),
+      touch: 'ontouchstart' in window || (navigator.maxTouchPoints || 0) > 0, reducedMotion: app.reducedMotion(),
+    });
+    // The first screen (LEVELS §5.11): ?level, ?lab, else the last screen; a fresh install opens home.
+    const lastScreen = ui.screen;
+    if (params.level) app.enterLevel(params.level, { v: params.v });
+    else if (params.lab || (lastScreen === 'lab' && !params.test)) { setScreen('lab'); showSurface('app'); }
+    else if (lastScreen === 'level' && !params.reset) {
+      const s = app.progress.loadLevel(BTC.ENGINE_VERSION);
+      if (s.status === 'ok' && BTC.levels.byId[s.save.levelId]) app.enterLevel(s.save.levelId);
+      else { if (s.status === 'mismatch') LY.toast(C.game.updated); app.enterHome(); }
+    } else app.enterHome();
     // Only a cell that has been run or changed is worth announcing (an untouched one is saved on every visit).
-    if (restored && (saved.snapshot.tick > 0 || (saved.snapshot.log && saved.snapshot.log.length > 0) || app.cell.pending.length > 0)) {
+    if (app.screen === 'lab' && restored && (saved.snapshot.tick > 0 || (saved.snapshot.log && saved.snapshot.log.length > 0) || app.cell.pending.length > 0)) {
       LY.toast(C.pwa.resumed, { label: C.pwa.resumedAction, run: () => app.openStartOver() });
     }
     BTC.pwa.register({ test: params.test, build: window.BTC_BUILD });
@@ -598,13 +1019,16 @@
     window.__btc = { get cell() { return app.cell; }, BTC, app };
 
     if (params.test) {
+      const stepN = (n) => {
+        let k = 0;
+        while (k < n && !app.shouldHalt()) { app.cell.step(); k++; }    // a level's cell stops where its run ends
+        app.onEvents(app.cell.takeEvents());
+        app.render(0, true, true, k * app.cell.dt);
+        return app.cell.tick;
+      };
+      const R = () => (app.level ? app.level.runner : null);
       app.test = {
-        runTicks(n) {
-          for (let i = 0; i < n; i++) app.cell.step();
-          app.onEvents(app.cell.takeEvents());
-          app.render(0, true, true, n * app.cell.dt);
-          return app.cell.tick;
-        },
+        runTicks: (n) => stepN(n),
         pause: () => app.pause(),
         resume: () => app.resume(),
         setSpeed: (s) => app.setSpeed(s),
@@ -615,6 +1039,40 @@
         cellViewStats: () => views.cellView.stats(),
         narratorKey: () => app.narrKey,
         shownKey: () => hold.key,
+        // Levels (LEVELS §9 item 12).
+        level: {
+          open(id, variantSeed) {
+            app.enterLevel(id, variantSeed === undefined ? {} : { v: typeof variantSeed === 'number' ? BTC.code.encodeSeed(variantSeed) : variantSeed });
+            return R() ? R().phase : null;
+          },
+          phase: () => (R() ? R().phase : null),
+          runner: R,
+          /** A prediction is locked; a debrief (or Prologue) question is tapped. Values are canonical option indices or 'ok'. */
+          answer(itemId, value) {
+            const r = R();
+            const out = r.phase === 'debrief' || r.phase === 'scenes' ? r.tap(itemId, value) : r.lock(itemId, value);
+            if (r.phase === 'predict' || r.phase === 'predict2') { if (!r.currentItem()) r.next(); }
+            views.levelUI.after();
+            return out;
+          },
+          sketch() { throw new Error('sketch input arrives with level 1.2 (build step 3)'); },
+          design(obj) { const ok = R().setDesign(obj); views.levelUI.after(); return ok; },
+          runTicks: (n) => { const t = stepN(n); updateHud(); return t; },
+          runToEnd() { let guard = 0; while (!app.shouldHalt() && guard++ < 1000) stepN(500); updateHud(); return app.cell.tick; },
+          /** The sheet's main button: the next line, screen or phase. */
+          next() {
+            const r = R();
+            if (r.phase === 'scenes') { if (r.sceneInfo().last) r.next(); else r.sceneNext(); }
+            else if (r.beat) { if (r.storyLine().last) r.next(); else r.storyNext(); }
+            else if (r.phase === 'echo' && !r.echoScreen().last) r.echoNext();
+            else if (hudMode(r)) r.next();
+            else r.next();
+            views.levelUI.after();
+            return r.phase;
+          },
+          code: () => (R() ? R().code : null),
+          score: () => (R() ? R().result : null),
+        },
       };
     }
     return app;

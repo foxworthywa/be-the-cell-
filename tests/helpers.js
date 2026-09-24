@@ -11,7 +11,7 @@ const BTC = {
   math: req('btc-math'), prng: req('btc-prng'), params: req('btc-params'), catalog: req('btc-catalog'),
   presets: req('btc-presets'), genome: req('btc-genome'), queue: req('btc-queue'), expression: req('btc-expression'),
   metabolism: req('btc-metabolism'), growth: req('btc-growth'), commands: req('btc-commands'), events: req('btc-events'),
-  observe: req('btc-observe'), replay: req('btc-replay'),
+  observe: req('btc-observe'), replay: req('btc-replay'), regulation: req('btc-regulation'),
   Cell: cellApi.Cell, ConfigError: cellApi.ConfigError, ENGINE_VERSION: cellApi.ENGINE_VERSION,
   dots: require(path.join(__dirname, '..', 'src', 'shared', 'btc-dots.js')),
   Recorder: require(path.join(__dirname, '..', 'src', 'shared', 'btc-recorder.js')),
