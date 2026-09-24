@@ -11,7 +11,8 @@
  * uppercases, maps O to 0 and I, L to 1, removes spaces and accepts – or —.
  *
  * Also here, for the instructor tools (§10.4): a small CSV reader, the code
- * finder for a Canvas "Student analysis" export and the duplicate checks.
+ * finder for a Canvas "Student analysis" export, the duplicate checks and the
+ * decoded table (named Expert objectives and flags, the variant's values).
  */
 (function (root, factory) {
   if (typeof module === 'object' && module.exports) {
@@ -207,5 +208,55 @@
     return rows;
   }
 
-  return { B32, SALT, b32, unb32, normalise, encodeSeed, decodeSeed, checksum, encode, decode, parseCSV, findCode, readCodes, analyse };
+  /**
+   * The instructor's table (§10.4): one plain row per entry, with the variant's values, the Expert
+   * objectives and flags by name, and every warning. defs: the level definitions (BTC.levels.list);
+   * opts.engine: this build's engine version. Pure: codes.html and tools/decode-codes.js share it.
+   */
+  function table(entries, defs, opts) {
+    const byCode = {};
+    for (const d of defs || []) byCode[d.code] = d;
+    const levels = {};
+    for (const c of Object.keys(byCode)) levels[c] = { id: byCode[c].id, version: byCode[c].version };
+    const rows = analyse(entries, { engine: opts && opts.engine, levels });
+    const flagIds = (d) => (d.flags || []).map((f) => (typeof f === 'string' ? f : f.id));
+    return rows.map((r) => {
+      const d = r.ok ? byCode[r.level] : null;
+      const out = {
+        student: r.student || '', code: r.code || r.input || '', valid: !!r.ok, reason: r.ok ? '' : (r.message || r.error || ''),
+        level: d ? d.id : r.level || '', variant: r.variant || '', variantValues: '', G: '', E: '', P: '', D: '', X: '', expert: '', expertText: '',
+        flags: '', attempt: '', runs: '', engine: r.engine || '', content: '', total: '', warnings: (r.warnings || []).join('; '),
+      };
+      if (!r.ok) return out;
+      if (d && d.scored && d.variantLabel) {
+        try { out.variantValues = d.variantLabel(d.variant(r.variantSeed)); } catch (e) { out.variantValues = ''; }
+      }
+      const pct = (x) => (x === null ? 'NA' : String(x));
+      Object.assign(out, {
+        G: String(r.G), E: pct(r.E), P: pct(r.P), D: r.D[0] + ' of ' + r.D[1], X: String(r.X),
+        attempt: r.override ? '0 (override)' : String(r.attempt), runs: String(r.runs), content: String(r.content),
+        total: r.total === null ? 'not scored' : String(r.total),
+      });
+      if (d) {
+        const ex = (d.text.task && d.text.task.expert) || [];
+        const met = ex.map((t, k) => ((r.X >> k) & 1 ? k : -1)).filter((k) => k >= 0);
+        out.expert = ex.length ? (met.length ? met.map((k) => k + 1).join(', ') : 'none') + ' of ' + ex.length : '';
+        out.expertText = met.map((k) => (k + 1) + ': ' + ex[k]).join(' | ');
+        out.flags = flagIds(d).filter((id, k) => (r.flags >> k) & 1).join(', ');
+      }
+      return out;
+    });
+  }
+
+  const TABLE_COLUMNS = ['student', 'level', 'variant', 'variantValues', 'G', 'E', 'P', 'D', 'X', 'expert', 'expertText', 'flags', 'attempt', 'runs',
+    'engine', 'content', 'total', 'valid', 'reason', 'warnings', 'code'];
+
+  /** The table as CSV (RFC 4180 quoting), with a header row. */
+  function toCSV(rows, columns) {
+    const cols = columns || TABLE_COLUMNS;
+    const q = (v) => { const t = v === undefined || v === null ? '' : String(v); return /[",\r\n]/.test(t) ? '"' + t.replace(/"/g, '""') + '"' : t; };
+    return [cols.join(',')].concat(rows.map((r) => cols.map((c) => q(c === 'valid' ? (r.valid ? 'yes' : 'no') : r[c])).join(','))).join('\r\n') + '\r\n';
+  }
+
+  return { B32, SALT, b32, unb32, normalise, encodeSeed, decodeSeed, checksum, encode, decode, parseCSV, findCode, readCodes, analyse, table, toCSV, TABLE_COLUMNS };
 });

@@ -87,13 +87,20 @@
       // Size | Growth swap (wide only).
       this.swapCtrl = segmentedLocal(G.plots.size, G.sizeOrGrowth, (k) => { app.ui.plot4 = k; app.savePrefs(); this.applySwap(); this.redraw(); });
       this.swapCtrl.el.classList.add('swap-ctrl');
-      root.appendChild(h('div', { class: 'graph-controls' }, [
-        chipRow,
-        h('div', { class: 'window-row' }, [h('span', { class: 'ctl-label inline', text: G.window }), this.windowCtrl.el, this.swapCtrl.el]),
-      ]));
+      // A level with its own fixed window (1.2: the 20-min test run, the whole 24-min run) hides the window choice.
+      const gw = app.labConfig.graphWindow;
+      const fixedWindow = !!gw && !G.windows.some((x) => x.s === gw);
+      const winRow = h('div', { class: 'window-row' }, [h('span', { class: 'ctl-label inline', text: G.window }), this.windowCtrl.el, this.swapCtrl.el]);
+      if (fixedWindow) { this.windowCtrl.el.hidden = true; winRow.firstChild.hidden = true; }
+      this.fixedWindow = fixedWindow;
+      root.appendChild(h('div', { class: 'graph-controls' }, [chipRow, winRow]));
       const grid = h('div', { class: 'plot-grid' });
       root.appendChild(grid);
-      for (const spec of SPECS) {
+      // A level may show fewer plots, in its own order (1.2's demo: Protein above mRNA).
+      const want = app.labConfig.plots;
+      const specs = Array.isArray(want) ? want.map((k) => SPECS.find((x) => x.key === k)).filter(Boolean) : SPECS;
+      const yBand = app.labConfig.yBand;
+      for (const spec of specs) {
         const canvas = h('canvas', { class: 'plot-canvas' });
         const value = h('span', { class: 'plot-value num' });
         const head = h('div', { class: 'plot-head' }, [h('div', { class: 'plot-titles' }, [h('span', { class: 'plot-title', text: spec.title }), value])]);
@@ -107,6 +114,7 @@
           head.appendChild(logCtrl.el);
         }
         const plot = new Plot({ canvas, scale: spec.scale, min: spec.min, max: spec.max, extendStep: spec.extendStep, band: spec.band, labelGutter: spec.multi });
+        if (yBand && yBand.plot === spec.key) plot.setYBand({ lo: yBand.lo, hi: yBand.hi, label: yBand.label });
         const entry = { spec, plot, box, value, logCtrl, canvas };
         this.attachPointer(entry);
         this.plots.push(entry);
@@ -126,10 +134,11 @@
         return { name, seg, lab, small: h('span', { class: 'spend-item' }, [h('span', { class: 'swatch' + (name === 'translation' ? ' hatch' : ''), style: { background: 'var(--ledger-' + i + ')' } }), h('span', { class: 'spend-text' })]) };
       });
       this.segs.forEach((s) => this.barSmall.appendChild(s.small));
-      root.appendChild(h('figure', { class: 'plot spend', 'data-plot': 'spending' }, [
+      const spendFig = h('figure', { class: 'plot spend', 'data-plot': 'spending', hidden: Array.isArray(want) && want.indexOf('spending') < 0 }, [
         h('div', { class: 'plot-head' }, [h('span', { class: 'plot-title', text: G.plots.spending })]),
         this.bar, this.barEmpty, this.barNone, this.barSmall,
-      ]));
+      ]);
+      root.appendChild(spendFig);
       void this.barLabels;
       this.syncControls();
       this.applySwap();
@@ -176,12 +185,24 @@
     applySwap() {
       const wide = this.app.layout === 'wide';
       const which = this.app.ui.plot4 === 'growth' ? 'growth' : 'size';
+      const both = this.plots.some((p) => p.spec.key === 'size') && this.plots.some((p) => p.spec.key === 'growth');
       for (const p of this.plots) {
-        const hide = wide && ((p.spec.key === 'size' && which !== 'size') || (p.spec.key === 'growth' && which !== 'growth'));
+        const hide = both && wide && ((p.spec.key === 'size' && which !== 'size') || (p.spec.key === 'growth' && which !== 'growth'));
         p.box.hidden = hide;
       }
-      this.swapCtrl.el.hidden = !wide;
+      this.swapCtrl.el.hidden = !wide || !both;
       this.swapCtrl.update(which);
+      const row = this.swapCtrl.el.parentNode;
+      if (row && this.fixedWindow) row.hidden = this.swapCtrl.el.hidden;
+    }
+
+    /** A curve over one plot (1.2: the student's sketch over the Protein plot): points [[t_s, y]]; null clears. */
+    setOverlay(key, points, style) {
+      const p = this.plots.find((x) => x.spec.key === key);
+      if (!p) return;
+      p.plot.setOverlay(points, style);
+      p.overlay = { points, style };
+      this.redraw();
     }
 
     syncControls() {
@@ -235,6 +256,7 @@
         if (p.box.hidden) continue;
         this.fillSeries(p.spec, view);
         m.gutterL = gl; m.gutterR = gr;
+        p.plot.opts.xStep = m.window <= 1800 ? 300 : 0;          // 5-min ticks on a level's short fixed window
         p.plot.draw(m);
         LY.setText(p.value, this.valueText(p.spec, view));
       }

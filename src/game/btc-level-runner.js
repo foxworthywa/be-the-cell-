@@ -1,4 +1,4 @@
-// @deps btc-cell btc-level-kit btc-levels btc-score btc-code
+// @deps btc-cell btc-replay btc-level-kit btc-levels btc-score btc-code
 /*
  * Be the Cell: the level runner (LEVELS §4) and the headless player.
  *
@@ -18,6 +18,8 @@
  *   r.echoNext()                                     "Meanwhile, in you"
  *   r.preview()                                      score components so far (the result sheet)
  *   r.result, r.code, r.runFile(extra), r.save(), LevelRunner.restore(def, saved, opts)
+ *   BTC.game.verifyRunFile(file, {levels})           replays a run file's records with the level's
+ *                                                    monitor and recomputes its score and code (§10.4)
  *
  * The run's cell gets the level monitor through a recorder: after every step
  * it passes the user commands that have been applied (LogEntries, in order),
@@ -25,15 +27,17 @@
  * replay, so the headless player, the app and verify-run agree.
  *
  * Option values of choice questions are canonical option indices (the order
- * in the level file); solutions may write 'ok' for the right option.
+ * in the level file); solutions may write 'ok' for the right option. A policy's
+ * act(view, tick, api, variant) gets the variant as its fourth argument.
  */
 (function (root, factory) {
   if (typeof module === 'object' && module.exports) {
-    module.exports = factory(require('../engine/btc-cell.js'), require('./btc-level-kit.js'), require('./btc-levels.js'),
-      require('./btc-score.js'), require('./btc-code.js'));
+    const cellApi = require('../engine/btc-cell.js');
+    module.exports = factory({ Cell: cellApi.Cell, ENGINE_VERSION: cellApi.ENGINE_VERSION, replay: require('../engine/btc-replay.js') },
+      require('./btc-level-kit.js'), require('./btc-levels.js'), require('./btc-score.js'), require('./btc-code.js'));
   } else {
     var B = root.BTC || (root.BTC = {});
-    var api = factory({ Cell: B.Cell, ENGINE_VERSION: B.ENGINE_VERSION }, B.levelKit, B.levels, B.score, B.code);
+    var api = factory({ Cell: B.Cell, ENGINE_VERSION: B.ENGINE_VERSION, replay: B.replay }, B.levelKit, B.levels, B.score, B.code);
     B.LevelRunner = api.LevelRunner;
     B.game = api.game;
   }
@@ -51,26 +55,119 @@
     return x;
   }
 
-  /**
-   * Builds a cell from a level config. Engine builds before LEVELS R-E3 reject an opaque
-   * config.variant; the cell is then built without it (the variant still goes into the
-   * code, the result and the run file), so levels run on either engine.
-   */
+  /** Builds a cell from a level config (engine ≥ 1.1 accepts config.variant, LEVELS R-E3). */
   function makeCell(config) {
-    try { return new Cell(config); } catch (e) {
-      if (e && e.name === 'ConfigError' && config && config.variant && /^variant/.test(String(e.path || ''))) {
-        const c = Object.assign({}, config);
-        delete c.variant;
-        return new Cell(c);
-      }
-      throw e;
-    }
+    return new Cell(config);
   }
 
   function localDate() {
     const d = new Date();
     const p = (n) => (n < 10 ? '0' : '') + n;
     return d.getFullYear() + '-' + p(d.getMonth() + 1) + '-' + p(d.getDate());
+  }
+
+  /**
+   * The record of one locked prediction (pure; the runner, verify-run and the tests share it):
+   * {locked, value, option?, correct?, mc?, answer?, features?, P?} or {error}.
+   * extras: {demo} (1.2's Expert number is judged against the demo's copies per mRNA).
+   */
+  function answerRecord(it, value, variant, extras) {
+    const a = { locked: true, value };
+    if (it.kind === 'choice') {
+      const idx = value === 'ok' ? it.options.findIndex((o) => o.ok === true) : value;
+      const o = it.options[idx];
+      if (!o) return { error: 'no such option' };
+      a.value = idx; a.option = idx; a.correct = o.ok === true; a.mc = o.mc || null;
+    } else if (it.kind === 'number') {
+      const x = Math.max(it.min, Math.min(it.max, Number(value)));
+      if (!(x === x)) return { error: 'not a number' };
+      a.value = x;
+      const ans = it.answer(variant, extras || {});
+      a.answer = ans;
+      a.correct = ans !== 0 ? Math.abs(x - ans) / Math.abs(ans) <= it.tolerance : x === 0;
+    } else if (it.kind === 'sketch' && typeof it.evaluate === 'function') {
+      const e = it.evaluate(value, variant, extras || {});
+      if (e) { a.features = e.features; a.P = e.P; a.correct = e.P === 1; }
+    }
+    return a;
+  }
+
+  /** Debrief state {qid: {tries, solved, first, firstCorrect, firstMc}} rebuilt from the taps, in order (pure). */
+  function debriefFromTaps(def, taps) {
+    const out = {};
+    for (const t of taps || []) {
+      const q = def.debrief.find((x) => x.id === t.id);
+      const o = q && q.options[t.option];
+      if (!o) continue;
+      const st = out[t.id] || (out[t.id] = { tries: [], solved: false, first: null, firstCorrect: false, firstMc: null });
+      if (st.solved || st.tries.indexOf(t.option) >= 0) continue;
+      st.tries.push(t.option);
+      const correct = o.ok === true;
+      if (st.tries.length === 1) { st.first = t.option; st.firstCorrect = correct; st.firstMc = correct ? null : (o.mc || null); }
+      if (correct) st.solved = true;
+    }
+    return out;
+  }
+
+  /**
+   * A recorder that feeds a level monitor exactly as a run does, live or in a replay: after
+   * every step, the user commands applied so far (LogEntries, in order) go to
+   * monitor.userCommand, then monitor.onTick(cell), then monitor.end(). st holds {logIdx,
+   * endReason, endTick} (the run keeps it in its autosave). onCommand(entry) and
+   * onEnd(reason, tick) are optional.
+   */
+  function monitorFeed(monitor, st, onCommand, onEnd) {
+    return {
+      onTick(c) {
+        const log = c.log;
+        while (st.logIdx < log.length) {
+          const e = log[st.logIdx];
+          if (e.source !== 'user') { st.logIdx++; continue; }
+          if (!(e.tick < c.tick)) break;             // not applied yet
+          st.logIdx++;
+          if (monitor.userCommand) monitor.userCommand(copy(e));
+          if (onCommand) onCommand(e);
+        }
+        monitor.onTick(c);
+        if (!st.endReason) {
+          const r = monitor.end();
+          if (r) {
+            st.endReason = r; st.endTick = c.tick;
+            if (onEnd) onEnd(r, c.tick);
+          }
+        }
+      },
+    };
+  }
+
+  /**
+   * G, E, P, D, X, flags, total and the code of an attempt (§6, §10), from the level's score
+   * components. o: {goal, comp, debrief (state), variantSeed, attempt, runs, override, record}.
+   */
+  function summarise(def, o) {
+    const comp = o.comp || {};
+    let first = 0;
+    for (const q of def.debrief) if (o.debrief[q.id] && o.debrief[q.id].firstCorrect) first++;
+    const D = [first, def.debrief.length];
+    const scored = def.scored;
+    const G = scored ? (o.goal ? 1 : 0) : 1;
+    // Efficiency against par counts only when the goal was met (§6.1), so a missed goal reports E 0.
+    const E = scored ? (G && typeof comp.E === 'number' ? S.clamp01(comp.E) : 0) : null;
+    const P = scored && typeof comp.P === 'number' ? S.clamp01(comp.P) : null;
+    const X = comp.X || 0;
+    const flagIds = LV.flagList(def).map((f) => f.id);
+    const evidence = (comp.flags || []).map((f) => (typeof f === 'string' ? { id: f } : copy(f)))
+      .filter((f, i, a) => flagIds.indexOf(f.id) >= 0 && a.findIndex((g) => g.id === f.id) === i);
+    const total = scored ? S.total({ G, E, P, D }) : null;
+    const digest = scored && o.record ? o.record.finalHash.slice(0, 6).toUpperCase() : '000000';
+    const engine = (o.record && o.record.engineVersion) || ENG.ENGINE_VERSION;
+    const attempt = o.override ? 0 : o.attempt;
+    const runs = Math.max(1, o.runs || 0);
+    const code = CODE.encode({
+      level: def.code, variantSeed: o.variantSeed, G, E: S.percent(E), P: S.percent(P), D, X,
+      flags: S.flagMask(flagIds, evidence), attempt, runs, engine, content: def.version, digest,
+    });
+    return { G, E, P, D, X, evidence, total, code, engine, attempt, runs };
   }
 
   class LevelRunner {
@@ -113,7 +210,7 @@
       this.withoutGoal = false;
       this.demo = { done: false, cell: null, record: null, result: null };
       this.design = null;
-      this.epilogue = { startTick: null, done: false };
+      this.epilogue = { startTick: null, done: false, started: false };
       this.result = null;
       this.code = null;
       this.flagEvidence = [];
@@ -153,7 +250,7 @@
       } else if (p === 'result') {
         if (this.goal && def.story.outro.length && !this.outroShown) this.beat = { name: 'outro', index: 0 };
       } else if (p === 'epilogue') {
-        this.epilogue = { startTick: this.run ? this.run.cell.tick : 0, done: false };
+        this.epilogue = { startTick: this.run ? this.run.cell.tick : 0, done: false, started: false };
       } else if (p === 'echo') {
         this.echoIndex = 0;
         if (!this.outroShown && def.story.outro.length) this.beat = { name: 'outro', index: 0 };
@@ -213,7 +310,16 @@
     }
 
     // --- story beats ----------------------------------------------------------------
-    beatLines(name) { return (this.def.story[name] || []); }
+    /** A beat's lines; the outro may be swapped for one in story.extra when the level's outroKey names it. */
+    beatLines(name) {
+      const def = this.def;
+      if (name === 'outro' && def.outroKey) {
+        const key = def.outroKey(this.variant, this.monitorResult || {}, this.goal);
+        const alt = key && def.story.extra && def.story.extra[key];
+        if (alt) return alt;
+      }
+      return def.story[name] || [];
+    }
     storyLine() {
       if (!this.beat) return null;
       const lines = this.beatLines(this.beat.name), l = lines[this.beat.index];
@@ -320,27 +426,17 @@
       if (!it) return { ok: false, reason: 'unknown item' };
       if ((it.phase || 'predict') !== this.phase) return { ok: false, reason: 'phase' };
       if (this.answers[id]) return { ok: false, reason: 'locked' };
-      let v = value === undefined ? this.selected[id] : value;
+      const v = value === undefined ? this.selected[id] : value;
       if (v === undefined || v === null) return { ok: false, reason: 'no answer' };
-      const a = { locked: true, value: v };
-      if (it.kind === 'choice') {
-        v = this.resolveOption(it, v);
-        const o = it.options[v];
-        if (!o) return { ok: false, reason: 'no such option' };
-        a.value = v; a.option = v; a.correct = o.ok === true; a.mc = o.mc || null;
-      } else if (it.kind === 'number') {
-        const x = Math.max(it.min, Math.min(it.max, Number(v)));
-        if (!(x === x)) return { ok: false, reason: 'not a number' };
-        a.value = x;
-        const ans = it.answer(this.variant, { demo: this.demo.result });
-        a.answer = ans;
-        a.correct = ans !== 0 ? Math.abs(x - ans) / Math.abs(ans) <= it.tolerance : x === 0;
-      }
+      const a = answerRecord(it, v, this.variant, { demo: this.demo.result });
+      if (a.error) return { ok: false, reason: a.error };
       this.answers[id] = a;
       delete this.selected[id];
       const d = { id, kind: it.kind };
-      if (it.kind === 'sketch') d.points = Array.isArray(v) ? v.filter(Boolean).length : 0;
-      else { d.value = a.value; d.correct = a.correct === undefined ? null : a.correct; }
+      if (it.kind === 'sketch') {
+        d.points = Array.isArray(a.value) ? a.value.filter(Boolean).length : 0;
+        if (a.features) { d.features = a.features; d.P = a.P; }
+      } else { d.value = a.value; d.correct = a.correct === undefined ? null : a.correct; }
       this.log('predict', d);
       return { ok: true };
     }
@@ -393,31 +489,22 @@
       const def = this.def;
       const monitor = def.monitor(this.variant, { dt: cell.dt, K, variant: this.variant, design: this.design });
       if (saved && saved.monitor !== undefined && monitor.restore) monitor.restore(copy(saved.monitor));
+      else if (!saved && monitor.start) monitor.start(cell);
       const run = {
         cell, monitor, logIdx: saved ? saved.logIdx : 0,
         endReason: saved ? saved.endReason : null, endTick: saved ? saved.endTick : null,
       };
       const runner = this;
+      const feed = monitorFeed(monitor, run, (e) => {
+        const d = { seq: e.seq, type: e.type, args: copy(e.args) || {}, ok: !e.rejected };
+        if (e.rejected) d.code = e.rejected;
+        runner.log('cmd', d, e.tick);
+      }, (reason, tick) => runner.endRun(reason, tick));
       run.recorder = {
         onTick(c) {
           if (runner.run !== run) return;
-          const log = c.log;
-          while (run.logIdx < log.length) {
-            const e = log[run.logIdx];
-            if (e.source !== 'user') { run.logIdx++; continue; }
-            if (!(e.tick < c.tick)) break;             // not applied yet
-            run.logIdx++;
-            if (monitor.userCommand) monitor.userCommand(copy(e));
-            const d = { seq: e.seq, type: e.type, args: copy(e.args) || {}, ok: !e.rejected };
-            if (e.rejected) d.code = e.rejected;
-            runner.log('cmd', d, e.tick);
-          }
-          monitor.onTick(c);
-          if (!run.endReason) {
-            const r = monitor.end();
-            if (r) runner.endRun(r, c.tick);
-          }
-          if (runner.phase === 'epilogue' && !runner.epilogue.done && def.epilogue &&
+          feed.onTick(c);
+          if (runner.phase === 'epilogue' && runner.epilogue.started && !runner.epilogue.done && def.epilogue &&
             c.tick - runner.epilogue.startTick >= def.epilogue.durationTicks) runner.epilogue.done = true;
         },
       };
@@ -437,13 +524,25 @@
 
     /** True when the app must not step the cell any further (the run has ended, or the epilogue is done). */
     halted() {
+      if (this.phase === 'demo') return !this.demo.cell || this.demo.done || this.demo.cell.tick >= this.def.demo.durationTicks;
       if (!this.run) return true;
-      if (this.phase === 'epilogue') return this.epilogue.done;
+      if (this.phase === 'epilogue') return !this.epilogue.started || this.epilogue.done;
       if (this.phase === 'run') return !!this.run.endReason;
       return true;
     }
     /** True when time may run for the cell on screen. */
-    canRun() { return !!this.run && !this.halted(); }
+    canRun() { return this.phase === 'demo' ? !this.halted() : !!this.run && !this.halted(); }
+
+    /**
+     * The epilogue (1.4) starts when the student acts (taps "Switch LacY off"): its watching time
+     * counts from here. The headless player starts it on entry.
+     */
+    startEpilogue() {
+      if (this.phase !== 'epilogue' || this.epilogue.started) return false;
+      this.epilogue.started = true;
+      this.epilogue.startTick = this.run ? this.run.cell.tick : 0;
+      return true;
+    }
 
     /** Try again after a failed run: same variant and seed, a fresh cell, predictions kept. */
     retry() {
@@ -471,7 +570,12 @@
     // --- demo (1.2) and design (1.7) --------------------------------------------------
     startDemo() {
       const cell = this.makeCell(this.def.config(this.variant, 'demo', this.extra()));
-      this.demo = { done: false, cell, record: null, result: null };
+      const mon = this.def.demo && this.def.demo.monitor ? this.def.demo.monitor(this.variant) : null;
+      this.demo = { done: false, cell, record: null, result: null, monitor: mon };
+      if (mon) {
+        if (mon.start) mon.start(cell);
+        cell.attachRecorder({ onTick: (c) => mon.onTick(c) });
+      }
       return cell;
     }
     /** The app or the headless player calls this after stepping the demo cell. */
@@ -481,7 +585,13 @@
       if (d.cell.tick >= this.def.demo.durationTicks) {
         d.done = true;
         d.record = d.cell.runRecord();
-        d.result = this.def.demoResult ? copy(this.def.demoResult(this.variant, d.cell)) : null;
+        d.result = this.def.demoResult ? copy(this.def.demoResult(this.variant, d.cell, d.monitor ? d.monitor.result() : null)) : null;
+        // Expert numbers that are judged against the demo (1.2's copies per mRNA) are marked now.
+        for (const it of this.def.predictions) {
+          const a = this.answers[it.id];
+          if (it.kind === 'number' && a && a.locked) Object.assign(a, answerRecord(it, a.value, this.variant, { demo: d.result }));
+        }
+        if (d.result && typeof d.result.ppm === 'number') this.log('demo_end', { ppm: d.result.ppm, final: d.result.final });
       }
       return d.done;
     }
@@ -515,7 +625,9 @@
     }
     hud() {
       if (!this.def.hud) return null;
-      const state = this.run && this.run.monitor.save ? this.run.monitor.save() : null;
+      let state = this.run && this.run.monitor.save ? this.run.monitor.save() : null;
+      if (this.phase === 'demo') state = this.demo.monitor && this.demo.monitor.save ? Object.assign({ demo: true }, this.demo.monitor.save()) : { demo: true };
+      else if (this.phase === 'epilogue' && state) state = Object.assign({}, state, { epilogue: copy(this.epilogue) });
       return this.def.hud(this.variant, state);
     }
     /** Level narrator rules with the read-only `level` object of §5.5.4 as their fourth argument. */
@@ -527,7 +639,9 @@
       }));
     }
     levelView() {
-      return { variant: this.variant, design: this.design, monitor: this.run && this.run.monitor.save ? this.run.monitor.save() : null, phase: this.phase };
+      const demo = this.phase === 'demo';
+      const mon = demo ? this.demo.monitor : this.run && this.run.monitor;
+      return { variant: this.variant, design: this.design, monitor: mon && mon.save ? mon.save() : null, phase: this.phase };
     }
 
     // --- scoring and the code (§6, §10) -------------------------------------------------
@@ -551,35 +665,19 @@
       const def = this.def;
       const comp = def.score ? (def.score(this.variant, this.monitorResult || {}, this.answersForScore(),
         { demo: this.demo.result, design: this.design, withoutGoal: this.withoutGoal }) || {}) : {};
-      const qs = def.debrief;
-      let first = 0;
-      for (const q of qs) if (this.debriefState[q.id] && this.debriefState[q.id].firstCorrect) first++;
-      const D = [first, qs.length];
-      const scored = def.scored;
-      const G = scored ? (this.goal ? 1 : 0) : 1;
-      // Efficiency against par counts only when the goal was met (§6.1), so a missed goal reports E 0.
-      const E = scored ? (G && typeof comp.E === 'number' ? S.clamp01(comp.E) : 0) : null;
-      const P = scored && typeof comp.P === 'number' ? S.clamp01(comp.P) : null;
-      const X = comp.X || 0;
-      const flagIds = LV.flagList(def).map((f) => f.id);
-      const evidence = (comp.flags || []).map((f) => (typeof f === 'string' ? { id: f } : copy(f)))
-        .filter((f, i, a) => flagIds.indexOf(f.id) >= 0 && a.findIndex((g) => g.id === f.id) === i);
-      this.flagEvidence = evidence;
-      const total = scored ? S.total({ G, E, P, D }) : null;
-      const digest = scored && this.record ? this.record.finalHash.slice(0, 6).toUpperCase() : '000000';
-      const engine = (this.record && this.record.engineVersion) || ENG.ENGINE_VERSION;
-      this.code = CODE.encode({
-        level: def.code, variantSeed: this.variantSeed, G, E: S.percent(E), P: S.percent(P), D, X,
-        flags: S.flagMask(flagIds, evidence), attempt: this.override ? 0 : this.attempt, runs: Math.max(1, this.runs),
-        engine, content: def.version, digest,
+      const r = summarise(def, {
+        goal: this.goal, comp, debrief: this.debriefState, variantSeed: this.variantSeed, attempt: this.attempt,
+        runs: this.runs, override: this.override, record: this.record,
       });
+      this.flagEvidence = r.evidence;
+      this.code = r.code;
       this.result = {
-        attempt: this.override ? 0 : this.attempt, variantSeed: this.variantSeed, content: def.version, engine,
-        runs: Math.max(1, this.runs), G, E, P, D, X, flags: evidence.map((f) => f.id), total, code: this.code,
+        attempt: r.attempt, variantSeed: this.variantSeed, content: def.version, engine: r.engine,
+        runs: r.runs, G: r.G, E: r.E, P: r.P, D: r.D, X: r.X, flags: r.evidence.map((f) => f.id), total: r.total, code: r.code,
         date: this.today(), override: this.override,
       };
-      for (const f of evidence) this.log('flag', { id: f.id, evidence: f });
-      this.log('score', { G, E, P, D, X, total });
+      for (const f of r.evidence) this.log('flag', { id: f.id, evidence: f });
+      this.log('score', { G: r.G, E: r.E, P: r.P, D: r.D, X: r.X, total: r.total });
       return this.result;
     }
 
@@ -656,7 +754,7 @@
     r.withoutGoal = !!s.withoutGoal;
     r.design = copy(s.design) || null;
     r.demo = { done: !!(s.demo && s.demo.done), cell: null, record: s.demo ? copy(s.demo.record) : null, result: s.demo ? copy(s.demo.result) : null };
-    r.epilogue = copy(s.epilogue) || { startTick: null, done: false };
+    r.epilogue = copy(s.epilogue) || { startTick: null, done: false, started: false };
     r.record = copy(s.record) || null;
     r.monitorResult = copy(s.monitorResult) || null;
     r.goal = !!s.goal;
@@ -710,9 +808,9 @@
           cell = runner.run.cell;
           restored = true;
         }
-        if (runner.phase === 'run' && sol.every && cell.tick % sol.every === 0) sol.act(cell.observe(), cell.tick, api(runner));
+        if (runner.phase === 'run' && sol.every && cell.tick % sol.every === 0) sol.act(cell.observe(), cell.tick, api(runner), runner.variant);
         if (runner.phase === 'epilogue' && sol.epilogue && cell.tick % (sol.epilogue.every || 1) === 0) {
-          sol.epilogue.act(cell.observe(), cell.tick, api(runner));
+          sol.epilogue.act(cell.observe(), cell.tick, api(runner), runner.variant);
         }
         cell.step();
         const evs = cell.takeEvents();
@@ -732,10 +830,12 @@
       }
       if (p === 'predict' || p === 'predict2') {
         for (const it of r.items()) {
-          const v = sol.predictions ? sol.predictions[it.id] : undefined;
+          let v = sol.predictions ? sol.predictions[it.id] : undefined;
+          // A Core sketch or number the solution does not script takes the reference's answer.
+          if (v === undefined && !it.expert && it.kind !== 'choice') v = (def.solutions.reference.predictions || {})[it.id];
           if (v !== undefined) r.lock(it.id, typeof v === 'function' ? v(r.variant) : v);
           else if (it.expert) r.skip(it.id);
-          else r.lock(it.id, it.kind === 'choice' ? 'ok' : undefined);
+          else r.lock(it.id, 'ok');
         }
       } else if (p === 'demo') {
         const cell = r.startDemo();
@@ -752,6 +852,7 @@
           continue;
         }
       } else if (p === 'epilogue') {
+        r.startEpilogue();
         stepCell(r, r.run.cell, () => r.epilogue.done);
       } else if (p === 'debrief') {
         for (const q of def.debrief) answer(q.id);
@@ -764,6 +865,115 @@
     return { runner: r, result: r.result, code: r.code, restored };
   }
 
-  const game = { makeCell, playHeadless, LevelRunner };
+  // ---------------------------------------------------------------------------
+  // Run-file verification (§10.4; tools/verify-run.js and tools/codes.html)
+  // ---------------------------------------------------------------------------
+  /** Replays a record with a fresh monitor (make(cell) → monitor) fed exactly as in a run; returns {cell, monitor, st}. */
+  function replayWithMonitor(record, make) {
+    const st = { logIdx: 0, endReason: null, endTick: null };
+    let monitor = null;
+    const cell = ENG.replay.run(record, record.finalTick, {
+      attach(c) {
+        monitor = make(c);
+        if (monitor.start) monitor.start(c);
+        c.attachRecorder(monitorFeed(monitor, st));
+      },
+    });
+    return { cell, monitor, st };
+  }
+
+  /**
+   * Verifies a level run file (§11.4): the variant from its seed, the configs of its records,
+   * a replay of the scored run with the level's monitor attached (R-E18), the 1.2 demo, and the
+   * score, flags, total and code recomputed from the stored answers. opts: {levels: {id: def}}.
+   * Returns {ok, level, checks: [{what, ok, got, want}], recomputed, error?}.
+   */
+  function verifyRunFile(file, opts) {
+    const levels = (opts && opts.levels) || LV.byId;
+    const out = { ok: false, level: null, checks: [], recomputed: null };
+    const check = (what, ok, got, want) => { out.checks.push({ what, ok: !!ok, got: got === undefined ? null : got, want: want === undefined ? null : want }); return !!ok; };
+    const L = file && file.level;
+    if (!file || file.format !== 'btc-level-run' || !L) { out.error = 'not a Be the Cell level run file'; return out; }
+    const def = levels[L.id];
+    if (!def) { out.error = 'unknown level ' + L.id; return out; }
+    out.level = L.id;
+    check('content version', L.content === def.version, L.content, def.version);
+    const variantSeed = def.scored ? (L.variantSeed >>> 0) & 0x3FFFFFFF : 0;
+    const variant = copy(def.variant(variantSeed));
+    check('variant from its seed', JSON.stringify(variant) === JSON.stringify(L.variant), L.variant, variant);
+    const design = L.design || null;
+    const recs = file.records || {};
+    const configHash = (role) => new Cell(def.config(variant, role, { deviceSeed: 0, design })).configHash;
+    try {
+      // The 1.2 demo: its config, its replay and its result (the copies per mRNA and the curve).
+      let demo = null;
+      if (def.demo && recs.demo) {
+        check('demo config', recs.demo.configHash === configHash('demo'), recs.demo.configHash, configHash('demo'));
+        const rep = def.demo.monitor ? replayWithMonitor(recs.demo, () => def.demo.monitor(variant)) : { cell: ENG.replay.run(recs.demo, recs.demo.finalTick), monitor: null };
+        check('demo replay reaches its final hash', rep.cell.hash() === recs.demo.finalHash, rep.cell.hash(), recs.demo.finalHash);
+        demo = def.demoResult ? copy(def.demoResult(variant, rep.cell, rep.monitor ? rep.monitor.result() : null)) : null;
+      } else if (def.demo) check('demo record present', false, null, 'records.demo');
+      // The scored run.
+      let monitorResult = {}, record = null;
+      if (def.monitor) {
+        record = recs.task;
+        if (!check('scored run record present', !!record, null, 'records.task')) return out;
+        check('run config is this level\'s', record.configHash === configHash('task'), record.configHash, configHash('task'));
+        const rep = replayWithMonitor(record, (c) => def.monitor(variant, { dt: c.dt, K, variant, design }));
+        check('run replay reaches its final hash', rep.cell.hash() === record.finalHash, rep.cell.hash(), record.finalHash);
+        check('run ends as recorded', rep.st.endTick === record.finalTick, rep.st.endTick, record.finalTick);
+        monitorResult = copy(rep.monitor.result()) || {};
+      }
+      // Answers and debrief, re-marked from what the file stores.
+      const predictions = {};
+      for (const it of def.predictions) {
+        const v = L.answers ? L.answers[it.id] : undefined;
+        if (v !== undefined && v !== null) predictions[it.id] = answerRecord(it, v, variant, { demo });
+        else if (it.expert) predictions[it.id] = { locked: false, skipped: true, value: null };
+      }
+      const debrief = debriefFromTaps(def, L.debrief);
+      const comp = def.score ? (def.score(variant, monitorResult, { predictions, debrief }, { demo, design, withoutGoal: false }) || {}) : {};
+      const r = summarise(def, {
+        goal: !!monitorResult.goal, comp, debrief, variantSeed, attempt: L.attempt, runs: L.runs, override: L.override, record,
+      });
+      const res = L.result || {};
+      out.recomputed = { G: r.G, E: r.E, P: r.P, D: r.D, X: r.X, flags: r.evidence.map((f) => f.id), total: r.total, code: r.code };
+      const near = (a, b) => (a === null || a === undefined ? b === null || b === undefined : typeof b === 'number' && Math.abs(a - b) < 1e-9);
+      check('goal (G)', res.G === r.G, res.G, r.G);
+      check('efficiency (E)', near(res.E, r.E), res.E, r.E);
+      check('prediction (P)', near(res.P, r.P), res.P, r.P);
+      check('debrief (D)', JSON.stringify(res.D) === JSON.stringify(r.D), res.D, r.D);
+      check('Expert (X)', res.X === r.X, res.X, r.X);
+      const gotFlags = (res.flags || []).map((f) => (typeof f === 'string' ? f : f.id)).sort();
+      check('flags', JSON.stringify(gotFlags) === JSON.stringify(out.recomputed.flags.slice().sort()), gotFlags, out.recomputed.flags);
+      check('total', res.total === r.total, res.total, r.total);
+      check('code', L.code === r.code, L.code, r.code);
+    } catch (err) {
+      check('replay', false, String(err && err.message || err), 'no error');
+    }
+    out.ok = out.checks.every((c) => c.ok);
+    return out;
+  }
+
+  /**
+   * What a played solution got wrong against its expect (§3.6): [] when it met every claim.
+   * expect: {goal: bool, par: bool (true: goal met and E ≥ 0.8; false: not both), P, minTotal,
+   * flags: [ids that must be raised], X (bits that must be set)}.
+   */
+  function checkExpect(expect, result) {
+    const e = expect || {}, r = result, out = [];
+    const withinPar = r.G === 1 && typeof r.E === 'number' && r.E >= S.PAR;
+    if (e.goal === true && r.G !== 1) out.push('goal not met');
+    if (e.goal === false && r.G !== 0) out.push('goal met');
+    if (e.par === true && !withinPar) out.push('not within par (E ' + r.E + ')');
+    if (e.par === false && withinPar) out.push('within par');
+    if (typeof e.P === 'number' && !(typeof r.P === 'number' && Math.abs(r.P - e.P) < 1e-9)) out.push('P ' + r.P + ', expected ' + e.P);
+    if (typeof e.minTotal === 'number' && !(r.total >= e.minTotal)) out.push('total ' + r.total + ' < ' + e.minTotal);
+    for (const f of e.flags || []) if ((r.flags || []).indexOf(f) < 0) out.push('flag ' + f + ' not raised');
+    if (typeof e.X === 'number' && (r.X & e.X) !== e.X) out.push('Expert bits ' + r.X + ', expected ' + e.X);
+    return out;
+  }
+
+  const game = { makeCell, playHeadless, LevelRunner, answerRecord, debriefFromTaps, summarise, monitorFeed, verifyRunFile, checkExpect };
   return { LevelRunner, game };
 });

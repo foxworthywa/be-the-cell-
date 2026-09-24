@@ -33,7 +33,14 @@ test('L-13: HUD texts: the counter\'s short form under 400 px; words, not colour
   assert.equal(met.progress, null, 'no bar on the Continue button');
   assert.equal(Hud.texts(model, 360, 'continue').goal, C.game.hud.continue);
   assert.equal(Hud.texts({ goal: { text: 'x', progress: 7 } }, 360, null).progress, 1, 'progress is clamped');
-  assert.deepEqual(Hud.texts(null, 360, null), { goal: '', progress: null, timer: '', counter: '', label: 'Goal: . Open the task card.' });
+  assert.deepEqual(Hud.texts(null, 360, null), { goal: '', progress: null, gauge: null, timer: '', counter: '', label: 'Goal: . Open the task card.' });
+  // A goal's short form under 400 px (1.4), and a band gauge instead of a bar: band and value as shares of the gauge's range.
+  const band = { goal: { text: 'LacY 412 · band 270–520 · held 4 of 15 min', short: 'LacY 412 · held 4 of 15', progress: null, gauge: { lo: 270, hi: 520, max: 780, value: 390 } } };
+  assert.equal(Hud.texts(band, 360, null).goal, 'LacY 412 · held 4 of 15');
+  assert.equal(Hud.texts(band, 1280, null).goal, 'LacY 412 · band 270–520 · held 4 of 15 min');
+  assert.deepEqual(Hud.texts(band, 360, null).gauge, { lo: 270 / 780, hi: 520 / 780, value: 0.5 });
+  assert.equal(Hud.texts(band, 360, 'met').gauge, null, 'no gauge on the Continue button');
+  assert.equal(Hud.texts({ goal: { text: 'x', gauge: { lo: 1, hi: 2, max: 3, value: 99 } } }, 360, null).gauge.value, 1, 'the value is clamped');
 });
 
 function memStorage() {
@@ -87,6 +94,9 @@ test('L-13: completion score lines use the words of §6.1', () => {
     'Goal met · Efficiency 100 · Prediction 75', 'Debrief 1 of 2 right first time · Expert 1', 'Total 85']);
   assert.deepEqual(LevelUI.scoreLines({ G: 0, E: 0, P: 0.5, D: [0, 2], X: 0, total: 10 })[0], 'Goal not met · Efficiency 0 · Prediction 50');
   assert.deepEqual(LevelUI.scoreLines({ G: 1, E: null, P: null, D: [1, 1], X: 0, total: null }), ['Not scored']);
+  // With the level's number of Expert objectives, the objectives met are counted (X = 3 is both of 2).
+  assert.equal(LevelUI.scoreLines({ G: 1, E: 1, P: 1, D: [1, 2], X: 3, total: 90 }, 2)[1], 'Debrief 1 of 2 right first time · Expert 2 of 2');
+  assert.equal(LevelUI.scoreLines({ G: 1, E: 1, P: 1, D: [1, 2], X: 0, total: 80 }, 0)[1], 'Debrief 1 of 2 right first time');
 });
 
 test('the Prologue drawings: ≤ 4 KB each, labelled from TEXT, with a scale bar, drawn in palette tokens', () => {

@@ -85,12 +85,31 @@ Numbers are for the reference cell (glucose High, default dials), measured with 
 
 **Tell students before they start (first phone test):**
 
-- To grow on lactose, set LacY and LacZ to ×4 with glucose still present and wait an hour
-  before removing glucose. With less (for example ×1 for 30 min) ATP runs out and the cell
-  stops; the model has no lag-and-adapt the way real E. coli does. Adding glucose back
-  restarts a stopped cell within a few minutes.
-- When carbon is short, ATP falls much further here than in real cells (the graphs then show
-  "< 0.01 mM"); real cells keep ATP up from reserves and by slowing their ribosomes.
+- To grow on lactose, switch LacY and LacZ on while glucose is still there, then remove
+  glucose. The cell pauses and then grows on lactose (engine 1.1.0): the more LacY and LacZ it
+  has at the switch, the shorter the pause (lab strain, to half speed: about 2 h after ×1 for 3
+  min, about 50 min after ×1 for 15 min, under 10 min after ×4 for 15 min; no pause after ×4
+  for 30 min or more). Switched on only after glucose is gone, they are never made: no sugar
+  gets in, so ATP runs down and the cell stops. Adding glucose back restarts it within about a
+  minute.
+- Without sugar, the cell slows its ribosomes and cuts its upkeep as real cells do, but its ATP
+  still falls further: within minutes to about a tenth of normal (energy charge about 0.1,
+  where starving E. coli holds about 0.5; Chapman 1971), then slowly over hours. Real cells
+  also draw on stored reserves, which are not modelled.
+- The wild-type lac strain of level 1.7 (m2-lac) lags about 2 h (125–146 min) when moved from
+  glucose to lactose alone, and about 1 h (64–71 min) after time in both sugars;
+  oxygen-breathing E. coli usually adapts faster (docs/BIOLOGY.md, "The lac operon").
+
+**Levels and completion codes (M2, in progress).** The home screen lists the Prologue and the
+levels built so far (1.2 "One gene, many copies", 1.4 "Nothing lasts"; 1.1 and 1.7 follow),
+specified in [`docs/LEVELS.md`](docs/LEVELS.md). A finished level shows a completion code for
+the Canvas quiz. The instructor's decoder is published beside the app at
+https://foxworthywa.github.io/be-the-cell-/tools/codes.html (paste codes or a Canvas "Student
+analysis" CSV; duplicates are flagged; a student's downloaded run file can be replayed and its
+score recomputed; nothing leaves the browser). From a checkout the same work is done by
+`node tools/decode-codes.js <codes.txt|export.csv> [--csv out.csv]` and
+`node tools/verify-run.js <run.json>`. `node tools/level-calibrate.js` re-measures the levels'
+numbers for the current engine and rewrites `src/levels/btc-level-constants.js`.
 
 The simplifications, the values still to verify and every parameter with its source are in
 [`docs/BIOLOGY.md`](docs/BIOLOGY.md).

@@ -112,7 +112,9 @@ test('game and level files load through require and in a bare context with only 
     assert.ok(B[name], 'BTC.' + name + ' is defined');
   }
   assert.ok(B.levelDefs.P, 'the Prologue registered itself');
-  assert.deepEqual(Array.from(B.levels.list, (d) => d.id), ['P']);
+  // Every shipped level registered itself, and the list is in `order`.
+  const ids = shipped().slice().sort((a, b) => a.order - b.order).map((d) => d.id);
+  assert.deepEqual(Array.from(B.levels.list, (d) => d.id), ids);
   assert.equal(B.levels.byId.P.code, 'P0');
 });
 

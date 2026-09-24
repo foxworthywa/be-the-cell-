@@ -16,6 +16,9 @@ self.addEventListener('fetch', (e) => {
   const r = e.request;
   if (r.method !== 'GET' || new URL(r.url).origin !== location.origin) return;
   if (r.mode === 'navigate') {
+    // Only the app's own page comes from the cache; other pages (tools/codes.html) go to the network.
+    const scope = new URL(self.registration.scope).pathname, path = new URL(r.url).pathname;
+    if (path !== scope && path !== scope + 'index.html') return;
     e.respondWith(caches.match('./index.html').then((hit) => hit || fetch(r)));
     return;
   }

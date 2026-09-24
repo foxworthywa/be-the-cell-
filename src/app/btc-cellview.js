@@ -36,6 +36,8 @@
   const JITTER_PX = 1.2;
   const MARKER_LIFE_S = 0.6;             // flux marker lifetime, render time
   const MARKERS = 128;                   // per flux
+  const NF = 5;                          // fluxes: glucose in, lactose in, amino acids in, products out, protein cut up
+  const CUT = 4;                         // the "cut up" marker (degradation, LEVELS §7.4.2)
   const GHOST_S = 180;                   // sister ghost fades over 3 sim-min
 
   // Glyph kinds.
@@ -187,6 +189,13 @@
     c.moveTo(x + lx + wx, y + ly + wy); c.lineTo(x + lx - wx, y + ly - wy);
     c.lineTo(x - lx - wx, y - ly - wy); c.lineTo(x - lx + wx, y - ly + wy); c.closePath();
   }
+  // A "cut up" protein: its membrane rectangle in two pieces that come apart as the marker fades (f 0 → 1).
+  function broken(c, x, y, a, l, w, f) {
+    const ca = Math.cos(a), sa = Math.sin(a), gap = 1 + 3 * f, half = (l - 1) / 2;
+    const d = (gap + half) / 2;
+    rect(c, x - ca * d, y - sa * d, a, half, w);
+    rect(c, x + ca * d, y + sa * d, a, half, w);
+  }
   function mark(c, x, y, a, l) {
     const dx = Math.cos(a) * l / 2, dy = Math.sin(a) * l / 2;
     c.moveTo(x - dx, y - dy); c.lineTo(x + dx, y + dy);
@@ -245,14 +254,17 @@
       this.hitDirty = true;
       this.built = { tick: -1, epoch: -1, focus: -1, w: 0, h: 0, dosage: 0 };
       this.strandNt = new Float64Array(NG);
-      // Flux markers: 4 fluxes × 128, fixed straight paths, age in render seconds (< 0 unused).
-      this.mAge = new Float32Array(4 * MARKERS).fill(-1);
-      this.mX0 = new Float32Array(4 * MARKERS); this.mY0 = new Float32Array(4 * MARKERS);
-      this.mX1 = new Float32Array(4 * MARKERS); this.mY1 = new Float32Array(4 * MARKERS);
-      this.mNext = new Int32Array(4);
-      this.emitters = [new D.FluxEmitter(1e3), new D.FluxEmitter(1e3), new D.FluxEmitter(1e3), new D.FluxEmitter(1e3)];
-      this.emitCount = new Int32Array(4);
-      this.markerN = new Float64Array(4).fill(1e3);
+      // Flux markers: 5 fluxes × 128, fixed straight paths, age in render seconds (< 0 unused).
+      this.mAge = new Float32Array(NF * MARKERS).fill(-1);
+      this.mX0 = new Float32Array(NF * MARKERS); this.mY0 = new Float32Array(NF * MARKERS);
+      this.mX1 = new Float32Array(NF * MARKERS); this.mY1 = new Float32Array(NF * MARKERS);
+      this.mA = new Float32Array(NF * MARKERS);         // the angle a "cut up" marker is drawn at
+      this.mNext = new Int32Array(NF);
+      this.emitters = [new D.FluxEmitter(1e3), new D.FluxEmitter(1e3), new D.FluxEmitter(1e3), new D.FluxEmitter(1e3), new D.FluxEmitter(1)];
+      this.emitCount = new Int32Array(NF);
+      this.markerN = new Float64Array(NF).fill(1e3);
+      this.markerN[CUT] = 1;
+      this.cutGene = -1;                                // the gene whose protein is being cut up (lacY in level 1.4)
       this.tau = 0;                                     // render time: advances only while running
       this.visible = true;
       this.dirty = true;
@@ -807,9 +819,9 @@
     }
 
     // --- flux markers (LAB_UI §2.5): rates, not amounts ------------------------------
-    markerScale(flux, speed) {
-      // Smallest ladder value ≥ 10³ with at most 20 markers per real second.
-      let N = 1e3;
+    markerScale(flux, speed, floor) {
+      // Smallest ladder value ≥ 10³ (≥ 1 for proteins cut up) with at most 20 markers per real second.
+      let N = floor || 1e3;
       while (flux * speed / N > 20 && N < 1e12) N *= 10;
       return N;
     }
@@ -818,8 +830,15 @@
       const fl = view.flux, speed = this.app.speed();
       const rates = FLUX_RATE;
       rates[0] = fl.glucoseIn; rates[1] = fl.lactoseIn; rates[2] = fl.aaImported; rates[3] = fl.fermentationProductsOut;
-      for (let k = 0; k < 4; k++) {
-        const N = this.markerScale(rates[k], speed);
+      // Proteins cut up by proteases (R-E10): the visible gene with the most degradation, from its glyphs.
+      let cut = -1, cutRate = 0;
+      for (let i = 0; i < NG; i++) {
+        const r = view.genes[i].degraded_perS;
+        if (r > cutRate && !(this.background && this.background[i])) { cutRate = r; cut = i; }
+      }
+      this.cutGene = cut; rates[CUT] = cutRate;
+      for (let k = 0; k < NF; k++) {
+        const N = this.markerScale(rates[k], speed, k === CUT ? 1 : 1e3);
         if (N !== this.markerN[k]) { this.markerN[k] = N; this.emitters[k].N = N; this.emitters[k].reset(); }
         let spawn = this.emitters[k].add(rates[k] * dtSim);
         if (spawn > 8) spawn = 8;
@@ -830,7 +849,7 @@
     spawn(k) {
       const g = this.geom, o = this.tmp;
       const e = this.emitCount[k]++;
-      const gene = FLUX_GENE[k];
+      const gene = k === CUT ? this.cutGene : FLUX_GENE[k];
       let x, y, nx, ny;
       const r0 = gene >= 0 ? this.geneRange[2 * gene] : 0, r1 = gene >= 0 ? this.geneRange[2 * gene + 1] : 0;
       if (gene >= 0 && r1 > r0) {
@@ -845,14 +864,16 @@
       const j = k * MARKERS + this.mNext[k];
       this.mNext[k] = (this.mNext[k] + 1) % MARKERS;       // the oldest is recycled
       const outward = k === 3;
-      const a = outward ? -10 : 16, b = outward ? 16 : -10;
+      // A cut-up protein leaves from its glyph and drifts a little inward as it fades.
+      const a = k === CUT ? 0 : outward ? -10 : 16, b = k === CUT ? -9 : outward ? 16 : -10;
       this.mX0[j] = x + nx * a; this.mY0[j] = y + ny * a;
       this.mX1[j] = x + nx * b; this.mY1[j] = y + ny * b;
+      this.mA[j] = Math.atan2(ny, nx);
       this.mAge[j] = 0;
     }
 
     ageMarkers(dt) {
-      for (let j = 0; j < 4 * MARKERS; j++) {
+      for (let j = 0; j < NF * MARKERS; j++) {
         if (this.mAge[j] < 0) continue;
         this.mAge[j] += dt;
         if (this.mAge[j] >= MARKER_LIFE_S) this.mAge[j] = -1;
@@ -860,7 +881,7 @@
     }
 
     drawMarkers(c, P, reduced) {
-      for (let k = 0; k < 4; k++) {
+      for (let k = 0; k < NF; k++) {
         // Three alpha steps per flux keep this to a few fill calls.
         for (let band = 0; band < 3; band++) {
           c.beginPath();
@@ -872,12 +893,15 @@
             if (Math.min(2, Math.floor(fr * 3)) !== band) continue;
             const t = reduced ? 0.5 : fr;
             const x = this.mX0[j] + (this.mX1[j] - this.mX0[j]) * t, y = this.mY0[j] + (this.mY1[j] - this.mY0[j]) * t;
-            if (k === 0) hex(c, x, y, 3.2); else if (k === 1) hex2(c, x, y, 2.4); else if (k === 2) tri(c, x, y, 3); else circle(c, x, y, 2.4);
+            if (k === 0) hex(c, x, y, 3.2); else if (k === 1) hex2(c, x, y, 2.4); else if (k === 2) tri(c, x, y, 3);
+            else if (k === CUT) broken(c, x, y, this.mA[j] + Math.PI / 2, 9, 5, fr);
+            else circle(c, x, y, 2.4);
             any = true;
           }
           if (!any) continue;
           c.globalAlpha = 1 - band / 3;
-          if (k === 3) { c.fillStyle = P.products; c.fill(); }
+          if (k === CUT) { c.strokeStyle = P['g-' + GENE_IDS[this.cutGene]] || P.muted; c.lineWidth = 1.4; c.stroke(); }
+          else if (k === 3) { c.fillStyle = P.products; c.fill(); }
           else if (k === 2) { c.fillStyle = P.aa; c.fill(); }
           else { c.strokeStyle = P.sugar; c.lineWidth = 1.4; c.stroke(); }
         }
@@ -1117,6 +1141,12 @@
       add((c) => { c.beginPath(); hex2(c, 12, 12, 2.4); c.strokeStyle = P.sugar; c.lineWidth = 1.4; c.stroke(); }, K2.fluxLac, M(1));
       add((c) => { c.beginPath(); tri(c, 12, 12, 3); c.fillStyle = P.aa; c.fill(); }, K2.fluxAa, M(2));
       add((c) => { c.beginPath(); circle(c, 12, 12, 2.4); c.fillStyle = P.products; c.fill(); }, K2.fluxOut, M(3));
+      // Proteins cut up (level 1.4): shown only when a gene's protein is being broken down.
+      if (this.cutGene >= 0) {
+        const id = GENE_IDS[this.cutGene], w = C.geneWords(id, app.labConfig.showNames);
+        add((c) => { c.beginPath(); broken(c, 12, 12, -Math.PI / 2, 12, 5, 0.6); c.strokeStyle = P['g-' + id]; c.lineWidth = 1.4; c.stroke(); },
+          F.fill(K2.fluxCut, { name: w.short || F.capital(w.protein) }), M(CUT));
+      }
       void view;
       LY.openSheet({
         title: C.key.title, className: 'key-sheet',
@@ -1153,8 +1183,8 @@
 
   const PKEY = GENE_IDS.map((id) => 'p:' + id);
   const PAUSED_PENDING = C.cell.pausedBadge + ' · ' + C.cell.pendingNote;
-  const FLUX_RATE = new Float64Array(4);
-  const FX_KEY = ['fx0', 'fx1', 'fx2', 'fx3'], FP_KEY = ['fp0', 'fp1', 'fp2', 'fp3'];
+  const FLUX_RATE = new Float64Array(NF);
+  const FX_KEY = ['fx0', 'fx1', 'fx2', 'fx3', 'fx4'], FP_KEY = ['fp0', 'fp1', 'fp2', 'fp3', 'fp4'];
   const FLUX_GENE = [0, 4, 3, -1];              // glucose through PtsG, lactose through LacY, amino acids through the importers
 
   /** Mixes two #rrggbb colours: t = 0 gives a, 1 gives b. */

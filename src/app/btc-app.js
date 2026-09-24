@@ -1,4 +1,4 @@
-// @deps btc-content btc-palette btc-format btc-prefs btc-layout btc-loop btc-controls btc-cellview btc-status btc-genes-panel btc-medium-panel btc-graphs-panel btc-narrator-ui btc-pwa btc-home btc-hud btc-prologue btc-level-ui
+// @deps btc-content btc-palette btc-format btc-prefs btc-layout btc-loop btc-controls btc-cellview btc-status btc-genes-panel btc-medium-panel btc-graphs-panel btc-narrator-ui btc-pwa btc-home btc-hud btc-sketch btc-prologue btc-level-ui
 /*
  * Be the Cell: bootstrap and wiring (LAB_UI §10.3–10.4), and the router
  * (LEVELS §9 item 1): screens home, lab and level. The lab mounts as in M1;
@@ -43,6 +43,9 @@
     mediumRows: Object.freeze({ glucose: 'free', lactose: 'free', aminoAcids: 'free' }), allowedLevels: null,
     speedOptions: null, defaultSpeed: 60, startPaused: true, tabs: ['cell', 'genes', 'medium', 'graphs'],
     graphGenes: null, bands: null, yBand: null, hud: false, focusGene: null,
+    // Level extensions (LEVELS.md, "Changes after engine 1.1"): which plots, in which order; the graph
+    // window (s) a level opens with; the tab it opens on.
+    plots: null, graphWindow: null, initialTab: null,
   });
   function localDate() {
     const d = new Date();
@@ -190,11 +193,12 @@
       if (!app.canRun()) return;
       app.loop.start(); afterRunChange(); app.logEvent('resume', {});
     };
-    /** Time may run: always in the lab; in a level only while its run (or epilogue, or live Prologue scene) is on. */
+    /** Time may run: always in the lab; in a level only while its run (or demo, epilogue, or live Prologue scene) is on. */
     app.canRun = () => {
       if (app.mode !== 'level' || !app.level) return true;
       if (app.level.live) return true;
       const r = app.level.runner;
+      if (r.phase === 'demo') return !!r.demo.cell && app.cell === r.demo.cell && !r.halted();
       return !!r.run && app.cell === r.run.cell && (r.phase === 'run' || r.phase === 'epilogue') && !r.halted();
     };
     function afterRunChange() {
@@ -240,6 +244,8 @@
       if (lc.readOnlyGenes) return 'readonly';
       if (lc.controls && lc.controls.genes === false) return 'none';
       if (lc.lockedGenes && lc.lockedGenes.indexOf(id) >= 0) return 'locked';
+      // A level may lock the student's controls from inside the run (1.2's deadline, setControls R-E11).
+      if (app.mode === 'level' && app.cell && app.cell.controls === 'locked') return 'locked';
       return 'free';
     };
 
@@ -334,6 +340,8 @@
         }
       }
       if (ev.cmdType === 'setDrug') return F.fill(G.drug, { drug: r.drug, v: BTC.MediumPanel.keyFor(BTC.catalog.DRUG_PRESETS, r.dose) });
+      // A level's schedule locking or freeing the controls (1.2's deadline) is marked in words, never by the command's name.
+      if (ev.cmdType === 'setControls') return r.controls === 'locked' ? G.locked : G.unlocked;
       return ev.cmdType;
     }
     function drugBand(ev) {
@@ -529,6 +537,7 @@
           body.appendChild(h('p', { text: S.why }));
           body.appendChild(h('h3', { text: S.lactoseHeading }));
           body.appendChild(h('p', { text: S.lactose }));
+          body.appendChild(h('p', { text: S.lactoseLag }));
           body.appendChild(h('p', { text: S.lactoseRestart }));
           body.appendChild(h('h3', { text: S.heading }));
           body.appendChild(h('ul', { class: 'about-list' }, C.about.map((t) => h('li', { text: t }))));
@@ -807,7 +816,7 @@
       const visible = C.GENE_IDS.filter((id) => app.geneVisible(id));
       const focus = lc.focusGene && visible.indexOf(lc.focusGene) >= 0 ? lc.focusGene : visible[0] || 'fliC';
       app.ui = Object.assign({}, ui, {
-        speed: lc.defaultSpeed || 60, tab: 'cell', focusGene: focus, window: 600,
+        speed: lc.defaultSpeed || 60, tab: lc.initialTab || 'cell', focusGene: focus, window: lc.graphWindow || 600,
         graphGenes: (lc.graphGenes || [focus]).filter((id) => visible.indexOf(id) >= 0).slice(0, 3),
         logScales: Object.assign({}, PR.DEFAULTS.logScales),
       });
@@ -841,6 +850,15 @@
         return;
       }
       if (L.live) { showSurface('app'); return; }        // the Prologue's bacterium stays behind its completion screen
+      if (r.phase === 'demo') {
+        // 1.2's scripted test run: its own cell, with the student's sketch over the Protein plot.
+        if (!r.demo.cell) r.startDemo();
+        if (app.cell !== r.demo.cell) { attachLevelCell(r, r.demo.cell); sketchOverlay(r); }
+        showSurface('app');
+        updateHud(true);
+        views.status.update(app.cell.observe(), app.facts);
+        return;
+      }
       const cell = r.run ? r.run.cell : null;
       if (!cell) { showSurface('none'); return; }
       if (app.cell !== cell) attachLevelCell(r, cell);
@@ -849,9 +867,21 @@
       views.status.update(app.cell.observe(), app.facts);
     };
 
+    /** The student's locked sketch over the demo's Protein plot, dashed, with its legend (§5.4.3). */
+    function sketchOverlay(r) {
+      const it = r.def.predictions.find((x) => x.kind === 'sketch');
+      const a = it && r.answers[it.id];
+      if (!a || !a.locked) return;
+      const S = C.game.sketch;
+      views.graphs.setOverlay('protein', a.value.map((p) => (p ? [p[0] * 60, p[1]] : null)), {
+        color: 'muted', dash: [6, 5], width: 2, legend: [{ text: S.sketch, dash: [6, 5], color: 'muted' }, { text: S.cell, color: 'g-lacY' }],
+      });
+    }
+
     function hudMode(r) {
       if (r.phase === 'run' && r.run && r.run.endReason && r.goal) return 'met';
       if (r.phase === 'epilogue' && r.epilogue.done) return 'continue';
+      if (r.phase === 'demo' && r.demo.done) return 'continue';
       return null;
     }
     function updateHud() {
@@ -863,9 +893,23 @@
     function hudGoalTap() {
       const r = app.level && app.level.runner;
       if (!r) return;
-      if (hudMode(r)) { r.next(); views.levelUI.after(); }
+      if (r.phase === 'demo' && r.demo.done) views.levelUI.sync();     // its sheet carries the Continue
+      else if (hudMode(r)) { r.next(); views.levelUI.after(); }
       else views.levelUI.task(true);
     }
+
+    /** The 1.4 epilogue: the student's one command (switch the gene off, logged), then 12 game-min at 1 s = 1 min. */
+    app.startEpilogue = () => {
+      const r = app.level && app.level.runner;
+      if (!r || r.phase !== 'epilogue' || r.epilogue.started || !r.run || app.cell !== r.run.cell) return;
+      const cmd = r.def.epilogue && r.def.epilogue.command;
+      if (cmd) app.send(Object.assign({}, cmd), cmd.gene || 'epilogue', 'off');
+      r.startEpilogue();
+      saveLevelNow();
+      views.levelUI.after();
+      if (r.def.epilogue && r.def.epilogue.speed) app.setSpeed(r.def.epilogue.speed);
+      app.resume();
+    };
     /** Per frame in a level: the end of a run, the HUD (≤ 4 Hz), the debounced autosave. */
     function levelFrame(dtReal, force) {
       const L = app.level;
@@ -879,6 +923,13 @@
         if (!r.goal) { r.next(); views.levelUI.after(); }    // a missed goal opens the result; a met one waits on the goal chip
       }
       if (r.phase === 'epilogue' && r.epilogue.done && app.loop.running) app.loop.stop();
+      // The demo stops at its end tick (halt); then its sheet opens.
+      if (r.phase === 'demo' && r.demo.cell && !r.demo.done && r.halted()) {
+        r.checkDemo();
+        if (app.loop.running) app.loop.stop();
+        saveLevelNow();
+        views.levelUI.after();
+      }
       L.sinceHud += dtReal;
       if (force || L.sinceHud >= 0.25) { L.sinceHud = 0; updateHud(); }
       if (L.dirtyAt !== null && performance.now() - L.dirtyAt >= 2000) saveLevelNow();
@@ -1055,7 +1106,18 @@
             views.levelUI.after();
             return out;
           },
-          sketch() { throw new Error('sketch input arrives with level 1.2 (build step 3)'); },
+          /** Locks the current sketch item with points [[minute, value], …] (as if drawn and Done tapped). */
+          sketch(points) {
+            const r = R();
+            const it = r.currentItem();
+            if (!it || it.kind !== 'sketch') return { ok: false, reason: 'no sketch item now' };
+            const out = r.lock(it.id, points);
+            if (out.ok) { views.levelUI.dropSketch(); if (!r.currentItem()) r.next(); }
+            views.levelUI.after();
+            return out;
+          },
+          /** 1.4: taps "Switch LacY off" in the epilogue. */
+          startEpilogue() { app.startEpilogue(); return R().epilogue.started; },
           design(obj) { const ok = R().setDesign(obj); views.levelUI.after(); return ok; },
           runTicks: (n) => { const t = stepN(n); updateHud(); return t; },
           runToEnd() { let guard = 0; while (!app.shouldHalt() && guard++ < 1000) stepN(500); updateHud(); return app.cell.tick; },

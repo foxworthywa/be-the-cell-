@@ -11,7 +11,8 @@ physics. **Instructor:** Alex Foxworthy (they/them). **Repo:** `/home/user/be-th
 **Normative words:** MUST, MUST NOT and SHOULD. "Engine spec §x" is `docs/ENGINE.md`, "Lab spec
 §x" is `docs/LAB_UI.md`. Numbers marked **[M1]** were measured with engine 1.0.0 in this
 session (Appendix A); `tools/level-calibrate.js` (§3.7) re-measures them for engine 1.1 before
-release, and the level files read the calibrated values, never the ones printed here.
+release, and the level files read the calibrated values, never the ones printed here. §16
+records where the M2 build (1.2, 1.4 and the code tools, engine 1.1.0) departs from this text.
 
 ---
 
@@ -1836,7 +1837,133 @@ Each can change without affecting the others.
    and laptop sketches (a pilot success criterion).
 7. **Integrity** is weak by design in Phase A (§10.5).
 8. **Size:** if the bundle passes 750 KB, add a safe comment-stripping step to `build.js`
-   (tokenizer-based; never regex over code).
+   (tokenizer-based; never regex over code). With 1.2 and 1.4 it is 790 KB; whole-line comments
+   are about 120 KB of the scripts. Levels 1.1 and 1.7 will pass 900 KB without it.
+9. **1.4 stockpile at half-life 5 min, ×2:** the stockpile holds the band on 6 of 40 seeds there
+   (2.5% over all variants). A longer hold or a narrower band would close it at the cost of the
+   `single` rate (95%).
+10. **1.3 and the priming threshold:** engine 1.1 has no bootstrapping threshold (§16.1). 1.3
+    needs a new way to show that an ATP-starved cell cannot make the enzymes that make ATP (for
+    example a finite medium or a lower gate), decided before it is specified.
+11. **1.7 and the lag:** the wild-type lag is 125–146 min, not 20–60 (§16.1). The options in
+    ENGINE.md §15 item 1 stand: accept 2-h lags (L phases ≥ 3·lagP90 ≈ 7 h), start every L phase
+    after a both-sugar phase (lag 64–71 min), or ask for a reserve in a later engine.
+
+---
+
+## 16. Changes after engine 1.1 (M2 build: levels 1.2 and 1.4, completion-code tools)
+
+Levels 1.2 and 1.4, the sketch, the demo, the epilogue and the instructor's code tools were built
+on engine 1.1.0. Where the build departs from §1–§15 it is recorded here, with the reason. All
+numbers come from `tools/level-calibrate.js` (40 seeds per variant, run 2026-09-24) and are in
+`src/levels/btc-level-constants.js`; the level files read them from there. Levels 1.1 and 1.7 are
+not built yet; the facts in §16.1 bear on them.
+
+### 16.1 Engine facts that changed the plan
+
+| Planned | Engine 1.1.0 | Consequence |
+|---|---|---|
+| `m2-lac` has 10 genes (R-E19) | 9: the lab strain's 7 plus lacI and lacA (ENGINE §22.5) | Level code reads the strain's gene list; nothing assumes 10 |
+| Wild-type lactose lag 20–60 min (RT-2) | 125–146 min from glucose (12 seeds, median 132); 64–71 min after time in both sugars; never dormant (BIOLOGY "The lac operon", open item 1) | For 1.7, `LMIN = max(90, 3·lagP90)` would be about 7 h per L phase, which the 600-min templates of §7.7.3 cannot hold. Open item for 1.7 (§15 item 11) |
+| 1.3 "The price of a protein" runs with `primingSeed = 0`, a real bootstrapping threshold (about 30% of default capacity) | Gone: the energy gates let even 5% capacity restart (ENGINE §21.1 row 6, test g6) | 1.3's planned lesson ("running out of ATP stalls everything, including making more enzymes") needs a new mechanism. Open item for 1.3 (§15 item 10) |
+| A newborn (`start: 'birth'`, lacY off) carries about 17 LacY [M1] | About 4 (4.4 on average) | The HUD and the gene card show it before the first tick; nothing else depends on it |
+| A starving cell reaches the energy floor in minutes | Without sugar: charge ≈ 0.1 within 15 min (ATP 0.39 mM), below 0.1 after about an hour, dormant at about 10.5 h | The lab's About sheet and narrator lines 11b and 13b were rewritten (Lab spec §17); none of this touches 1.2 or 1.4, which run in 10 mM glucose |
+| The lab strain cannot adapt to lactose | It pauses and then grows; the pause shortens with more LacY and LacZ at the switch (×1 for 3 min: 112–123 min to half speed; ×4 for 5 min: 30–35 min; ×4 for 15 min: growth never falls below half) | README "Tell students before they start" and the About sheet say so |
+
+### 16.2 Framework (runner, schema, kit)
+
+- **`config.variant` always passed.** The `src/game` fallback that rebuilt a cell without
+  `config.variant` after a `ConfigError` is removed; `makeCell(config)` is `new Cell(config)`.
+- **Demo monitor.** `def.demo.monitor(variant)` gives the demo cell a monitor with the run
+  monitor's interface (`start`, `onTick`, `result`, `save`, `restore`); `demoResult(v, cell,
+  monitorResult)` receives its result. During the demo the HUD reads it (`{demo: true, …}`) and
+  the level narrator rules see it as `level.monitor`.
+- **The demo runs by itself** (`startPaused: false`) at 1 s = 1 min on the Graphs tab (Protein
+  with the sketch overlaid, then mRNA; fixed 20-min axis). Pause stays allowed. At 20 min a
+  sheet shows the sketch over the test run's curve, the four features ✓/✗, the amount accuracy
+  and the measured copies per mRNA, with "Continue to your run".
+- **The epilogue starts on the student's tap** ("Switch LacY off" sends the logged user command
+  and calls `runner.startEpilogue()`), not on entering the phase; until then the phase is halted.
+  A headless solution plays it with `epilogue.act`.
+- **Alternative outros.** `story.extra` (named beats) and `outroKey(variant, monitorResult,
+  goal)`: the outro's first line must be true of the run the student just made (1.2: `keptOn`,
+  `missed`; 1.4: `pulsed`, `missed`). Validated with the other beats.
+- **Run monitors start from the cell** (`start(cell)`), so the HUD shows the newborn's LacY
+  before the first tick, as the gene card does.
+- **Pure helpers** in `BTC.game`: `answerRecord`, `debriefFromTaps`, `summarise`, `monitorFeed`
+  (shared by live runs and replays), `verifyRunFile`, `checkExpect`. Headless play gives a Core
+  sketch or number that a solution does not script the reference prediction.
+- **`labConfig` additions:** `plots` (which plots, in order), `graphWindow` (s; a window that is
+  not a preset hides the Window row), `initialTab`. `yBand` is drawn on the Protein plot.
+- **HUD additions:** `goal.short`, `timer.short`, `counter.short` (used below 400 px) and
+  `goal.gauge {lo, hi, max, value}` (1.4's band gauge). Whole minutes left round up ("due in 9
+  min" at 5 min 30 s of a 14-min deadline). The HUD is 44 px in the wide layout too (M1 build;
+  §5.5 says 40 px), so its buttons keep 44 px targets.
+- **Completion screen:** "Expert {a} of {b}" (objectives met) instead of the bit mask of §5.9
+  ("Expert 3" read as a score); the code still carries X. A predict phase with one question is
+  titled "Predict", not "Prediction 1 of 1".
+
+### 16.3 Level 1.2
+
+| § | Planned | Built | Why |
+|---|---|---|---|
+| 7.2.2 | newborn ≈ 17 LacY | ≈ 4 | engine 1.1 (§16.1) |
+| 7.2.3 | ppm ≈ 21, `mPar` 32, 40, 49 | ppm 21.2 (5th–95th percentile 17.5–24.8; 20.7 at the demo's 20 min), `mPar` 32, 40, 48 | calibration |
+| 7.2.3 | D = 14 for all T | D = 14 for all T | calibration: the reference reaches T by 10.6, 11.1 and 12.6 min at the latest (T 400, 500, 600) |
+| 7.2.4 | Expert prompt "… lasts about {min} minutes on average …", `sec` and `min` read from the demo cell at tick 0 | "A ribosome starts on each LacY mRNA about every {sec} seconds, and an mRNA lasts about {min} minutes. How many LacY does one mRNA make?"; `sec` = 13 and `min` = 4.5 from the calibration (13.27 s, 4.33 min) | the same for every variant and seed; the prompt comes before any demo cell exists. "on average" dropped for length |
+| 7.2.4 | demo "pause allowed" | runs by itself, pause allowed; the demo sheet of §16.2 | the demo is watched, not played |
+| 7.2.4 | HUD | as planned; short forms "LacY {count} / {T}", "due in {time}", "{m} / {mPar}"; demo "Test run · LacY {count}", "{time} of 20 min", "mRNAs {m}"; settle "{time} left" | 360 px width |
+| 7.2.11 | `l12.settle` after D with lacY mRNA or nascent > 0 | also needs lacY off | with the gene on, new mRNA is still made and "come from mRNA that was already there" is false |
+| 7.2.10 | one outro | `keptOn` when lacY was on at the deadline; `missed` when T was not reached | "You switched the gene off" must be true |
+| 7.2.12 | reference: T reached every time [M1] | reached by D on 92.5%, 97.5% and 100% of seeds (T 400, 500, 600); goal and par on 97.2% overall; mRNAs 23–34, 28–37, 35–46 | the 10% margin undershoots on a few seeds at T = 400 |
+| 7.2.12 | `stopAtTarget` misses par | par on 0.3% (mRNAs 48–74, 55–81, 57–86) | – |
+| 7.2.12 | `keepOn`, `plateauSketch`, `fallingSketch` | par 0%; the sketch solutions meet their expectations on 97.2% | – |
+| 7.2.12 | `weak` fails the goal on ≥ 80% | goal on 3.9% (`expect: {goal: false, rate: 0.8}`) | – |
+| 5.1 | – | the deadline's `setControls` is marked "controls locked" on the graphs, and the lacY card says "Set by this level." | Lab spec §17 |
+
+### 16.4 Level 1.4
+
+| § | Planned | Built | Why |
+|---|---|---|---|
+| 7.4.1, 7.4.5 | hold 10 game-min within 40 | **hold 15 within 45** (task card, story "fifteen minutes", HUD "held {h} of 15 min") | on engine 1.1 the stockpile (×4 to the band's middle, then off) stays in the band for about 10 min, because the mRNA already made keeps delivering while proteases cut; with a 10-min hold it passed. 45 min is still before the newborn replicates (≈ 48 min) |
+| 7.4.3 | S [M1] | `S[hl][level]` for ×¼, ×½, ×1, ×2, ×4: half-life 3 min 73, 142, 286, 572, 1,100; 4 min 98, 194, 382, 754, 1,469; 5 min 111, 215, 436, 880, 1,771 (coefficient of variation 0.01–0.33 at ×1–×4). Band [0.70, 1.35] kept; neighbouring settings outside the band on 99% | calibration |
+| 7.4.4 | Expert prompt "… about {X} LacY per minute, and each LacY lasts about {Y} minutes. About how many LacY will there be once the count levels off at ×1?" | "At ×1 this gene makes about {X} LacY a minute, and each lasts about {Y} minutes. About how many LacY are there once the count levels off?"; Y = 4, 5.5, 7 min | ≤ 140 characters |
+| 7.4.7 | p2 ✓ "Fall steadily, losing about half every {halfLife} minutes." | ✓ "Hold for a minute or two while the last mRNA is read, then fall steadily as proteases cut it up." — "Right. Proteases keep cutting it up, and once the last mRNA is gone nothing replaces what they cut." | measured after the switch-off: > 90% left at 2 min, 28–41% at 12 min, slower than halving every half-life because the leftover mRNA delivers for a few minutes |
+| 7.4.13 | reference: the target level when the count reaches `lo` | the target level when `protein + 15·mRNA + 20·nascent ≥ (lo + hi)/2` | switching at `lo` overshot the band (the mRNA already made carries the count on) |
+| 7.4.12 | rules keyed on the 60-s mean against the band | keyed on the last minute's measured making and cutting-up rates (`synthesis_perS`, `degraded_perS`): `l14.rising` (made > 1.1·cut + 0.05/s), new `l14.dropping` ("At this setting LacY is cut up faster than it is made, so the count falls until the two rates meet."), `l14.balance` (even, ≥ 60 s), `l14.over` and new `l14.under` ("At this setting making and breakdown balance below the band, so the count settles there.") when even; `l14.falling` needs lacY off and no lacY mRNA left | the band rule claimed the wrong direction about 20% of the time (noise and overshoot); the rate rules made no wrong claim in the tests |
+| 7.4.11 | one outro | `pulsed` when lacY was switched off during the run; `missed` when the goal was not met | "LacY was made and cut up at the same rate the whole time" must be true |
+| 7.4.2 | key "each marker = N LacY cut up" | a "cut up" flux marker (broken rectangle in the gene colour) from the glyphs of the gene with the most degradation, ladder from 1; key "LacY cut up by proteases (proteases are not drawn)" with its scale | Lab spec §17 |
+| 7.4.4 | epilogue after p2 | starts on the "Switch LacY off" tap; the dial is locked during it; 12 game-min at 1 s = 1 min | §16.2 |
+| 7.4.13 | results | reference goal and par 98.8% (goal at 20.9–34.4 min); `single` 95.0% (25.2–39.3 min); `pulser` never within par (goal 24.6%; its expectation, par missed and `PULSING`, met on 93.3%); `max` 0%; `stockpile` goal on 2.5%, all at half-life 5 min ×2 (6 of 40 there) | – |
+
+### 16.5 Completion codes and the instructor's tools (§10.4)
+
+- `tools/codes.html`: paste codes or choose/drop a Canvas CSV; one row per code (student, valid,
+  warnings, level, variant and its values, G, E, P, D, total, Expert objectives met, attempt,
+  runs, flags by name, engine, content version, code); duplicate codes and variants flagged; a
+  key of each level's Expert objectives; "Download CSV"; a run file dropped or chosen is
+  replayed (`verifyRunFile`) with a ✓/✗ line per check. The build writes a single-file copy
+  with the engine, game and level scripts inlined to `dist/tools/codes.html` (about 440 KB),
+  published at `…/be-the-cell-/tools/codes.html`; in a checkout it loads `../src/…` by
+  `file://`. The service worker leaves pages other than the app to the network.
+- `tools/decode-codes.js` (CLI, `--csv out.csv`) and `tools/verify-run.js` (prints each check
+  and "match", exits 1 on a mismatch). `verifyRunFile` checks the content version, the variant,
+  the demo (config, replay, result), the run's config hash, the replay's final hash, that the
+  run ends as recorded, and recomputes answers, G, E, P, D, X, flags, total and code.
+
+### 16.6 Tests and checks
+
+- L-4/L-5 (`level-1-2.test.js`, `level-1-4.test.js`): three seeds per variant in `npm test`, at
+  least 2 of 3 per variant and 90% (1.2) or 85% (1.4) overall. The 40-seed rates of the
+  calibration are the guard (§3.7) and are asserted from the constants file; "every variant"
+  with one seed each cannot pass reliably at 97–99% rates.
+- L-7 in `level-replay.test.js` (with the CLI tools, the decoded table and the published
+  `codes.html`). The narrator rules of both levels are checked for truth whenever they speak.
+- Browser (`tools/ui-check-levels.js`, run by `tools/ui-check.js`): LV-1, LV-4 (360 × 740 and
+  1280 × 800, sketch by touch and by mouse), LV-5, LV-7, LV-8, LV-9 and the published
+  `codes.html`. LV-3 (1.1) and LV-6 (1.7) are left to those levels.
+- Build: `dist/index.html` is 790 KB, over the 750 KB warning and under the 900 KB limit
+  (§15 item 8).
 
 ---
 

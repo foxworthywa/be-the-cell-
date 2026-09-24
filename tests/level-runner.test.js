@@ -90,11 +90,15 @@ test('L-12: every phase of a scored level refuses Continue until its gate holds'
   refused(r, 'predict');
   r.lock('p2', 'ok');
   assert.ok(r.next().ok);
-  // epilogue: until its game time has run.
+  // epilogue: it waits for the student's act (1.4: "Switch LacY off"), then until its game time has run.
   assert.equal(r.phase, 'epilogue');
-  assert.equal(r.halted(), false);
+  assert.equal(r.halted(), true, 'time does not run before the epilogue is started');
   refused(r, 'epilogue');
   cell.command({ type: 'setPromoter', gene: 'lacY', level: 'off' });
+  assert.equal(r.startEpilogue(), true);
+  assert.equal(r.startEpilogue(), false, 'started once');
+  assert.equal(r.halted(), false);
+  refused(r, 'epilogue');
   while (!r.halted()) cell.step();
   assert.equal(r.epilogue.done, true);
   assert.ok(r.next().ok);
@@ -175,6 +179,7 @@ test('L-12: a failed run offers Try again: same variant and seed, a fresh cell, 
   assert.ok(r.continueWithoutGoal().ok);
   assert.equal(r.phase, 'predict2');
   r.lock('p2', 'ok'); r.next();
+  r.startEpilogue();
   while (!r.halted()) r.run.cell.step();
   r.next();
   r.tap('d1', 'ok'); r.next();

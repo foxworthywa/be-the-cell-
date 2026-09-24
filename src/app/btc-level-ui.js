@@ -1,4 +1,4 @@
-// @deps btc-content btc-format btc-layout btc-pwa btc-home
+// @deps btc-content btc-format btc-layout btc-pwa btc-home btc-sketch
 /*
  * Be the Cell: the level screens (LEVELS §5.2–5.9): story beats, the task
  * card, prediction sheets, the result, the debrief, "Meanwhile, in you" and
@@ -12,17 +12,22 @@
  * the others full height) and centred dialogs (≤ 560 px) elsewhere; level
  * sheets have no close button, because their own buttons move on.
  *
+ * Level 1.2 adds the sketch (BTC.Sketch) and the demo's sheet (the sketch over the
+ * test run, feature by feature); level 1.4 adds the epilogue's "Switch LacY off"
+ * sheet. A level's own words for these live in its TEXT (item.words, text.demo,
+ * text.epilogue).
+ *
  * Pure helpers (test L-13): LevelUI.codeLines(code, perLine), LevelUI.scoreLines(result).
  */
 (function (root, factory) {
   if (typeof module === 'object' && module.exports) {
     module.exports = factory(require('./btc-content.js'), require('./btc-format.js'), require('./btc-layout.js'),
-      require('./btc-pwa.js'), require('./btc-home.js'));
+      require('./btc-pwa.js'), require('./btc-home.js'), require('./btc-sketch.js'));
   } else {
     var B = root.BTC || (root.BTC = {});
-    B.LevelUI = factory(B.content, B.format, B.layout, B.pwa, B.HomeView);
+    B.LevelUI = factory(B.content, B.format, B.layout, B.pwa, B.HomeView, B.Sketch);
   }
-})(typeof self !== 'undefined' ? self : this, function (C, F, LY, PWA, Home) {
+})(typeof self !== 'undefined' ? self : this, function (C, F, LY, PWA, Home, Sketch) {
   'use strict';
 
   const G = C.game;
@@ -42,13 +47,20 @@
     return lines;
   }
 
-  /** The score lines of the completion screen, in the words of §6.1. */
-  function scoreLines(res) {
+  /**
+   * The score lines of the completion screen, in the words of §6.1. With nExpert (the level's
+   * number of Expert objectives) the Expert part counts the objectives met ("Expert 2 of 2")
+   * instead of printing the bit mask X, which reads as a score ("Expert 3").
+   */
+  function scoreLines(res, nExpert) {
     const K = G.complete;
     if (res.total === null || res.total === undefined) return [K.notScored];
     const lines = [];
     lines.push([res.G ? K.goalMet : K.goalNotMet, F.fill(K.efficiency, { v: pct(res.E) }), F.fill(K.prediction, { v: pct(res.P) })].join(' · '));
-    lines.push([F.fill(K.debrief, { a: res.D[0], b: res.D[1] }), F.fill(K.expert, { v: res.X })].join(' · '));
+    let met = 0;
+    for (let x = res.X | 0; x; x >>= 1) met += x & 1;
+    const expert = nExpert > 0 ? F.fill(K.expertOf, { a: met, b: nExpert }) : nExpert === 0 ? null : F.fill(K.expert, { v: res.X });
+    lines.push([F.fill(K.debrief, { a: res.D[0], b: res.D[1] }), expert].filter(Boolean).join(' · '));
     lines.push(F.fill(K.total, { v: res.total }));
     return lines;
   }
@@ -69,7 +81,8 @@
       this.lastPhase = runner.phase;
       this.completed = false;
     }
-    unbind() { this.close(); this.runner = null; this.def = null; }
+    unbind() { this.dropSketch(); this.close(); this.runner = null; this.def = null; }
+    dropSketch() { if (this.sketch) { this.sketch.destroy(); this.sketch = null; } }
     title() { return this.def ? Home.nameOf(this.def) : ''; }
 
     close() {
@@ -100,7 +113,9 @@
         case 'intro': return this.story();
         case 'task': return this.task(false);
         case 'predict': case 'predict2': return this.predict();
-        case 'run': case 'epilogue': return this.close();
+        case 'run': return this.close();
+        case 'demo': return r.demo.done ? this.demoResult() : this.close();
+        case 'epilogue': return r.epilogue.started ? this.close() : this.epilogueSheet();
         case 'result': return this.result();
         case 'debrief': return this.debrief();
         case 'echo': return this.echo();
@@ -269,8 +284,10 @@
       const it = r.currentItem();
       if (!it) { r.next(); return this.after(); }
       const items = r.items(), i = items.indexOf(it) + 1;
-      const title = F.fill(G.predict.itemOf, { i, n: items.length }) + (it.expert ? ' · ' + G.predict.expert : '');
-      this.sheet('predict:' + it.id, { title, className: 'lv-sheet lv-full' }, (body) => {
+      // A phase with one question (1.4's p2, before the epilogue) is titled "Predict", not "Prediction 1 of 1".
+      const title = (items.length > 1 ? F.fill(G.predict.itemOf, { i, n: items.length }) : G.predict.title) + (it.expert ? ' · ' + G.predict.expert : '');
+      this.dropSketch();
+      this.sheet('predict:' + it.id, { title, className: 'lv-sheet lv-full' + (it.kind === 'sketch' ? ' lv-sketch-sheet' : '') }, (body) => {
         body.appendChild(h('p', { class: 'lv-prompt', text: r.text(it.prompt) }));
         const lockBtn = h('button', { class: 'btn primary lv-wide', type: 'button', 'data-primary': '', disabled: true }, G.predict.lockIn);
         const actions = [];
@@ -312,8 +329,29 @@
           ]));
           body.appendChild(clampNote);
           lockBtn.addEventListener('click', () => { const v = read(); if (v !== null && r.lock(it.id, Math.max(it.min, Math.min(it.max, v))).ok) this.afterLock(); });
+        } else if (it.kind === 'sketch') {
+          const S = G.sketch;
+          LY.setText(lockBtn, S.done);
+          const sk = new Sketch({
+            item: it, schedule: this.scheduleOf(it), words: { x: r.text(it.x.label), y: r.text(it.y.label) },
+            onChange: () => {
+              const v = sk.value();
+              lockBtn.disabled = !v.length || !sk.covered();
+              if (v.length) r.select(it.id, v);
+            },
+          });
+          this.sketch = sk;
+          sk.mount(body);
+          if (Array.isArray(r.selected[it.id])) sk.setPoints(r.selected[it.id]);     // a draft survives a rebuild
+          actions.push(h('button', { class: 'btn', type: 'button', 'data-action': 'sketch-clear', onclick: () => { sk.clear(); delete r.selected[it.id]; } }, S.clear));
+          lockBtn.setAttribute('data-action', 'sketch-done');
+          lockBtn.addEventListener('click', () => {
+            if (!sk.covered()) return;
+            if (r.lock(it.id, sk.value()).ok) { this.dropSketch(); this.afterLock(); }
+          });
+          lockBtn.disabled = !sk.value().length || !sk.covered();
         }
-        body.appendChild(h('p', { class: 'sheet-note', text: G.predict.note }));
+        body.appendChild(h('p', { class: 'sheet-note', text: it.kind === 'sketch' ? G.predict.sketchNote : G.predict.note }));
         if (it.expert) actions.push(h('button', { class: 'btn', type: 'button', onclick: () => { r.skip(it.id); this.afterLock(); } }, G.predict.skipExpert));
         actions.push(lockBtn);
         body.appendChild(h('div', { class: 'lv-sticky lv-actions' }, actions));
@@ -326,10 +364,80 @@
       this.after();
     }
 
+    /** A sketch item's schedule bands ({from, to, label} in minutes), filled with the variant. */
+    scheduleOf(it) {
+      const r = this.runner;
+      const list = typeof it.schedule === 'function' ? it.schedule(r.variant) : it.schedule || [];
+      return list.map((b) => ({ from: b.from, to: b.to, label: r.text(b.label) }));
+    }
+
+    /**
+     * The sketch against what the cell did: the chart (sketch dashed, the cell solid) and one
+     * ✓/✗ line per shape feature with what happened; the amount accuracy for the Expert.
+     */
+    sketchReview(box, it, answer) {
+      const r = this.runner, h = LY.h, S = G.sketch, W = it.words || {};
+      const demo = r.demo.result;
+      const ev = it.evaluate ? it.evaluate(answer.value, r.variant, { demo }) : null;
+      const chartHost = h('div', { class: 'lv-sketch-chart' });
+      box.appendChild(chartHost);
+      const ch = Sketch.chart({
+        host: chartHost, sketch: answer.value, curve: demo && demo.curve, step: 0.25, schedule: this.scheduleOf(it),
+        words: { x: r.text(it.x.label), y: r.text(it.y.label), sketch: S.sketch, cell: S.cell },
+      });
+      (this.charts || (this.charts = [])).push(ch);
+      if (ev && W.features) {
+        const keys = Object.keys(W.features);
+        const list = h('ul', { class: 'lv-features' });
+        keys.forEach((k, i) => {
+          const ok = !!ev.features[i];
+          list.appendChild(h('li', { class: ok ? 'is-right' : 'is-wrong' }, [
+            h('span', { class: 'lv-mark', 'aria-hidden': 'true', text: ok ? '✓ ' : '✗ ' }),
+            h('span', { class: 'lv-feature-name', text: r.text(W.features[k]) + (ok ? '' : ' · ' + S.wrong) }),
+            ok ? null : h('span', { class: 'lv-feature-fb', text: r.text(W.happened[k]) }),
+          ]));
+        });
+        box.appendChild(list);
+        if (typeof ev.A === 'number' && W.accuracy) box.appendChild(h('p', { class: 'sheet-note', text: F.fill(r.text(W.accuracy), { a: Math.round(100 * ev.A) }) }));
+      }
+    }
+    dropCharts() { for (const c of this.charts || []) c.destroy(); this.charts = []; }
+
+    // --- the 1.2 demo's end: the sketch over the test run (§5.4.3, §7.2.4) ----------------
+    demoResult() {
+      const r = this.runner, h = LY.h, T = this.def.text.demo || {};
+      const it = this.def.predictions.find((x) => x.kind === 'sketch');
+      const a = it && r.answers[it.id];
+      this.dropCharts();
+      this.sheet('demo', { title: r.text(T.title || ''), className: 'lv-sheet lv-full lv-sketch-sheet' }, (body) => {
+        if (T.intro) body.appendChild(h('p', { class: 'lv-prompt', text: r.text(T.intro) }));
+        if (a && a.locked) this.sketchReview(body, it, a);
+        const d = r.demo.result;
+        if (T.copies && d && d.ppm > 0) body.appendChild(h('p', { text: F.fill(r.text(T.copies), { ppm: Math.round(d.ppm) }) }));
+        body.appendChild(h('div', { class: 'lv-sticky lv-actions' }, h('button', {
+          class: 'btn primary lv-wide', type: 'button', 'data-primary': '', 'data-action': 'demo-continue',
+          onclick: () => { this.dropCharts(); r.next(); this.after(); },
+        }, G.demo.continue)));
+      });
+    }
+
+    // --- the 1.4 epilogue: the student switches the gene off, then watches (§7.4.4) ------
+    epilogueSheet() {
+      const r = this.runner, h = LY.h, T = this.def.text.epilogue || {};
+      this.sheet('epilogue', { className: 'lv-sheet lv-story', backdropClass: 'lv-dim lv-clear', label: r.text(T.button || '') }, (body) => {
+        body.appendChild(h('p', { class: 'lv-line', 'aria-live': 'polite', text: r.text(T.prompt || '') }));
+        body.appendChild(h('div', { class: 'lv-actions lv-actions-end' }, h('button', {
+          class: 'btn primary lv-next', type: 'button', 'data-primary': '', 'data-action': 'epilogue-start',
+          onclick: () => this.app.startEpilogue(),
+        }, r.text(T.button || G.continue))));
+      });
+    }
+
     // --- the result (§5.6) --------------------------------------------------------------
     result() {
       const r = this.runner, h = LY.h, R = G.result;
       const prev = r.preview();
+      this.dropCharts();
       this.sheet('result', { title: R.title, className: 'lv-sheet lv-full' }, (body) => {
         const reason = R.reasons[r.run && r.run.endReason] || R.reasons.done;
         body.appendChild(h('p', { class: 'lv-outcome ' + (r.goal ? 'is-met' : 'is-not'), text: r.goal ? R.met : F.fill(R.notMet, { reason }) }));
@@ -342,6 +450,7 @@
               h('span', { class: 'lv-eff-par', style: { left: '80%' } }, h('span', { class: 'lv-eff-par-label', text: R.parMark })),
             ]),
           ]));
+          if (this.def.resultLines) for (const t of this.def.resultLines(r.variant, prev)) body.appendChild(h('p', { class: 'sheet-note', text: t }));
         }
         const review = this.reviewCards('predict');
         if (review.length) {
@@ -376,7 +485,9 @@
           kids.push(h('p', { text: F.fill(R.estimate, { v: a.value }) }));
           kids.push(h('p', { text: a.correct ? R.estimateRight : R.estimateWrong }));
         }
-        out.push(h('div', { class: 'lv-review' + (a.correct ? ' is-right' : a.skipped ? '' : ' is-wrong') }, kids));
+        const card = h('div', { class: 'lv-review' + (a.correct ? ' is-right' : a.skipped ? '' : ' is-wrong') }, kids);
+        if (it.kind === 'sketch' && !a.skipped) this.sketchReview(card, it, a);
+        out.push(card);
       }
       return out;
     }
@@ -423,7 +534,7 @@
       const r = this.runner, h = LY.h, app = this.app, K = G.complete, res = r.result;
       if (!this.completed) { this.completed = true; app.levelCompleted(r); }
       this.sheet('complete', { title: this.title(), className: 'lv-sheet lv-full lv-complete' }, (body) => {
-        const lines = scoreLines(res);
+        const lines = scoreLines(res, this.def.text.task.expert.length);
         body.appendChild(h('div', { class: 'lv-score' }, lines.map((t, i) => h('p', { class: i === lines.length - 1 && res.total !== null ? 'lv-total' : '', text: t }))));
         if (r.cards.length && !r.has('echo')) {
           const names = this.def.echo.cards.map((c) => textAt(this.def, c.title) + ' (' + (c.stamp === 'universal' ? G.echo.universal : G.echo.bacteria) + ')');
@@ -465,14 +576,11 @@
       });
     }
 
-    /** Phases whose screens arrive with later levels (demo: 1.2, design: 1.7): a plain Continue. */
+    /** A phase whose screen arrives with a later level (design: 1.7's DNA editor): a plain Continue. */
     placeholder() {
       const r = this.runner, h = LY.h;
       this.sheet('placeholder', { title: this.title(), className: 'lv-sheet' }, (body) => {
-        body.appendChild(h('button', { class: 'btn primary lv-wide', type: 'button', onclick: () => {
-          if (r.phase === 'demo') { const c = r.startDemo(); while (!r.checkDemo()) { c.step(); c.takeEvents(); } }
-          r.next(); this.after();
-        } }, G.continue));
+        body.appendChild(h('button', { class: 'btn primary lv-wide', type: 'button', onclick: () => { r.next(); this.after(); } }, G.continue));
       });
     }
 

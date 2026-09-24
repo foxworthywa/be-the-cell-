@@ -1,0 +1,247 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Be the Cell codes</title>
+<meta name="robots" content="noindex">
+<!--
+  Be the Cell: the instructor's code decoder and run-file check (LEVELS.md §10.4).
+  Paste completion codes (one per line) or choose a Canvas "Student analysis" CSV: the table
+  shows each code's level, variant, scores, Expert objectives and flags by name, with
+  warnings for duplicates, overrides and other engines. A run file a student sent is
+  replayed here and its score recomputed. Nothing leaves the browser.
+  From a checkout it runs by file:// (it loads ../src/…); the build writes a single-file copy
+  with every script inlined to dist/tools/codes.html (published at …/be-the-cell-/tools/codes.html).
+-->
+<style>
+  :root { --bg: #f6f5f0; --panel: #ffffff; --ink: #1d1f24; --muted: #5f6570; --line: #d9d7cf; --accent: #2f6fd6; --accent-ink: #ffffff;
+          --good: #217a46; --bad: #b3261e; --warn: #8a5a00; --warn-pale: #fbf1dc; --bad-pale: #fbe4e2; }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) { --bg: #15181e; --panel: #1d2129; --ink: #e8e6e1; --muted: #a3a8b2; --line: #343a45; --accent: #6ea0ff;
+      --accent-ink: #0d1320; --good: #6fcf97; --bad: #f28b82; --warn: #e3b341; --warn-pale: #3a3020; --bad-pale: #3d2322; }
+  }
+  :root[data-theme="dark"] { --bg: #15181e; --panel: #1d2129; --ink: #e8e6e1; --muted: #a3a8b2; --line: #343a45; --accent: #6ea0ff;
+    --accent-ink: #0d1320; --good: #6fcf97; --bad: #f28b82; --warn: #e3b341; --warn-pale: #3a3020; --bad-pale: #3d2322; }
+  * { box-sizing: border-box; }
+  html { -webkit-text-size-adjust: 100%; }
+  body { margin: 0; background: var(--bg); color: var(--ink); font: 16px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; overflow-x: hidden; }
+  main { max-width: 1200px; margin: 0 auto; padding: 20px 16px 40px; }
+  h1 { font-size: 1.35rem; margin: 0 0 4px; }
+  h2 { font-size: 1.1rem; margin: 28px 0 6px; }
+  p { margin: 0 0 12px; }
+  .muted { color: var(--muted); }
+  textarea { width: 100%; min-height: 132px; padding: 10px 12px; font: 15px/1.4 ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+             color: var(--ink); background: var(--panel); border: 1px solid var(--line); border-radius: 10px; resize: vertical; }
+  .row { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; margin: 10px 0 12px; }
+  button, .file { min-height: 44px; padding: 0 18px; font: inherit; font-weight: 600; color: var(--ink); background: var(--panel);
+                  border: 1px solid var(--line); border-radius: 10px; display: inline-flex; align-items: center; cursor: pointer; }
+  button.primary { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
+  button:disabled { opacity: .45; cursor: default; }
+  .file input { position: absolute; width: 1px; height: 1px; opacity: 0; }
+  .file:focus-within { outline: 3px solid var(--accent); outline-offset: 2px; }
+  :focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
+  #drop.over { outline: 3px dashed var(--accent); outline-offset: 4px; }
+  .summary { font-weight: 600; }
+  .table-wrap { overflow-x: auto; border: 1px solid var(--line); border-radius: 10px; background: var(--panel); }
+  table { border-collapse: collapse; width: 100%; font-size: 14px; }
+  th, td { text-align: left; vertical-align: top; padding: 6px 10px; border-bottom: 1px solid var(--line); white-space: nowrap; }
+  th { position: sticky; top: 0; background: var(--panel); font-size: 13px; color: var(--muted); }
+  td.wrap { white-space: normal; min-width: 160px; max-width: 280px; }
+  td.code { font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace; font-size: 12px; }
+  tr.row-invalid td { background: var(--bad-pale); }
+  tr.row-warn td { background: var(--warn-pale); }
+  .key { font-size: 14px; margin-top: 8px; } .key p { margin: 0 0 4px; }
+  .ok { color: var(--good); font-weight: 700; } .bad { color: var(--bad); font-weight: 700; } .warn { color: var(--warn); font-weight: 600; }
+  ul.checks { list-style: none; padding: 0; margin: 8px 0; }
+  ul.checks li { padding: 2px 0; }
+  details { margin-top: 28px; } summary { cursor: pointer; font-weight: 600; padding: 10px 0; }
+  .note li { margin-bottom: 6px; }
+</style>
+<script src="../src/engine/btc-math.js"></script>
+<script src="../src/engine/btc-prng.js"></script>
+<script src="../src/engine/btc-params.js"></script>
+<script src="../src/engine/btc-catalog.js"></script>
+<script src="../src/engine/btc-presets.js"></script>
+<script src="../src/engine/btc-genome.js"></script>
+<script src="../src/engine/btc-queue.js"></script>
+<script src="../src/engine/btc-regulation.js"></script>
+<script src="../src/engine/btc-expression.js"></script>
+<script src="../src/engine/btc-metabolism.js"></script>
+<script src="../src/engine/btc-growth.js"></script>
+<script src="../src/engine/btc-commands.js"></script>
+<script src="../src/engine/btc-events.js"></script>
+<script src="../src/engine/btc-observe.js"></script>
+<script src="../src/engine/btc-cell.js"></script>
+<script src="../src/engine/btc-replay.js"></script>
+<script src="../src/shared/btc-dots.js"></script>
+<script src="../src/shared/btc-recorder.js"></script>
+<script src="../src/shared/btc-narrate.js"></script>
+<script src="../src/game/btc-level-kit.js"></script>
+<script src="../src/game/btc-misconceptions.js"></script>
+<script src="../src/levels/btc-level-constants.js"></script>
+<script src="../src/levels/btc-level-1-2.js"></script>
+<script src="../src/levels/btc-level-1-4.js"></script>
+<script src="../src/levels/btc-level-p.js"></script>
+<script src="../src/game/btc-levels.js"></script>
+<script src="../src/game/btc-score.js"></script>
+<script src="../src/game/btc-code.js"></script>
+<script src="../src/game/btc-telemetry.js"></script>
+<script src="../src/game/btc-progress.js"></script>
+<script src="../src/game/btc-level-runner.js"></script>
+</head>
+<body>
+<main id="drop">
+  <h1>Be the Cell completion codes</h1>
+  <p class="muted">Paste codes, one per line, or choose (or drop) a Canvas "Student analysis" CSV. Everything stays in this browser.</p>
+  <label for="codes" class="muted">Codes or CSV text</label>
+  <textarea id="codes" spellcheck="false" autocomplete="off" placeholder="BTC1-12-7K2Q9C-G1E100P75D12X1-F02-A1N2-R110C1-3F9A0B-4NQ8ZR1"></textarea>
+  <div class="row">
+    <button id="decode" class="primary" type="button">Decode</button>
+    <label class="file">Choose a CSV…<input id="csv" type="file" accept=".csv,.txt,text/csv,text/plain"></label>
+    <button id="download" type="button" disabled>Download CSV</button>
+  </div>
+  <p id="summary" class="summary" aria-live="polite"></p>
+  <div class="table-wrap" id="wrap" hidden><table id="table"></table></div>
+  <div class="key muted" id="key"></div>
+
+  <h2>Check a run file</h2>
+  <p class="muted">Choose a run file a student sent (be-the-cell-&lt;level&gt;-&lt;variant&gt;-a&lt;attempt&gt;.json). It is replayed here with the level's own rules, and its score and code are recomputed.</p>
+  <div class="row"><label class="file">Choose a run file…<input id="runfile" type="file" accept=".json,application/json"></label></div>
+  <div id="verify" aria-live="polite"></div>
+
+  <details class="note">
+    <summary>What a code cannot guarantee</summary>
+    <ul>
+      <li>Who played: there are no accounts, so a code can be passed on. Duplicate codes and duplicate variants are flagged; a unique code from someone else is not detectable.</li>
+      <li>An honest score: the checksum catches typos and casual edits, not a determined forger (the method is public).</li>
+      <li>A first attempt: clearing site data or using another browser starts again at attempt 1.</li>
+      <li>Re-checking without the run file: only a run file can be replayed, and a replay still does not show who made it.</li>
+      <li>Comparability across content versions: codes with different C values may differ in variants or scoring.</li>
+    </ul>
+  </details>
+  <p class="muted" id="build"></p>
+</main>
+<script>
+(function () {
+  'use strict';
+  var B = window.BTC, $ = function (id) { return document.getElementById(id); };
+  var rows = [];
+  // Warnings (duplicates, overrides, other engines) sit next to Valid, so they are on screen without scrolling the table.
+  var COLS = [['student', 'Student'], ['valid', 'Valid'], ['warnings', 'Warnings'], ['level', 'Level'], ['variant', 'Variant'], ['variantValues', 'Variant values'],
+    ['G', 'G'], ['E', 'E'], ['P', 'P'], ['D', 'D'], ['total', 'Total'], ['expert', 'Expert met'], ['attempt', 'Attempt'], ['runs', 'Runs'],
+    ['flags', 'Flags'], ['engine', 'Engine'], ['content', 'C'], ['code', 'Code']];
+  var WRAP = { flags: 1, warnings: 1, variantValues: 1 };
+  function el(tag, cls, text) { var e = document.createElement(tag); if (cls) e.className = cls; if (text !== undefined) e.textContent = text; return e; }
+  function render() {
+    var t = $('table');
+    t.textContent = '';
+    var head = el('tr');
+    COLS.forEach(function (c) { head.appendChild(el('th', null, c[1])); });
+    var thead = el('thead'); thead.appendChild(head); t.appendChild(thead);
+    var tb = el('tbody');
+    rows.forEach(function (r) {
+      var tr = el('tr', !r.valid ? 'row-invalid' : r.warnings ? 'row-warn' : '');
+      if (!r.valid) {
+        // An invalid code: its reason across the row, then the code as typed.
+        tr.appendChild(el('td', null, r.student));
+        var why = el('td', 'wrap'); why.colSpan = COLS.length - 2;
+        why.appendChild(el('span', 'bad', '✗ ' + r.reason));
+        tr.appendChild(why);
+        tr.appendChild(el('td', 'code', r.code));
+        tb.appendChild(tr);
+        return;
+      }
+      COLS.forEach(function (c) {
+        var k = c[0], td;
+        if (k === 'valid') { td = el('td'); td.appendChild(el('span', r.valid ? 'ok' : 'bad', r.valid ? '✓ valid' : '✗ ' + r.reason)); }
+        else if (k === 'warnings') { td = el('td', 'wrap'); if (r.warnings) td.appendChild(el('span', 'warn', r.warnings)); }
+        else td = el('td', (WRAP[k] ? 'wrap' : '') + (k === 'code' ? ' code' : ''), String(r[k] === undefined ? '' : r[k]));
+        tr.appendChild(td);
+      });
+      tb.appendChild(tr);
+    });
+    t.appendChild(tb);
+    $('wrap').hidden = !rows.length;
+    // The Expert objectives of each level in the table, by number.
+    var key = $('key'); key.textContent = '';
+    var levels = {};
+    rows.forEach(function (r) { if (r.valid && r.level) levels[r.level] = true; });
+    B.levels.list.forEach(function (d) {
+      var ex = d.text.task && d.text.task.expert;
+      if (!levels[d.id] || !ex || !ex.length) return;
+      key.appendChild(el('p', null, 'Level ' + d.id + ' Expert objectives: ' + ex.map(function (t, k) { return (k + 1) + ' = ' + t; }).join('  ')));
+    });
+    var bad = rows.filter(function (r) { return !r.valid; }).length, warn = rows.filter(function (r) { return r.warnings; }).length;
+    $('summary').textContent = rows.length ? rows.length + ' code(s): ' + (rows.length - bad) + ' valid, ' + bad + ' invalid, ' + warn + ' with warnings.'
+      : 'No Be the Cell codes found.';
+    $('download').disabled = !rows.length;
+  }
+  function decode(text) {
+    rows = B.code.table(B.code.readCodes(text), B.levels.list, { engine: B.ENGINE_VERSION });
+    render();
+  }
+  function readFile(file, then) {
+    var fr = new FileReader();
+    fr.onload = function () { then(String(fr.result)); };
+    fr.onerror = function () { $('summary').textContent = 'Could not read ' + file.name + '.'; };
+    fr.readAsText(file);
+  }
+  function verify(text, name) {
+    var out = $('verify');
+    out.textContent = '';
+    var file;
+    try { file = JSON.parse(text); } catch (e) { out.appendChild(el('p', 'bad', name + ' is not a JSON file.')); return; }
+    out.appendChild(el('p', 'muted', 'Replaying ' + name + '…'));
+    setTimeout(function () {
+      var res = B.game.verifyRunFile(file, { levels: B.levels.byId });
+      out.textContent = '';
+      if (res.error) { out.appendChild(el('p', 'bad', 'Not verified: ' + res.error + '.')); return; }
+      var L = file.level;
+      out.appendChild(el('p', res.ok ? 'ok' : 'bad', res.ok ? '✓ match: the replayed run gives this score and this code.' : '✗ mismatch: see the lines marked below.'));
+      out.appendChild(el('p', 'muted', 'Level ' + L.id + ', attempt ' + L.attempt + ', ' + L.runs + ' run(s). Code ' + L.code));
+      var ul = el('ul', 'checks');
+      res.checks.forEach(function (c) {
+        var li = el('li');
+        li.appendChild(el('span', c.ok ? 'ok' : 'bad', c.ok ? '✓ ' : '✗ '));
+        li.appendChild(document.createTextNode(c.what + (c.ok ? '' : ': file ' + JSON.stringify(c.got) + ', replay ' + JSON.stringify(c.want))));
+        ul.appendChild(li);
+      });
+      out.appendChild(ul);
+    }, 30);
+  }
+  $('decode').addEventListener('click', function () { decode($('codes').value); });
+  $('csv').addEventListener('change', function (e) {
+    var f = e.target.files && e.target.files[0];
+    if (f) readFile(f, function (text) { $('codes').value = text; decode(text); });
+  });
+  $('runfile').addEventListener('change', function (e) {
+    var f = e.target.files && e.target.files[0];
+    if (f) readFile(f, function (text) { verify(text, f.name); });
+  });
+  $('download').addEventListener('click', function () {
+    var blob = new Blob([B.code.toCSV(rows)], { type: 'text/csv' });
+    var a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = 'be-the-cell-codes.csv';
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(function () { URL.revokeObjectURL(a.href); }, 0);
+  });
+  var drop = $('drop');
+  drop.addEventListener('dragover', function (e) { e.preventDefault(); drop.classList.add('over'); });
+  drop.addEventListener('dragleave', function () { drop.classList.remove('over'); });
+  drop.addEventListener('drop', function (e) {
+    e.preventDefault(); drop.classList.remove('over');
+    var f = e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files[0];
+    if (!f) return;
+    readFile(f, function (text) {
+      if (/\.json$/i.test(f.name) || /^\s*\{/.test(text)) verify(text, f.name);
+      else { $('codes').value = text; decode(text); }
+    });
+  });
+  $('build').textContent = 'Engine ' + B.ENGINE_VERSION + '; levels ' + B.levels.list.map(function (d) { return d.id + ' (C' + d.version + ')'; }).join(', ') + '.';
+  window.__codes = { decode: decode, verify: verify, rows: function () { return rows; } };
+})();
+</script>
+</body>
+</html>

@@ -7,6 +7,11 @@
  * assumed spacing. At most two points are drawn per pixel column (the
  * column's minimum and maximum), so a spike survives any zoom. The last point
  * is the live value from the view, so a plot moves even between samples.
+ *
+ * Level hooks (LEVELS §5.4.3, §9 item 6): setOverlay(points, style) draws a
+ * dashed curve in data units (1.2's sketch over the demo), setYBand(band)
+ * shades a horizontal band (1.4's target band), and setInputMode('sketch', opts)
+ * turns the canvas into a finger-drawing surface that reports data points.
  */
 (function (root, factory) {
   if (typeof module === 'object' && module.exports) {
@@ -102,6 +107,8 @@
       this.colMax = new Float64Array(MAX_COLS);
       this.labelY = new Float64Array(8);
       this.overlay = null;
+      this.yBand = null;
+      this.input = null;
     }
 
     resize() {
@@ -116,9 +123,65 @@
       return true;
     }
 
-    /** Reserved for level 1.2 (predicted curves); not in M1. */
-    setOverlay() { throw new Error('not in M1'); }
-    setInputMode() { throw new Error('not in M1'); }
+    /**
+     * A curve drawn over the data in data units: points [[t_s, value], …] (null breaks the line),
+     * style {color (palette token), dash ([6, 5]), width, legend: [{text, dash?, color?}]}. null clears it.
+     */
+    setOverlay(points, style) {
+      this.overlay = points && points.length ? { points, style: Object.assign({ color: 'muted', dash: [6, 5], width: 2 }, style || {}) } : null;
+    }
+
+    /** A horizontal band {lo, hi, label, color?} shaded behind the data (1.4's target band); null clears it. */
+    setYBand(band) { this.yBand = band || null; }
+
+    /**
+     * 'sketch': pointer input in data units (touch-action none while on, pointer capture,
+     * pointercancel ends the stroke). opts.onPoint(t_s, value, phase) with phase 'start' | 'move' |
+     * 'end'. Any other mode (null) turns it off and restores scrolling.
+     */
+    setInputMode(mode, opts) {
+      const cv = this.canvas;
+      if (this.input) {
+        for (const [type, fn] of this.input.handlers) cv.removeEventListener(type, fn);
+        cv.style.touchAction = this.input.touchAction;
+        this.input = null;
+      }
+      if (mode !== 'sketch') return;
+      const o = opts || {};
+      let active = null;
+      const at = (e) => {
+        const r = cv.getBoundingClientRect();
+        return this.dataAt(e.clientX - r.left, e.clientY - r.top);
+      };
+      const emit = (e, phase) => {
+        const p = at(e);
+        if (p && o.onPoint) o.onPoint(p.t, p.v, phase);
+      };
+      const handlers = [
+        ['pointerdown', (e) => {
+          if (e.button !== undefined && e.button > 0) return;
+          active = e.pointerId;
+          try { cv.setPointerCapture(e.pointerId); } catch (err) { /* capture is optional */ }
+          e.preventDefault();
+          emit(e, 'start');
+        }],
+        ['pointermove', (e) => { if (active !== e.pointerId) return; e.preventDefault(); emit(e, 'move'); }],
+        ['pointerup', (e) => { if (active !== e.pointerId) return; emit(e, 'end'); active = null; }],
+        ['pointercancel', (e) => { if (active !== e.pointerId) return; active = null; if (o.onPoint) o.onPoint(null, null, 'end'); }],
+      ];
+      for (const [type, fn] of handlers) cv.addEventListener(type, fn);
+      this.input = { handlers, touchAction: cv.style.touchAction };
+      cv.style.touchAction = 'none';
+    }
+
+    /** Data coordinates {t (sim s), v} under CSS point (x, y) of the last draw, clamped to the axes; null before a draw. */
+    dataAt(x, y) {
+      if (!(this.x1 > this.x0) || !this.ymap) return null;
+      const fx = Math.max(0, Math.min(1, (x - this.x0) / (this.x1 - this.x0)));
+      const m = this.ymap;
+      const fy = Math.max(0, Math.min(1, (m.y1 - y) / (m.y1 - m.y0)));
+      return { t: this.t0 + fx * (this.t1 - this.t0), v: m.lo + fy * (m.hi - m.lo) };
+    }
 
     /** The y range for this frame, from the data maximum. */
     yRange(maxV) {
@@ -126,6 +189,11 @@
       if (o.scale === 'fixed') {
         let hi = o.max;
         if (o.extendStep && maxV > hi) hi = Math.ceil(maxV / o.extendStep) * o.extendStep;
+        if (o.yStep) {
+          const ticks = [];
+          for (let t = o.min; t <= hi + 1e-9 && ticks.length < 12; t += o.yStep) ticks.push(t);
+          return { lo: o.min, hi, ticks };
+        }
         return { lo: o.min, hi, ticks: niceTicks(o.min, hi, 4).filter((t) => t <= hi + 1e-9) };
       }
       if (this.log) {
@@ -136,15 +204,17 @@
       return { lo: 0, hi: ticks[ticks.length - 1], ticks };
     }
 
-    /** Data maximum within the window (and the live values). */
+    /** Data maximum within the window (and the live values, the overlay and the band). */
     dataMax(m) {
-      const i0 = lowerBound(m.ticks, m.count, Math.floor(m.t0 / m.dt));
+      const i0 = m.count ? lowerBound(m.ticks, m.count, Math.floor(m.t0 / m.dt)) : 0;
       let maxV = 0;
       for (let s = 0; s < m.nSeries; s++) {
         const d = m.series[s].data;
         if (d) for (let i = i0; i < m.count; i++) if (d[i] > maxV) maxV = d[i];
         if (m.series[s].live > maxV) maxV = m.series[s].live;
       }
+      if (this.overlay) for (const p of this.overlay.points) if (p && p[1] > maxV) maxV = p[1];
+      if (this.yBand && this.yBand.hi * 1.1 > maxV) maxV = this.yBand.hi * 1.1;
       return maxV;
     }
 
@@ -178,19 +248,33 @@
       const c = this.ctx, P = PAL.current(), W = this.w, H = this.h;
       const own = (m.gutterL === undefined || m.gutterR === undefined) ? this.gutters(m, GUT) : null;
       const gutterL = own ? own.left : m.gutterL, gutterR = own ? own.right : m.gutterR;
-      const x0 = gutterL, x1 = Math.max(x0 + 20, W - gutterR), y0 = PAD_TOP, y1 = H - PAD_BOTTOM;
+      const x0 = gutterL, x1 = Math.max(x0 + 20, W - gutterR), y0 = this.opts.yLabel ? PAD_TOP + 10 : PAD_TOP, y1 = H - PAD_BOTTOM;
       const tEnd = m.tEnd > m.t1 ? m.tEnd : m.t1;
       const span = Math.max(1, tEnd - m.t0);
       const tx = (t) => x0 + ((t - m.t0) / span) * (x1 - x0);
       c.fillStyle = P.panel;
       c.fillRect(0, 0, W, H);
 
-      const i0 = lowerBound(m.ticks, m.count, Math.floor(m.t0 / m.dt));
+      const i0 = m.count ? lowerBound(m.ticks, m.count, Math.floor(m.t0 / m.dt)) : 0;
       const yr = this.yRange(this.dataMax(m));
       const ty = (v) => {
         const u = this.log ? Math.log10(Math.max(1, v)) : v;
         return y1 - ((u - yr.lo) / (yr.hi - yr.lo || 1)) * (y1 - y0);
       };
+      this.ymap = this.log ? null : { y0, y1, lo: yr.lo, hi: yr.hi };
+
+      // A horizontal target band (1.4), labelled at its top right (the label is drawn after the grid, below).
+      let bandLabel = null;
+      if (this.yBand) {
+        const b = this.yBand, ya = Math.max(y0, ty(b.hi)), yb = Math.min(y1, ty(b.lo));
+        if (yb > ya) {
+          c.globalAlpha = 0.16; c.fillStyle = P[b.color || 'good']; c.fillRect(x0, ya, x1 - x0, yb - ya); c.globalAlpha = 1;
+          c.strokeStyle = P[b.color || 'good']; c.lineWidth = 1; c.setLineDash([4, 3]);
+          c.beginPath(); c.moveTo(x0, Math.round(ya) + 0.5); c.lineTo(x1, Math.round(ya) + 0.5); c.moveTo(x0, Math.round(yb) + 0.5); c.lineTo(x1, Math.round(yb) + 0.5); c.stroke();
+          c.setLineDash([]);
+          if (b.label) bandLabel = { text: b.label, x: x1 - 4, y: ya + 4 };
+        }
+      }
 
       // Drug bands (each labelled at its start) and the "low" band.
       c.font = '11px ' + FONT; c.textAlign = 'left'; c.textBaseline = 'top';
@@ -215,6 +299,13 @@
       for (const t of yr.ticks) { const y = Math.round(ty(t)) + 0.5; c.moveTo(x0, y); c.lineTo(x1, y); }
       c.moveTo(x0 - 0.5, y0); c.lineTo(x0 - 0.5, y1);
       c.stroke();
+      // The band's label on a patch of the panel colour, so a gridline through the band never crosses it.
+      if (bandLabel) {
+        c.font = '12px ' + FONT; c.textAlign = 'right'; c.textBaseline = 'top';
+        const w = c.measureText(bandLabel.text).width;
+        c.fillStyle = P.panel; c.fillRect(bandLabel.x - w - 3, bandLabel.y - 1, w + 6, 15);
+        c.fillStyle = P.ink; c.fillText(bandLabel.text, bandLabel.x, bandLabel.y);
+      }
       c.fillStyle = P.muted; c.font = '12px ' + FONT; c.textAlign = 'right'; c.textBaseline = 'middle';
       const every = this.log && yr.ticks.length > 4 ? 2 : 1;
       for (let k = 0; k < yr.ticks.length; k++) {
@@ -223,8 +314,8 @@
         c.fillText(tickLabel(t), x0 - 5, y);
       }
 
-      // x axis: sim time.
-      const xt = xTicks(m.window || span);
+      // x axis: sim time (a plot may ask for its own step, e.g. 5 min on the 20-min sketch axes).
+      const xt = this.opts.xStep ? { step: this.opts.xStep, unit: 'min', div: 60 } : xTicks(m.window || span);
       c.textAlign = 'center'; c.textBaseline = 'top';
       const first = Math.ceil(m.t0 / xt.step) * xt.step;
       let lastLabelX = -1e9;
@@ -235,7 +326,8 @@
         lastLabelX = x;
       }
       c.textAlign = 'right';
-      c.fillText(xt.unit === 'min' ? 'min' : 'h', W - 4, y1 + 3);
+      c.fillText(this.opts.xLabel || (xt.unit === 'min' ? 'min' : 'h'), W - 4, y1 + 3);
+      if (this.opts.yLabel) { c.textAlign = 'left'; c.textBaseline = 'top'; c.fillText(this.opts.yLabel, 4, 1); }
 
       // Division markers (dashed) and command ticks.
       c.strokeStyle = P.muted; c.lineWidth = 1;
@@ -281,6 +373,22 @@
         }
       }
 
+      // The overlay (a sketch), dashed, under the series.
+      if (this.overlay) {
+        const ov = this.overlay;
+        c.strokeStyle = P[ov.style.color] || P.muted; c.lineWidth = ov.style.width; c.setLineDash(ov.style.dash || []);
+        c.lineJoin = 'round'; c.lineCap = 'round';
+        c.beginPath();
+        let pen = false;
+        for (const p of ov.points) {
+          if (!p) { pen = false; continue; }
+          const x = Math.max(x0, Math.min(x1, tx(p[0]))), y = Math.max(y0, Math.min(y1, ty(p[1])));
+          if (!pen) { c.moveTo(x, y); pen = true; } else c.lineTo(x, y);
+        }
+        c.stroke();
+        c.setLineDash([]);
+      }
+
       // Series: min/max per pixel column, then the live head.
       for (let s = 0; s < m.nSeries; s++) {
         const ser = m.series[s];
@@ -304,7 +412,7 @@
           if (cmin[q] !== cmax[q]) c.lineTo(x, cmin[q]);
         }
         const yl = ty(ser.live), xl = tx(m.t1);
-        if (!started) c.moveTo(xl, yl); else c.lineTo(xl, yl);
+        if (ser.live === ser.live) { if (!started) c.moveTo(xl, yl); else c.lineTo(xl, yl); }
         c.stroke();
         this.labelY[s] = yl;
         this.labelX = Math.min(x1, xl);
@@ -331,6 +439,20 @@
           const ser = m.series[s];
           c.fillStyle = P[ser.color];
           c.fillText(ser.label, this.labelX + 6, this.labelY[s]);
+        }
+      }
+
+      // A legend for the overlay (1.2: "- - your sketch  — the cell"), top left inside the plot.
+      if (this.overlay && this.overlay.style.legend) {
+        c.font = '12px ' + FONT; c.textAlign = 'left'; c.textBaseline = 'middle';
+        let lx = x0 + 8;
+        const ly = y0 + 8;
+        for (const it of this.overlay.style.legend) {
+          c.strokeStyle = P[it.color || 'ink']; c.lineWidth = 2; c.setLineDash(it.dash || []);
+          c.beginPath(); c.moveTo(lx, ly); c.lineTo(lx + 18, ly); c.stroke();
+          c.setLineDash([]);
+          c.fillStyle = P.ink; c.fillText(it.text, lx + 23, ly);
+          lx += 23 + c.measureText(it.text).width + 14;
         }
       }
 

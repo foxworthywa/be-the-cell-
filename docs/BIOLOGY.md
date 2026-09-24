@@ -147,12 +147,21 @@ mannose uptake system is deleted (ΔmanXYZ), so PtsG is the only way glucose get
   (no regulation) a few minutes of both at ×1 before glucose is removed is enough since engine
   1.1.0: the cell pauses and keeps its charge (lowest 0.15–0.4) while the permeases it has bring
   in enough lactose to make more (half speed or better after 2 h, 4 of 4 seeds, with ×1 for 3
-  min). Engine 1.0.0 needed ×1 for two hours. A cell with LacY but no LacZ keeps pumping
+  min). Engine 1.0.0 needed ×1 for two hours. The more LacY and LacZ at the switch, the shorter
+  the pause (from the steady preset, lactose present throughout, seeds 1–4: time from removing
+  glucose until growth, averaged over a few minutes, is back above half its lactose rate): ×1
+  for 3 min 112–123 min, 5 min 94–102, 15 min 47–61, 30 min 31–42; ×4 for 5 min 30–35; after ×4
+  for 15 min growth never falls below half (the charge dips to about 0.55), and after ×4 for 30
+  min the charge stays above 0.78. Switched on only after glucose is gone (1 min after), they are never
+  made: the charge is already near 0.1, no lacY mRNA is finished in 40 min, and the cell goes
+  dormant after about 2 h. Glucose added back after 3 h brings it to half speed in about 70 s. A cell with LacY but no LacZ keeps pumping
   lactose in without splitting it and runs its ATP down to nothing (lactose killing is caused by
   LacY transport itself, also in lacZ mutants; Dykhuizen & Hartl 1978).
-- The narrator's line "Lactose is outside, but there is too little LacY and LacZ to keep ATP up,
-  so the cell has stopped" now needs the charge below 0.1, which a cell holding a few lac
-  proteins rarely reaches; such a cell usually reads "not growing" instead.
+- The narrator names that pause: "Lactose gets in through only a few LacY and LacZ, so ATP stays
+  low and growth has paused." (rule 13b, while growth is arrested and the charge is below 0.7;
+  after ×1 for 5 min it speaks within 20 min and gives way to "The cell is growing on lactose"
+  once enough LacY and LacZ are made). The engine 1.0.0 line ("… so the cell has stopped")
+  needed the charge below 0.1, which such a cell never reaches since engine 1.1.0.
 
 ## The lac operon (strain m2-lac, engine 1.1.0)
 
@@ -477,11 +486,13 @@ short forms like these), then the detail for instructors.
    - Options for a later engine: a small glycogen/RNA-turnover reserve that holds a starving
      cell near a charge of 0.5 (Chapman 1971) so that bursts can be made and read; and
      preferential lac initiation in the lag (Rickenberg 1955; Jacobson 1970).
-   - The lab's About sheet and the narrator still describe the engine 1.0.0 behaviour ("set
-     LacY and LacZ to ×4 … and wait an hour"; "Real E. coli adapts … this model does not"),
-     and `lac.toofew`, `gene.noatp` and `starve.dormant` now need the charge below 0.1, which
-     takes about an hour of starvation (or never, with a few permeases). The app text needs
-     updating.
+   - App text (resolved in the M2 build, LAB_UI §17): the About sheet now says to switch LacY
+     and LacZ on while glucose is there (the cell pauses, then grows; more of both, a shorter
+     pause), and that switched on after glucose is gone they are never made. `lac.toofew` now
+     speaks during the pause (growth arrested, charge below 0.7) instead of at a charge below 0.1
+     it never reached; `gene.noatp` says "almost no ATP" and is reached about 12 min after the
+     sugar is gone; `starve.dormant` is unchanged and true after about 10.5 h without glucose
+     import. Each is checked on the default parameters in U-4.
 2. **Values to verify before the spring release:**
    - protein lengths against UniProt E. coli K-12 (PtsG P69786, GapA P0A9B2, LacY P02920, LacZ
      P00722, FliC P04949);

@@ -53,12 +53,12 @@ test('c-1 / U-3: the lint catches what it must (negative controls), and the LAB_
   assert.equal(say('gene.leftover', 'fliC'), 'Transcription of the flagellin gene has stopped, but its mRNA is still being translated.');
   assert.equal(say('gene.gone', 'lacZ'), 'The mRNA for β-galactosidase is gone; the protein remains and is shared out at each division.');
   assert.equal(say('burden', 'fliC'), 'Ribosomes busy with flagellin are not making other proteins, so growth slows over a few generations.');
-  assert.equal(say('gene.noatp', 'lacY'), 'The lactose permease gene is switched on, but with no ATP nothing is transcribed.');
+  assert.equal(say('gene.noatp', 'lacY'), 'The lactose permease gene is switched on, but with almost no ATP nothing is transcribed.');
   assert.equal(say('gene.down', 'ptsG'), 'The glucose transporter gene is transcribed less often now; its protein is diluted as the cell grows.');
   assert.equal(say('gene.up', 'gly'), 'The glucose-processing genes are transcribed more often now, so their protein climbs to a higher level.');
   assert.equal(say('starve.noenzyme', 'gly'), 'The glucose-processing enzymes are too scarce to break down glucose quickly, so ATP is low and growth slows.');
   assert.equal(say('starve.noenzyme', 'gly', hidden), 'Protein B is too scarce to break down glucose quickly, so ATP is low and growth slows.');
-  assert.equal(say('lac.toofew', null), 'Lactose is outside, but there is too little LacY and LacZ to keep ATP up, so the cell has stopped.');
+  assert.equal(say('lac.toofew', null), 'Lactose gets in through only a few LacY and LacZ, so ATP stays low and growth has paused.');
   assert.equal(say('gene.tx', 'fliC', hidden), 'Gene G is being transcribed; no protein yet.');
   assert.equal(say('lac.noY', null, hidden), 'Lactose is outside, but without protein E it does not get in.');
   assert.equal(say('burden.lac', 'lacZ'), 'With no lactose here, β-galactosidase does no work, and making it slows growth over a few generations.');
@@ -131,31 +131,28 @@ test('U-4: fliC ×4 → gene.tx within 20 ticks, before gene.rising; lacZ ×¼ f
   assert.ok(w.first('gene.tx') > w.keys[0].tick, w.seq());
 });
 
-test('U-4: glucose None → starve.nosugar within 10 ticks, and still starve.nosugar after 15 min (v1.1: the cell keeps a little charge, so it is not dormant)', () => {
-  const r = play({ commands: [[0, medium({ glucose_mM: 0 })]], ticks: 900 });
+test('U-4: glucose None → starve.nosugar within 10 ticks, and still starve.nosugar after 11 h, past dormancy (v1.1: the charge runs down over hours)', () => {
+  const r = play({ commands: [[0, medium({ glucose_mM: 0 })]], ticks: 11 * HOUR });
   const t = r.first('starve.nosugar');
   assert.ok(t >= 0 && t <= 10, r.seq());
-  assert.equal(r.event('dormant'), -1, 'dormant within 15 min');
-  assert.equal(r.keyAt(900), 'starve.nosugar', r.seq());
-  assert.ok(!r.keys.some((k) => k.key === 'starve.dormant'), r.seq());
-  // Once ATP has run out (a larger basal upkeep makes that minutes instead of hours; test-only), still starve.nosugar after dormant.
-  const d = play({ config: { params: { upkeepBasal: 0.03 } }, commands: [[0, medium({ glucose_mM: 0 })]], ticks: 1800 });
-  const dormant = d.event('dormant');
-  assert.ok(dormant > 0 && dormant < 1800, `dormant at ${dormant}`);
-  assert.equal(d.keyAt(1800), 'starve.nosugar', d.seq());
+  const dormant = r.event('dormant');
+  assert.ok(dormant > 8 * HOUR && dormant < 11 * HOUR, `dormant at ${dormant} s (engine 1.1: E below 0.01 after about 10 h)`);
+  assert.equal(r.keyAt(11 * HOUR), 'starve.nosugar', r.seq());
+  assert.ok(!r.keys.some((k) => k.key === 'starve.dormant'), 'an empty medium is the cause, not missing transporters: ' + r.seq());
 });
 
-// Scenarios that need ATP to run out use a larger basal upkeep (test-only), so a starving cell reaches
-// energy 'none' in minutes; with the v1.1 default it keeps a little charge for hours (glucose test g5).
-const DRAIN = { upkeepBasal: 0.03 };
+// Every scenario runs on the default parameters (engine 1.1): a starving cell keeps a little charge for
+// hours and reaches energy 'none' (E < 0.1) after about an hour, or minutes with lactose outside and no
+// LacY to split it (glucose test g5); dormancy (E < 0.01 for 10 min) comes after about 10 h.
 
-test('U-4: ptsG knockout (no protein), glucose High → starve.noimport before dormant, then starve.dormant', () => {
-  const r = play({ config: { genes: { ptsG: KO }, params: DRAIN }, ticks: 1800 });
+test('U-4: ptsG knockout (no protein), glucose High → starve.noimport for hours, then starve.dormant once ATP is gone (default parameters)', () => {
+  const r = play({ config: { genes: { ptsG: KO } }, ticks: 11 * HOUR });
   const dormant = r.event('dormant');
   const noimport = r.first('starve.noimport');
+  assert.ok(dormant > 8 * HOUR, `dormant at ${dormant} s`);
   assert.ok(noimport >= 0 && noimport < dormant, r.seq());
   assert.ok(r.first('starve.dormant') >= dormant, r.seq());
-  assert.equal(r.keyAt(1800), 'starve.dormant', r.seq());
+  assert.equal(r.keyAt(11 * HOUR), 'starve.dormant', r.seq());
 });
 
 test('U-4: gly knockout (no protein), glucose High → growth.arrested (transporters are fine, so no transporter line)', () => {
@@ -165,20 +162,18 @@ test('U-4: gly knockout (no protein), glucose High → growth.arrested (transpor
   assert.equal(r.facts.limiting, 'energy');
 });
 
-test('U-4: glucose None + lactose, then (once E < 0.1) lacY ×1 and lacZ ×1 on → gene.noatp', () => {
-  let switched = -1;
+test('U-4: glucose None + lactose, then lacY ×1 and lacZ ×1 on → lac.noY while ATP is low, gene.noatp once it is almost gone; they are never made (default parameters)', () => {
   const r = play({
-    config: { params: DRAIN },
-    commands: [[0, medium({ glucose_mM: 0, lactose_mM: PV.lactosePresent })]], ticks: 900,
-    script: (c, f, tick) => {
-      if (switched < 0 && f.energy === 'none') { switched = tick; c.command(setP('lacY', 1)); c.command(setP('lacZ', 1)); }
-    },
+    commands: [[0, medium({ glucose_mM: 0, lactose_mM: PV.lactosePresent })], [60, setP('lacY', 1)], [60, setP('lacZ', 1)]], ticks: 40 * 60,
   });
-  assert.ok(switched > 0);
   const t = r.first('gene.noatp');
-  assert.ok(t > switched, r.seq());
+  assert.ok(t > 60 && t < 30 * 60, r.seq());
+  assert.ok(r.first('lac.noY') >= 0 && r.first('lac.noY') < t, 'lac.noY before gene.noatp: ' + r.seq());
   assert.equal(r.keys.find((k) => k.key === 'gene.noatp').gene, 'lacZ');
-  assert.equal(r.keyAt(900), 'gene.noatp', r.seq());
+  assert.equal(r.facts.energy, 'none');
+  assert.equal(r.keyAt(40 * 60), 'gene.noatp', r.seq());
+  // True: nothing is transcribed. No lacY mRNA has been finished since the switch.
+  assert.equal(r.cell.gene('lacY').mMade, 0, 'lacY mRNA was made after all');
 });
 
 test('U-4: lacZ ×1 in glucose, 30 min later glucose None + lactose → lac.noY; the same with lacY → lac.noZ', () => {
@@ -236,13 +231,13 @@ test('U-4: glucose-processing genes Off in High glucose → starve.noenzyme (the
   assert.equal(r.keyAt(5 * HOUR), 'starve.noenzyme', r.seq());
 });
 
-test('U-4: lac genes ×1 for only 5 min, then lactose only → lac.toofew once ATP is gone; ×4 for an hour never gives it', () => {
+test('U-4: lac genes ×1 for only 5 min, then lactose only → lac.toofew while growth pauses, then growth.lactose once enough LacY and LacZ are made; ×4 for an hour never pauses (default parameters)', () => {
   const lactoseOnly = medium({ glucose_mM: 0 });
-  // v1.1: with its default upkeep a cell with too few lac proteins keeps a little charge (energy 'low',
-  // growth.arrested); the line needs ATP gone, so this arm uses a much larger basal upkeep (test-only).
-  const few = play({ config: { params: { upkeepBasal: 0.3 } }, commands: [[0, setP('lacY', 1)], [0, setP('lacZ', 1)], [0, medium({ lactose_mM: PV.lactosePresent })], [300, lactoseOnly]], ticks: 300 + 900 });
-  assert.ok(few.first('lac.toofew', 300) > 300, few.seq());
-  assert.equal(few.keyAt(300 + 900), 'lac.toofew', few.seq());
+  const few = play({ commands: [[0, setP('lacY', 1)], [0, setP('lacZ', 1)], [0, medium({ lactose_mM: PV.lactosePresent })], [300, lactoseOnly]], ticks: 3 * HOUR });
+  const t = few.first('lac.toofew', 300);
+  assert.ok(t > 300 && t < 300 + 20 * 60, few.seq());
+  assert.ok(few.first('growth.lactose', t) > t, 'growth on lactose after the pause: ' + few.seq());
+  assert.equal(few.keyAt(3 * HOUR), 'growth.lactose', few.seq());
   const ok = play({ commands: [[0, setP('lacY', 4)], [0, setP('lacZ', 4)], [0, medium({ lactose_mM: PV.lactosePresent })], [HOUR, lactoseOnly]], ticks: 2 * HOUR });
   assert.ok(!ok.keys.some((k) => k.key === 'lac.toofew'), ok.seq());
   assert.equal(ok.keyAt(2 * HOUR), 'growth.lactose', ok.seq());

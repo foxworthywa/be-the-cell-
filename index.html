@@ -438,6 +438,7 @@ body[data-layout="compact"] .toast { bottom: calc(64px + var(--safe-b)); }
   font-size: 14px; font-weight: 600; white-space: nowrap; min-width: 0;
 }
 body[data-short] .hud-chip { font-size: 13px; }
+@media (max-width: 399px) { .hud-row { gap: 4px; padding: 0 6px; } .hud-chip { padding: 0 6px; } }
 .hud-goal { flex: 1 1 auto; min-width: 120px; min-height: 44px; position: relative; overflow: hidden; justify-content: flex-start; border-radius: 8px; text-align: left; }
 .hud-goal-text { overflow: hidden; text-overflow: ellipsis; }
 .hud-goal.is-continue { background: var(--accent); color: var(--accent-ink); flex: 1 0 auto; }
@@ -446,6 +447,40 @@ body[data-short] .hud-chip { font-size: 13px; }
 .hud-bar { position: absolute; left: 10px; right: 10px; bottom: 4px; height: 4px; border-radius: 2px; background: var(--muted-fill); overflow: hidden; }
 .hud-bar-fill { display: block; height: 100%; width: 0; background: var(--accent); }
 .hud-timer, .hud-counter { flex: none; color: var(--muted); font-weight: 500; }
+
+/* ---- level 1.2 sketch and 1.4 band gauge (LEVELS §5.4.3, §7.4.4) ---- */
+.lv-sketch-sheet .sheet-body { gap: 8px; }
+body:not([data-layout="compact"]) .sheet.lv-sketch-sheet { width: min(700px, 94vw); }
+.sketch-wrap { position: relative; width: 100%; height: 260px; flex: none; border: 1px solid var(--line); border-radius: 10px; overflow: hidden; background: var(--panel); }
+body:not([data-layout="compact"]) .sketch-wrap { height: 320px; }
+body[data-short] .sketch-wrap { height: 220px; }
+.sketch-wrap.is-chart { height: 220px; }
+body:not([data-layout="compact"]) .sketch-wrap.is-chart { height: 260px; }
+.sketch-wrap.is-readonly { border-style: dashed; }
+.sketch-canvas { display: block; width: 100%; height: 100%; }
+.sketch-note { font-size: 14px !important; color: var(--muted); min-height: 1.4em; }
+.sketch-note.is-warn { color: var(--warn-ink); font-weight: 600; }
+.sketch-toggle { align-self: flex-start; }
+.sketch-sliders { display: flex; flex-direction: column; gap: 6px; }
+.sketch-slider { display: flex; align-items: center; gap: 8px; }
+.sketch-at { min-width: 84px; color: var(--muted); font-size: 15px; }
+.sketch-value { min-width: 56px; text-align: center; font-weight: 600; }
+.lv-sketch-chart { display: flex; flex-direction: column; gap: 4px; margin: 4px 0; }
+.sketch-legend { display: flex; flex-wrap: wrap; gap: 4px 16px; font-size: 14px; color: var(--ink); }
+.sketch-key { display: inline-flex; align-items: center; gap: 6px; }
+.sketch-swatch { display: inline-block; width: 22px; height: 0; border-top: 2.5px solid var(--muted); }
+.sketch-swatch.is-dashed { border-top-style: dashed; }
+.lv-features { list-style: none; margin: 4px 0 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.lv-features li { display: flex; flex-wrap: wrap; gap: 0 4px; font-size: 15px; }
+.lv-features .lv-feature-name { font-weight: 600; }
+.lv-features .lv-feature-fb { flex-basis: 100%; padding-left: 20px; color: var(--ink); font-size: 14px; }
+.lv-features .is-right .lv-mark { color: var(--good); }
+.lv-features .is-wrong .lv-mark { color: var(--bad); }
+.lv-actions.lv-actions-end { justify-content: flex-end; }
+.hud-bar.is-gauge { height: 6px; bottom: 3px; overflow: visible; }
+.hud-gauge-band { position: absolute; top: 0; bottom: 0; background: var(--good); opacity: .45; border-radius: 2px; }
+.hud-gauge-tick { position: absolute; top: -3px; bottom: -3px; width: 3px; margin-left: -1.5px; background: var(--ink); border-radius: 1px; }
+.hud-gauge-tick.is-in { background: var(--good); }
 
 /* ---- home and level select (LEVELS §5.1) ---- */
 .home {
@@ -626,6 +661,8 @@ body[data-reduced-motion] * { transition-duration: 0s !important; animation: non
 <script src="src/game/btc-level-kit.js"></script>
 <script src="src/game/btc-misconceptions.js"></script>
 <script src="src/levels/btc-level-constants.js"></script>
+<script src="src/levels/btc-level-1-2.js"></script>
+<script src="src/levels/btc-level-1-4.js"></script>
 <script src="src/levels/btc-level-p.js"></script>
 <script src="src/game/btc-levels.js"></script>
 <script src="src/game/btc-score.js"></script>
@@ -651,6 +688,7 @@ body[data-reduced-motion] * { transition-duration: 0s !important; animation: non
 <script src="src/app/btc-pwa.js"></script>
 <script src="src/app/btc-home.js"></script>
 <script src="src/app/btc-hud.js"></script>
+<script src="src/app/btc-sketch.js"></script>
 <script src="src/app/btc-prologue.js"></script>
 <script src="src/app/btc-level-ui.js"></script>
 <script src="src/app/btc-app.js"></script>

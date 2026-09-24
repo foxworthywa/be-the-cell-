@@ -199,6 +199,15 @@
     });
     if (!isObj(def.story) || !Array.isArray(def.story.intro) || !Array.isArray(def.story.outro)) fail('story', '{intro, outro}');
     for (const beat of ['intro', 'outro']) def.story[beat].forEach((l, i) => validateLine(fail, 'story.' + beat + '[' + i + ']', l));
+    if (def.story.extra !== undefined) {
+      if (!isObj(def.story.extra)) fail('story.extra', '{name: [lines]}');
+      for (const k of Object.keys(def.story.extra)) {
+        const lines = def.story.extra[k];
+        if (!Array.isArray(lines) || !lines.length) fail('story.extra.' + k, 'a beat of lines');
+        lines.forEach((l, i) => validateLine(fail, 'story.extra.' + k + '[' + i + ']', l));
+      }
+    }
+    if (def.outroKey !== undefined && typeof def.outroKey !== 'function') fail('outroKey', 'must be outroKey(variant, monitorResult, goal)');
     if (has('intro') && !def.story.intro.length) fail('story.intro', 'the intro beat has no lines');
     if (has('scenes')) {
       if (!Array.isArray(def.scenes) || !def.scenes.length) fail('scenes', 'a list of scenes');

@@ -8,7 +8,8 @@
 // by file://. Every interactive check uses ?test=1&seed=1&lab=1 (the app opens on the level list otherwise,
 // LEVELS §5.11) and drives time with
 // app.test.runTicks(n), so results do not depend on machine speed.
-// Screenshots (for human review, no pixel diff) go to test-artifacts/screens/.
+// Screenshots (for human review, no pixel diff) go to test-artifacts/screens/; the level checks
+// (tools/ui-check-levels.js, LEVELS.md §12.2) put theirs in test-artifacts/levels/ (or --levels-out <dir>).
 'use strict';
 const fs = require('fs');
 const path = require('path');
@@ -23,6 +24,8 @@ const ROOT = path.join(__dirname, '..');
 const DIST = path.join(ROOT, 'dist');
 const outArg = process.argv.indexOf('--out');
 const OUT = outArg >= 0 ? path.resolve(process.argv[outArg + 1]) : path.join(ROOT, 'test-artifacts', 'screens');
+const lvArg = process.argv.indexOf('--levels-out');
+const LV_OUT = lvArg >= 0 ? path.resolve(process.argv[lvArg + 1]) : path.join(ROOT, 'test-artifacts', 'levels');
 
 const results = [];
 function check(id, ok, detail) {
@@ -346,6 +349,10 @@ async function main() {
       JSON.stringify(p11) + ' ' + errs.join(' | '));
     await page.screenshot({ path: path.join(OUT, 'P11-file.png') });
     await ctx.close();
+
+    // LV-1, LV-4, LV-5, LV-7, LV-8, LV-9 and the published code decoder (LEVELS.md §12.2).
+    const shots = await require('./ui-check-levels.js').run(browser, port, LV_OUT, check);
+    console.log('  level screenshots: ' + shots.length + ' in ' + LV_OUT);
   } finally {
     await browser.close();
     server.close();

@@ -21,6 +21,8 @@
   "src/game/btc-level-kit.js",
   "src/game/btc-misconceptions.js",
   "src/levels/btc-level-constants.js",
+  "src/levels/btc-level-1-2.js",
+  "src/levels/btc-level-1-4.js",
   "src/levels/btc-level-p.js",
   "src/game/btc-levels.js",
   "src/game/btc-score.js",
@@ -46,6 +48,7 @@
   "src/app/btc-pwa.js",
   "src/app/btc-home.js",
   "src/app/btc-hud.js",
+  "src/app/btc-sketch.js",
   "src/app/btc-prologue.js",
   "src/app/btc-level-ui.js",
   "src/app/btc-app.js"

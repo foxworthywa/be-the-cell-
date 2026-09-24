@@ -62,10 +62,10 @@
     ['10', 'starve.fewimport', 'Too little glucose is getting in, so ATP is low and growth has slowed.'],
     ['10b', 'starve.noenzyme', '{N} {is} too scarce to break down glucose quickly, so ATP is low and growth slows.'],
     ['11', 'recover', 'Sugar is getting in through transporters that were already there, and ATP is coming back.'],
-    ['11b', 'gene.noatp', '{G} {is} switched on, but with no ATP nothing is transcribed.'],
+    ['11b', 'gene.noatp', '{G} {is} switched on, but with almost no ATP nothing is transcribed.'],
     ['12', 'lac.noY', 'Lactose is outside, but without {Y} it does not get in.'],
     ['13', 'lac.noZ', 'Lactose gets in, but without {Z} it is not split.'],
-    ['13b', 'lac.toofew', 'Lactose is outside, but there is too little {Y} and {Z} to keep ATP up, so the cell has stopped.'],
+    ['13b', 'lac.toofew', 'Lactose gets in through only a few {Y} and {Z}, so ATP stays low and growth has paused.'],
     ['14', 'aa.low', 'Amino acids are running short, so ribosomes are moving more slowly.'],
     ['15', 'divided', 'The cell divided; this daughter received about half of everything.'],
     ['16a', 'gene.waiting', '{G} {is} switched on; RNA polymerase has not started on {it} yet.'],
@@ -258,7 +258,8 @@
     if (memory.gene !== null && memory.phase === 'waiting' && f.energy === 'none') return pick('gene.noatp', memory.gene);
     if (f.lactoseBlock === 'no-lacY' && f.medium === 'lactose') return pick('lac.noY');
     if (f.lactoseBlock === 'no-lacZ') return pick('lac.noZ');
-    if (f.medium === 'lactose' && f.lactoseBlock === null && f.energy === 'none') return pick('lac.toofew');
+    // Engine 1.1: a cell with a few lac proteins pauses on lactose alone (ATP low, not gone) until it has made more.
+    if (f.medium === 'lactose' && f.lactoseBlock === null && f.energy !== 'normal' && f.growth === 'arrested') return pick('lac.toofew');
     if (f.aa === 'low') return pick('aa.low');
     if (f.justDivided) return pick('divided');
     if (memory.gene !== null && memory.phase !== null) return pick(GENE_PHASE_KEY[memory.phase], memory.gene);

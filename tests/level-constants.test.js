@@ -40,7 +40,8 @@ test('L-11: every constant a level file reads exists (500 variants and their con
   for (const f of levelFiles) {
     const ctx = vm.createContext({});
     vm.runInContext('var self = this;', ctx);
-    ctx.self.BTC = { levelKit: K, misconceptions: MC, levelConstants: strict(LC, 'LC') };
+    // A plain copy: the shipped constants are frozen, and a proxy must not wrap a frozen object's properties.
+    ctx.self.BTC = { levelKit: K, misconceptions: MC, levelConstants: strict(JSON.parse(JSON.stringify(LC)), 'LC') };
     vm.runInContext(fs.readFileSync(path.join(LEVEL_DIR, f), 'utf8'), ctx, { filename: f });
     const defs = ctx.self.BTC.levelDefs;
     const ids = Object.keys(defs);
