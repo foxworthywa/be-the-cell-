@@ -34,13 +34,16 @@
   const MEMBRANE = Object.freeze(['ptsG', 'aaImp', 'lacY', 'araE']);
   const LIMIT_MIN = 180, HOLD_TICKS = 300, MEAN_TICKS = 60, PAR_N = 3, REVEAL_TICKS = 600;
   const LETTERS = 'ABCDEF';
-  // Content version (LEVELS §3.2: bumped on any change to variants, goals, scoring or questions): the M2 review reworded its questions and feedback, and the side route is disclosed.
-  const CONTENT = 2;
+  // Content version (LEVELS §3.2: bumped on any change to variants, goals, scoring or questions): 2, the M2 review reworded its questions
+  // and feedback, and the side route is disclosed; 3, the plain-language pass (§16.12) reworded an option and two feedback lines.
+  const CONTENT = 3;
 
   const TEXT = {
     title: 'Starving next to a feast',
     challenge: 'Glucose is outside. Find its transporter.',
     task: {
+      // Read before the goal (LEVELS §5.3): the one term the predictions lean on, in plain words.
+      context: ['Glucose is this cell\'s food. Broken down inside, it gives ATP, the energy supply the cell uses to make proteins and grow.'],
       goal: 'Get glucose into the cell.',
       core: ['Find the gene whose protein lets glucose in, and get growth back to normal.',
         'Use at most 3 experiments; switching a gene on counts as one.'],
@@ -78,7 +81,7 @@
         { t: 'More glucose starts coming in.', mc: 'DNA_DIRECT',
           fb: 'More glucose came in only after transporters had been made and sat in the membrane, minutes later.' },
         { t: 'ATP goes up.', mc: 'ENERGY_FIRST',
-          fb: 'ATP rose later. ATP comes from glucose inside, glucose gets in only through transporters, and transporters are built from mRNA.' },
+          fb: 'ATP rose later. It is made from glucose inside, and glucose got in only once transporters had been built from the mRNA.' },
         { t: 'The cell grows faster.', mc: 'OTHER',
           fb: 'Growth changed last of all, once ATP was back.' },
       ],
@@ -90,7 +93,7 @@
           fb: 'It spans the membrane, which is why it was drawn across the cell\'s edge.' },
         { t: 'In the DNA.', mc: 'DNA_DIRECT',
           fb: 'The DNA holds the instructions. The protein made from them ends up in the membrane.' },
-        { t: 'Anywhere in the cytoplasm.', mc: 'PROTEIN_LOCATION',
+        { t: 'Floating anywhere inside the cell.', mc: 'PROTEIN_LOCATION',
           fb: 'A protein floating inside never meets the glucose outside. This one sits in the membrane.' },
         { t: 'Outside the cell, around the glucose.', mc: 'OTHER',
           fb: 'It stays in the membrane. Glucose meets it there and crosses through it.' },
@@ -132,7 +135,7 @@
       counter: 'Experiments {n} · target 3', counterShort: '{n}/3 tests',
       counterOver: 'Experiments {n} · over par (3)', counterOverShort: '{n}/3 tests',
     },
-    medium: 'The glucose outside is fixed. Lactose and amino acids are yours to add; adding them is not an experiment.',
+    medium: 'The glucose outside is fixed. Lactose and amino acids are yours to add; adding them does not count as an experiment.',
     result: {
       used: 'You used {n} experiments; par is 3 or fewer.', usedOne: 'You used 1 experiment; par is 3 or fewer.',
       second: 'You also saw the job of gene {letter} (Expert).',
@@ -142,7 +145,7 @@
       line: 'Gene {letter}: {name} ({symbol}), {where}',
       membrane: 'in the membrane', inside: 'inside the cell',
       // Flagellin is exported to build a flagellum in a real cell; this strain has none of the other flagellum genes.
-      fliC: 'made inside the cell; here it is not exported to a flagellum',
+      fliC: 'inside the cell; the rest of the swimming tail is missing here',
     },
     narr: {
       revealGlucose: 'Glucose now gets in through {N}, so {its} gene is named after that job.',
@@ -153,9 +156,9 @@
       nosplit: 'Lactose gets in, but almost none of it is split inside.',
       busy: 'Ribosomes busy with {n} are not making other proteins, so growth slows over a few generations.',
       // Gene → mRNA → protein in plain words (the lab's rules 16a–16c lose to "too little glucose" all through the search).
-      waiting: '{G} {is} switched on; RNA polymerase has not started on {it} yet.',
+      waiting: '{G} {is} switched on, but RNA polymerase has not started copying {it} yet.',
       tx: '{G} {is} being copied into mRNA; no protein yet.',
-      rising: '{N} {is} building up; each mRNA is read by many ribosomes before it decays.',
+      rising: '{N} {is} building up; each mRNA is read by many ribosomes before it breaks down.',
       trickle: 'Only a trickle of glucose gets in, through a slow side route, so ATP is low and growth is slow.',
       start: 'Glucose is outside, but only a trickle of it can get in, through a slow side route.',
     },

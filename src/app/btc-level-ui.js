@@ -13,7 +13,7 @@
  * sheets have no close button, because their own buttons move on.
  *
  * Level 1.2 adds the sketch (BTC.Sketch) and the demo's sheet (the sketch over the
- * test run, feature by feature); level 1.4 adds the epilogue's "Switch LacY off"
+ * test run, feature by feature); level 1.4 adds the epilogue's "Switch the gene off"
  * sheet. A level's own words for these live in its TEXT (item.words, text.demo,
  * text.epilogue). Level 1.7 adds the truth-table prediction (§5.4.4), the DNA editor
  * (BTC.DesignerView, §5.10) and a result with three bars against par and the run's
@@ -239,6 +239,8 @@
     task(fromHud) {
       const r = this.runner, h = LY.h, def = this.def, T = def.text.task;
       const build = (body, close) => {
+        // A level may set the scene in plain words before the goal (TEXT.task.context: one or more paragraphs).
+        for (const t of [].concat(T.context || [])) body.appendChild(h('p', { class: 'lv-context', text: r.text(t) }));
         body.appendChild(h('h3', { text: G.task.goal }));
         body.appendChild(h('p', { class: 'lv-goal', text: r.text(T.goal) }));
         body.appendChild(h('h3', { text: G.task.core }));
@@ -302,8 +304,8 @@
       this.dropSketch();
       this.sheet('predict:' + it.id, { title, className: 'lv-sheet lv-full' + (it.kind === 'sketch' ? ' lv-sketch-sheet' : '') }, (body) => {
         body.appendChild(h('p', { class: 'lv-prompt', text: r.text(it.prompt) }));
-        // A line of background before the item (1.7: how the lac switch works, above the truth table).
-        if (it.intro) body.appendChild(h('p', { class: 'lv-how', text: r.text(it.intro) }));
+        // Background before the item, one or more paragraphs (1.7: how the lac switch works, above the truth table; what CRP is).
+        for (const t of [].concat(it.intro || [])) body.appendChild(h('p', { class: 'lv-how', text: r.text(t) }));
         const lockBtn = h('button', { class: 'btn primary lv-wide', type: 'button', 'data-primary': '', disabled: true }, G.predict.lockIn);
         const actions = [];
         if (it.kind === 'choice') {

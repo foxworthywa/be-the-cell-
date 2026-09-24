@@ -27,37 +27,41 @@
 
   const SETTLE_MIN = 10, DEMO_MIN = 20;
   const GRID = K.sketch.GRID;
-  // Content version (LEVELS §3.2: bumped on any change to variants, goals, scoring or questions): the M2 review reworded the Expert question and the debrief.
-  const CONTENT = 2;
+  // Content version (LEVELS §3.2: bumped on any change to variants, goals, scoring or questions): 2, the M2 review reworded the Expert
+  // question and the debrief; 3, the plain-language pass (§16.12) reworded the sketch and the debrief.
+  const CONTENT = 3;
 
   const TEXT = {
     title: 'One gene, many copies',
-    challenge: 'Many permeases, few mRNAs, one deadline.',
+    challenge: 'Many proteins, few mRNAs, one deadline.',
     task: {
-      goal: '{T} LacY in the membrane by minute {D}.',
-      core: ['Reach {T} LacY by minute {D}.', 'Use at most {mPar} mRNAs; the count is on screen.'],
+      // Read before the goal (LEVELS §5.3): the protein by what it does, before its name.
+      context: ['Lactose, the sugar in milk, can only get into the cell through a transporter protein in the membrane: the lactose transporter, LacY.',
+        'Its gene is copied into mRNA, and ribosomes read each mRNA many times, building one transporter each time.'],
+      goal: 'Get {T} of these transporters into the membrane within {D} minutes.',
+      core: ['Reach {T} lactose transporters by minute {D}.', 'Let the gene be copied into at most {mPar} mRNAs; the count is on screen.'],
       expert: ['Before the test run, work out how many LacY are made from one mRNA, within 30%.',
         'Sketch the amounts, not only the shape: 75% accuracy or better.'],
     },
     story: {
       intro: [
-        { who: 'narrator', text: 'Orders from the top: {T} lactose permeases (lactose transporters) in the membrane by minute {D}.' },
+        { who: 'narrator', text: 'Orders from the top: {T} lactose transporters in the membrane by minute {D}.' },
         { who: 'commander', text: 'Build them one at a time. Starting now.' },
         { who: 'ribosome', text: 'There is one copy of the gene. I read the mRNA, not the gene, and I am not the only ribosome.' },
-        { who: 'narrator', text: 'Each extra permease costs amino acids and ATP. The mRNA count is being watched.' },
+        { who: 'narrator', text: 'Each extra transporter costs amino acids and ATP. The mRNA count is being watched.' },
       ],
       outro: [
-        { who: 'narrator', text: 'You switched the gene off. The permeases kept arriving anyway, read from mRNA that was already there.' },
+        { who: 'narrator', text: 'You switched the gene off. The transporters kept arriving anyway, built from mRNA that was already there.' },
         { who: 'narrator', text: 'One gene, a few dozen mRNAs, several hundred proteins. The middle step is where the copies come from.' },
       ],
       // The outro when the target was not reached by the deadline.
       missed: [
-        { who: 'narrator', text: 'The deadline came first. More mRNA, made sooner, would have been read into enough permeases in time.' },
+        { who: 'narrator', text: 'The deadline came first. More mRNA, made sooner, would have been read into enough transporters in time.' },
         { who: 'narrator', text: 'One gene, a few dozen mRNAs, several hundred proteins. The middle step is where the copies come from.' },
       ],
       // The outro when lacY was still on at the deadline (its first line would not be true).
       keptOn: [
-        { who: 'narrator', text: 'The gene stayed on past the target, so new mRNA kept coming, and every copy was read into more permeases.' },
+        { who: 'narrator', text: 'The gene stayed on past the target, so new mRNA kept coming, and every copy was read into more transporters.' },
         { who: 'narrator', text: 'One gene, a few dozen mRNAs, several hundred proteins. The middle step is where the copies come from.' },
       ],
     },
@@ -66,36 +70,36 @@
       unit: 'LacY per mRNA',
     },
     sketch: {
-      prompt: 'Sketch the LacY count for the next 20 minutes. The gene goes on at ×4 now and off at minute {tOff}.',
-      x: 'minutes', y: 'LacY (molecules)', band: '×4 on',
+      prompt: 'Sketch the transporter count over the next 20 minutes. The gene goes on now at ×4 (four times the usual rate) and off at minute {tOff}.',
+      x: 'minutes', y: 'transporters', band: '×4 on',
       features: {
-        F1: 'A short delay before LacY rises',
+        F1: 'A short delay before the count rises',
         F2: 'Still rising after the switch-off',
         F3: 'Levelling off by minute 20',
         F4: 'Never falling',
       },
       happened: {
-        F1: 'LacY appeared only after mRNA had been made and read, so the first minute stayed near the start.',
-        F2: 'mRNA made before the switch-off was still being read, so LacY kept rising for minutes.',
-        F3: 'Once the old mRNA had decayed, no more LacY was made, and the count levelled off.',
-        F4: 'LacY is not broken down in this level, so the count never fell.',
+        F1: 'New transporters appeared only once mRNA had been made and read, so for the first minute the count stayed near its start.',
+        F2: 'mRNA made before the switch-off was still being read, so the count kept rising for minutes.',
+        F3: 'Once the old mRNA had broken down, no more transporters were made, and the count levelled off.',
+        F4: 'Transporters are not broken down in this level, so the count never fell.',
       },
       accuracy: 'Amounts: {a}% accurate (Expert: 75% or better).',
     },
     demo: {
       title: 'Your sketch and the test run',
       intro: 'The test run: ×4 from minute 0, off at minute {tOff}. Your sketch is the dashed line.',
-      copies: 'In the test run each LacY mRNA was read into about {ppm} LacY.',
+      copies: 'In the test run each mRNA was read into about {ppm} transporters.',
     },
     d1: {
-      prompt: 'You switched the gene off, yet LacY kept rising for minutes. Why?',
+      prompt: 'You switched the gene off, yet the transporter count kept rising for minutes. Why?',
       options: [
         { t: 'mRNA made before the switch-off was still being read by ribosomes.', ok: true,
-          fb: 'Each mRNA lasts a few minutes, and ribosomes keep reading it until it decays.' },
+          fb: 'Each mRNA lasts a few minutes, and ribosomes keep reading it until it breaks down.' },
         { t: 'The gene took a while to register that it was off.', mc: 'CELL_DECIDES',
-          fb: 'Genes register nothing. RNA polymerase stopped starting new copies at once; the copies already made remained.' },
-        { t: 'LacY makes more LacY once there is enough of it.', mc: 'PROTEIN_SELF_COPY',
-          fb: 'Proteins are not copied from proteins. Every LacY was built by a ribosome reading an mRNA.' },
+          fb: 'Genes register nothing. RNA polymerase, the enzyme that copies the gene, stopped at once; the mRNA already made was still read.' },
+        { t: 'Transporters make more transporters once there are enough of them.', mc: 'PROTEIN_SELF_COPY',
+          fb: 'Proteins are not copied from proteins. Every transporter was built by a ribosome reading an mRNA.' },
         { t: 'The switch-off took minutes to reach the DNA.', mc: 'DELAY_MISATTRIBUTED',
           fb: 'The switch acted at once: no new mRNA was started after it. The rise came from mRNA already made.' },
       ],
@@ -104,9 +108,9 @@
       prompt: 'Why is the gene copied into mRNA, instead of ribosomes reading the gene directly?',
       options: [
         { t: 'Many copies can be made, and each is read many times, so one gene gives many proteins.', ok: true,
-          fb: 'Here one gene gave a few dozen mRNAs and each gave about twenty LacY. Copies also decay, so output stops soon after the gene does.' },
+          fb: 'One gene gave a few dozen mRNAs, each read into about twenty transporters. Copies break down, so making stops soon after the gene goes off.' },
         { t: 'mRNA is a spare copy kept in case the DNA is damaged.', mc: 'MIDDLEMAN',
-          fb: 'mRNA is read, not stored. Each copy lasts only minutes before it decays.' },
+          fb: 'mRNA is read, not stored. Each copy lasts only minutes before it breaks down.' },
         { t: 'Ribosomes cannot reach the DNA.', mc: 'OTHER',
           fb: 'In this bacterium ribosomes start on mRNA right beside the DNA, while it is still being made. Distance is not the reason here.' },
         { t: 'mRNA is an early form of the protein.', mc: 'MIDDLEMAN',
@@ -117,20 +121,22 @@
     echo2: 'Nearly every cell in your body has the same two copies of the insulin gene, one from each parent. It is copied into mRNA only in beta cells.',
     cards: { mRNA: 'mRNA' },
     hud: {
-      goal: 'LacY {count} / {T}', reached: 'LacY {count} · {T} reached', reachedShort: 'LacY {count} · reached',
+      // The long form names the protein by its job; under 400 px only "LacY" fits beside the timer and counter (the focus card below says "Lactose transporter").
+      goal: '{count} / {T} lactose transporters', goalShort: 'LacY {count} / {T}',
+      reached: '{count} lactose transporters · {T} reached', reachedShort: 'LacY {count} · reached',
       settle: 'Reached · watching 10 more min', settleShort: 'Reached · watching',
       timer: 'deadline in {time}', timerShort: 'due in {time}', settleTimer: '{time} left',
       counter: 'mRNAs {m} / {mPar}', counterShort: '{m}/{mPar} mRNA',
       counterOver: 'mRNAs {m} / {mPar} · over par', counterOverShort: '{m}/{mPar} mRNA',
-      demoGoal: 'Test run · LacY {count}', demoGoalShort: 'LacY {count}', demoTimer: '{time} of 20 min', demoTimerShort: 'min {t} of 20',
+      demoGoal: 'Test run · {count} transporters', demoGoalShort: 'LacY {count}', demoTimer: '{time} of 20 min', demoTimerShort: 'min {t} of 20',
       demoCounter: 'mRNAs {m}', demoCounterShort: '{m} mRNAs',
     },
     narr: {
-      settle: 'The deadline has passed; the permeases still arriving come from mRNA that was already there.',
+      settle: 'The deadline has passed; the transporters still arriving are built from mRNA that was already there.',
     },
     result: {
       used: 'You used {m} mRNAs; par is {mPar} or fewer.',
-      hint: 'mRNA already made keeps being read into LacY, so switching the gene off earlier needs fewer mRNAs.',
+      hint: 'mRNA already made keeps being read into transporters, so switching the gene off earlier means fewer mRNAs.',
     },
   };
 
@@ -220,7 +226,7 @@
       }
       const Dt = v.D * 60, settle = s.settle || s.tick >= Dt;
       const goalText = settle && s.reached ? TEXT.hud.settle : s.reached ? TEXT.hud.reached : TEXT.hud.goal;
-      const goalShort = settle && s.reached ? TEXT.hud.settleShort : s.reached ? TEXT.hud.reachedShort : TEXT.hud.goal;
+      const goalShort = settle && s.reached ? TEXT.hud.settleShort : s.reached ? TEXT.hud.reachedShort : TEXT.hud.goalShort;
       const left = settle ? Math.max(0, Dt + SETTLE_MIN * 60 - s.tick) : Math.max(0, Dt - s.tick);
       const timer = K.fill(settle ? TEXT.hud.settleTimer : TEXT.hud.timer, { time: K.clock(left, true) });
       // Whole minutes left round up (5 min into a 14-min deadline reads "due in 9 min", matching the clock).

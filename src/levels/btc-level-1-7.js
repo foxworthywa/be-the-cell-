@@ -64,8 +64,9 @@
   // sugars together after a lactose phase (lactose 20–59% of the sugar in both-sugar phases), against Monod's diauxie.
   // IEmax 1 is not usable here: a cell that has never seen lactose then fails to adapt on some schedules.
   const PARAMS = Object.freeze({ IEmax: 0.8 });
-  // Content version (LEVELS §3.2): 2 = inducer exclusion, the Expert objective relabelled, the questions reworded (M2 review).
-  const CONTENT = 2;
+  // Content version (LEVELS §3.2): 2 = inducer exclusion, the Expert objective relabelled, the questions reworded (M2 review);
+  // 3 = the plain-language pass (§16.12): the table's words, a line before the CRP question, the debrief feedback, a third echo screen.
+  const CONTENT = 3;
   const HOURS = ['zero', 'one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'nine', 'ten', 'eleven', 'twelve', 'thirteen',
     'fourteen', 'fifteen', 'sixteen', 'seventeen', 'eighteen', 'nineteen', 'twenty', 'twenty-one', 'twenty-two', 'twenty-three', 'twenty-four'];
 
@@ -73,12 +74,15 @@
     title: 'Nobody\'s in charge',
     challenge: 'Write the DNA, then let it run.',
     task: {
-      goal: 'Keep the cell growing through every change, with no controls.',
-      core: ['Grow on lactose in every lactose phase.',
-        'Do about as well as the normal lac genes on your schedule: grow as much, waste little in glucose, start fast on lactose.'],
+      // Read before the goal (LEVELS §5.3): what the lac genes are for, and what "write the DNA" means.
+      context: ['The lac genes hold the instructions for LacY, which lets lactose in, and LacZ, which splits it. Without lactose, those proteins do no work.',
+        'This time you set the DNA around the lac genes before the run. After that, it runs on its own.'],
+      goal: 'Keep the cell growing as the sugars change, with no controls.',
+      core: ['Keep growing each time lactose is the only sugar.',
+        'Do about as well as the normal lac genes: grow as much, make few lac proteins in glucose, and start growing fast on lactose.'],
       // The fraction follows the calibrated threshold (§16.8); written in here so every reader (the codes page too) sees it.
       expert: ['Glucose effect: with both sugars present, make at most ' + (L.rBLMax <= 0.25 ? 'a quarter' : 'half') + ' as much lac protein as on lactose alone.',
-        'Predict all four strains and the CRP question correctly.'],
+        'Predict all four rows of the table and the CRP question correctly.'],
     },
     story: {
       intro: [
@@ -111,19 +115,22 @@
       ],
     },
     table: {
-      prompt: 'Which strains make LacZ?',
-      how: 'How the switch works: LacI sits on the operator and blocks RNA polymerase, unless allolactose, made from lactose, is bound to it.',
+      prompt: 'Which of these cells make LacZ, the enzyme that splits lactose?',
+      // Two paragraphs above the table: the switch's parts in plain words, the first time the student meets them.
+      how: ['How the switch works: the repressor protein LacI sits on the operator, a short stretch of DNA, and blocks the copying of the lac genes.',
+        'Inside the cell, some lactose becomes allolactose. When allolactose attaches to LacI, LacI lets go of the operator.'],
       rows: {
-        wt: 'Normal lac genes', dlacI: 'No repressor gene', Oc: 'No operator', Is: 'Repressor that cannot bind allolactose',
+        wt: 'Normal lac genes', dlacI: 'No repressor gene', Oc: 'No operator', Is: 'Repressor that cannot hold allolactose',
       },
       cols: { glc: 'glucose only', lac: 'lactose only' },
       choices: ['almost none', 'LacZ made'],
     },
     crp: {
+      intro: 'CRP is a protein that makes RNA polymerase start the lac genes more often, but only with cAMP on it. cAMP is low while glucose gets in.',
       prompt: 'Glucose and lactose are both present. Which design makes less LacZ?',
       options: [
         { t: 'The one with the CRP site.', ok: true,
-          fb: 'With glucose getting in, cAMP is low, CRP seldom sits on its site, and the lac promoter fires less often.' },
+          fb: 'While glucose gets in, cAMP is low, so CRP seldom sits on its site and RNA polymerase starts the lac genes less often.' },
         { t: 'The one without the CRP site.', mc: 'OTHER',
           fb: 'In this game a promoter without the site ignores CRP, so glucose holds it back much less. The real lac promoter is weak without CRP.' },
         { t: 'Both make the same.', mc: 'OTHER',
@@ -133,10 +140,10 @@
     d1: {
       prompt: 'In the normal design, what switched the lac genes on when lactose arrived?',
       options: [
-        { t: 'Allolactose made from lactose bound to LacI, changed its shape, and LacI let go of the operator.', ok: true,
-          fb: 'The few LacY let lactose in, LacZ turned some into allolactose, and with the operator free RNA polymerase could start the lac genes.' },
+        { t: 'Allolactose, made from lactose, attached to LacI and changed its shape, so LacI let go of the operator.', ok: true,
+          fb: 'A few LacY let lactose in, and LacZ turned some into allolactose. With LacI off the operator, RNA polymerase could copy the lac genes.' },
         { t: 'The cell decided lactose was worth using.', mc: 'CELL_DECIDES',
-          fb: 'Nothing decided. LacI lets go of the operator only when allolactose is bound to it.' },
+          fb: 'Nothing decided. LacI lets go of the operator only when allolactose is attached to it.' },
         { t: 'You did, by designing the DNA.', mc: 'COMMANDER',
           fb: 'You wrote the parts before the run. During it, LacI and allolactose did the switching.' },
         { t: 'The ribosomes, once they saw lactose.', mc: 'RIBOSOME_DECIDES',
@@ -151,31 +158,32 @@
         { t: 'The cell switched the lac genes off to save energy.', mc: 'CELL_DECIDES',
           fb: 'Energy was saved, but nobody saved it. With no allolactose to change its shape, LacI stayed on the operator.' },
         { t: 'Glucose damages the lac genes.', mc: 'OTHER',
-          fb: 'The genes were untouched. A protein sat on the operator, and they were transcribed again once it came off.' },
+          fb: 'The genes were untouched. A protein sat on the operator, and they were copied again once it came off.' },
         { t: 'Ribosomes skip lac mRNA when glucose is present.', mc: 'RIBOSOME_DECIDES',
-          fb: 'Ribosomes read any mRNA. There was little lac mRNA to read, because LacI blocked transcription.' },
+          fb: 'Ribosomes read any mRNA. There was little lac mRNA to read, because LacI blocked the copying of the lac genes.' },
       ],
     },
-    echo1: 'In your cells, transcription factors switch genes on and off. Some block transcription, as LacI does; many change shape when a signal binds.',
-    echo2: 'Your genes are not grouped into operons; most have their own promoter, and several factors act on each. Nobody is in charge there either.',
+    echo1: 'Your cells switch genes on and off with proteins called transcription factors. Some block copying, as LacI does.',
+    echo2: 'The lac genes sit side by side and are copied into one mRNA: an operon. Your genes are not grouped this way; most have their own promoter.',
+    echo3: 'Several transcription factors act on each of your genes, many changing shape as signals attach. Nobody is in charge there either.',
     cards: { repressor: 'Repressor protein', operon: 'Operon' },
     design: {
       title: 'Write the DNA',
       note: 'The run starts from a cell grown on glucose; your DNA takes over from there.',
       repressorUnit: 'Repressor gene',
       lacUnit: 'lac operon',
-      genes: 'lacZ, lacY, lacA: the genes, not editable',
+      genes: 'lacZ, lacY, lacA: copied together into one mRNA; not editable',
       parts: {
-        'lacI.promoter': { label: 'promoter', name: 'Promoter of the repressor gene', desc: 'How often the repressor gene is copied into mRNA; strong makes about ten times as much LacI.',
-          options: [{ v: 1, t: 'normal' }, { v: 10, t: 'strong (Iq)' }] },
-        'lacI.allele': { label: 'lacI', name: 'Repressor gene (lacI)', desc: 'Its protein, LacI, sits on the operator and blocks the lac genes, unless allolactose is bound to it.',
-          options: [{ v: 'wt', t: 'normal' }, { v: 'deleted', t: 'deleted' }, { v: 'Is', t: 'cannot bind allolactose' }] },
-        'lac.crpSite': { label: 'CRP site', name: 'CRP site', desc: 'With the site, the lac promoter fires fully only when CRP with cAMP sits here. Without it, the promoter ignores CRP.',
-          note: 'That is this game\'s rule. The real lac promoter is weak without its CRP site.',
+        'lacI.promoter': { label: 'promoter', name: 'Promoter of the repressor gene', desc: 'How often the repressor gene is copied into mRNA. Strong gives about ten times as much LacI.',
+          options: [{ v: 1, t: 'normal' }, { v: 10, t: 'strong' }] },
+        'lacI.allele': { label: 'lacI', name: 'Repressor gene (lacI)', desc: 'Its protein, LacI, sits on the operator and blocks copying of the lac genes, unless allolactose is attached to it.',
+          options: [{ v: 'wt', t: 'normal' }, { v: 'deleted', t: 'deleted' }, { v: 'Is', t: 'cannot hold allolactose' }] },
+        'lac.crpSite': { label: 'CRP site', name: 'CRP site', desc: 'CRP, a protein, sits here only with cAMP on it; cAMP is low while glucose gets in. With CRP here, the lac genes are copied more often.',
+          note: 'Without the site, the promoter ignores CRP: that is this game\'s rule. The real lac promoter is weak without its CRP site.',
           options: [{ v: true, t: 'present' }, { v: false, t: 'absent (promoter ignores CRP)', short: 'absent' }] },
-        'lac.promoter': { label: 'promoter', name: 'Promoter of the lac genes', desc: 'How often RNA polymerase starts the lac genes when nothing blocks it.',
+        'lac.promoter': { label: 'promoter', name: 'Promoter of the lac genes', desc: 'Where RNA polymerase, the enzyme that copies genes, starts on the lac genes. Stronger means it starts more often when nothing blocks it.',
           options: [{ v: 0.5, t: '×½' }, { v: 1, t: '×1' }, { v: 2, t: '×2' }, { v: 4, t: '×4' }] },
-        'lac.operator': { label: 'operator', name: 'Operator', desc: 'When LacI sits here, RNA polymerase cannot start the lac genes.',
+        'lac.operator': { label: 'operator', name: 'Operator', desc: 'A short stretch of DNA beside the promoter. When LacI sits here, RNA polymerase cannot start copying the lac genes.',
           options: [{ v: true, t: 'present' }, { v: false, t: 'absent' }] },
       },
       summary: 'This design: {parts}.',
@@ -201,7 +209,7 @@
     result: {
       growth: 'Growth', waste: 'Waste in glucose', lag: 'Lag on lactose',
       growthLine: '{d} doublings; par {p}.', wasteLine: '{w}% of the protein made in glucose was lac protein; par {p}%.',
-      lagLine: 'Lag {l} min on average; par {p} min.', noLactose: 'Growth on lactose fell short in at least one lactose phase.',
+      lagLine: 'After each switch to lactose, growth took {l} min on average to pick up; par {p} min.', noLactose: 'Growth on lactose fell short in at least one lactose phase.',
       missLactose: 'growth on lactose fell short', missDormant: 'the cell ran out of energy and stopped',
       chart: 'Doublings over the run: your design (solid) and par (dashed), over the sugar phases.',
       yours: 'your design', par: 'par (normal lac genes)', x: 'h', y: 'doublings',
@@ -211,12 +219,12 @@
       tradeLag: 'Little waste in glucose, but slow to start on lactose: few lac proteins were there when it arrived.',
     },
     narr: {
-      super: 'This LacI cannot bind allolactose, so it stays on the operator even with lactose inside.',
-      noop: 'With no operator, nothing blocks RNA polymerase, so the lac genes are transcribed all the time.',
-      norep: 'With no LacI, nothing sits on the operator, so the lac genes are transcribed all the time.',
-      crp: 'Glucose is getting in, so cAMP is low, CRP seldom sits on its site, and the lac promoter fires less often.',
+      super: 'Allolactose cannot attach to this LacI, so it stays on the operator even with lactose inside.',
+      noop: 'With no operator, nothing blocks RNA polymerase, so the lac genes are copied all the time.',
+      norep: 'With no LacI, nothing sits on the operator, so the lac genes are copied all the time.',
+      crp: 'Glucose is getting in, so cAMP is low, CRP seldom sits on its site, and the lac genes are copied less often.',
       lag: 'Only lactose is here, and the cell has few lac proteins yet, so it grows slowly until more are made.',
-      induced: 'Allolactose is bound to LacI, so LacI has let go of the operator and the lac genes are transcribed.',
+      induced: 'Allolactose is attached to LacI, so LacI has let go of the operator and the lac genes are being copied.',
       repressed: 'LacI is sitting on the operator, so RNA polymerase rarely starts the lac genes.',
     },
   };
@@ -337,7 +345,7 @@
         shownRows: (v) => v.rows.concat([v.extraRow]),
         expertRows: (v) => [v.extraRow],
       },
-      { id: 'crp', kind: 'choice', expert: true, prompt: TEXT.crp.prompt, options: TEXT.crp.options },
+      { id: 'crp', kind: 'choice', expert: true, prompt: TEXT.crp.prompt, intro: TEXT.crp.intro, options: TEXT.crp.options },
     ],
 
     /**
@@ -503,7 +511,7 @@
       { id: 'l17.d2', kind: 'choice', prompt: TEXT.d2.prompt, options: TEXT.d2.options },
     ],
     echo: {
-      screens: ['echo1', 'echo2'],
+      screens: ['echo1', 'echo2', 'echo3'],
       cards: [{ id: 'repressor', title: 'cards.repressor', stamp: 'universal' }, { id: 'operon', title: 'cards.operon', stamp: 'bacteria' }],
     },
     story: { intro: TEXT.story.intro, outro: TEXT.story.outro, extra: { onRun: TEXT.story.onRun, missed: TEXT.story.missed, alwaysOn: TEXT.story.alwaysOn } },

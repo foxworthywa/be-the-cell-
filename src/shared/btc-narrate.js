@@ -37,24 +37,24 @@
     gly: { genePhrase: 'the glucose-processing genes', noun: 'the glucose-processing enzymes', plural: true, slot: 1 },
     aaSyn: { genePhrase: 'the amino-acid-making genes', noun: 'the amino-acid-making enzymes', plural: true, slot: 2 },
     aaImp: { genePhrase: 'the amino-acid importer genes', noun: 'the amino-acid importers', plural: true, slot: 3 },
-    lacY: { genePhrase: 'the lactose permease gene', noun: 'the lactose permease', plural: false, slot: 4, name: 'LacY' },
-    lacZ: { genePhrase: 'the β-galactosidase gene', noun: 'β-galactosidase', plural: false, slot: 5, name: 'LacZ' },
-    fliC: { genePhrase: 'the flagellin gene', noun: 'flagellin', plural: false, slot: 6 },
+    lacY: { genePhrase: 'the lactose transporter gene', noun: 'the lactose transporter', plural: false, slot: 4, name: 'LacY' },
+    lacZ: { genePhrase: 'the lactose-splitting enzyme gene', noun: 'the lactose-splitting enzyme', plural: false, slot: 5, name: 'LacZ' },
+    fliC: { genePhrase: 'the flagellum protein gene', noun: 'the flagellum protein', plural: false, slot: 6 },
   });
   const GENE_IDS = Object.freeze(Object.keys(PHRASES));
   const PREEMPT = ['1', '2', '3', '4', '5', '6', '6b', '6c', '7', '8', '9', '10', '10b', '11', '11b'];
 
   // Priority list (LAB_UI §7.2). Tokens: {G} gene phrase, {n}/{N} noun, {is} is/are, {its} its/their,
-  // {it} it/them, {s} verb ending, {Y}/{Z} the LacY/LacZ names. A sentence's first letter is capitalised.
+  // {it} it/them, {s} verb ending, {Y}/{Z} the LacY/LacZ nouns (plain names). A sentence's first letter is capitalised.
   // preempt: rules 1–11b may replace the line after 0.5 s instead of 1.5 s (NarratorHold).
   const RULES = Object.freeze([
     ['1', 'drug.both', 'Both drugs are on: no new mRNA is started, and ribosomes are stalled.'],
     ['2', 'drug.cm', 'Chloramphenicol stalls ribosomes; the mRNA is still here, but almost no protein is made.'],
-    ['3', 'drug.rif.late', 'Under rifampicin the old mRNA is almost gone, so protein synthesis is winding down.'],
-    ['4', 'drug.rif', 'Rifampicin blocks RNA polymerase; mRNA already made is read until it decays.'],
+    ['3', 'drug.rif.late', 'Under rifampicin the old mRNA is almost gone, so protein making is winding down.'],
+    ['4', 'drug.rif', 'Rifampicin blocks RNA polymerase, so no new mRNA is made; mRNA already made is read until it breaks down.'],
     ['5', 'drug.cm.low', 'Some ribosomes are stalled by chloramphenicol, so protein is made more slowly and growth slows.'],
-    ['6', 'drug.rif.low', 'Rifampicin is slowing transcription, so less new mRNA is made.'],
-    ['6b', 'drug.rif.off', 'Rifampicin is gone, so RNA polymerase starts new mRNA again and protein synthesis picks up.'],
+    ['6', 'drug.rif.low', 'Rifampicin is slowing RNA polymerase, so less new mRNA is made.'],
+    ['6b', 'drug.rif.off', 'Rifampicin is gone, so RNA polymerase starts new mRNA again and protein making picks up.'],
     ['6c', 'drug.cm.off', 'Chloramphenicol is gone, so ribosomes run again on the mRNA that is left and growth picks up.'],
     ['7', 'starve.nosugar', 'There is no sugar in the medium, so no new ATP is made and every machine that uses ATP slows to a stop.'],
     ['8', 'starve.dormant', 'With no ATP, no new transporters can be made, so no sugar gets in and nothing restarts.'],
@@ -62,18 +62,18 @@
     ['10', 'starve.fewimport', 'Too little glucose is getting in, so ATP is low and growth has slowed.'],
     ['10b', 'starve.noenzyme', '{N} {is} too scarce to break down glucose quickly, so ATP is low and growth slows.'],
     ['11', 'recover', 'Sugar is getting in through transporters that were already there, and ATP is coming back.'],
-    ['11b', 'gene.noatp', '{G} {is} switched on, but with almost no ATP nothing is transcribed.'],
-    ['12', 'lac.noY', 'Lactose is outside, but without {Y} it does not get in.'],
+    ['11b', 'gene.noatp', '{G} {is} switched on, but with almost no ATP nothing is copied into mRNA.'],
+    ['12', 'lac.noY', 'Lactose is outside, but without {Y} none of it gets in.'],
     ['13', 'lac.noZ', 'Lactose gets in, but without {Z} it is not split.'],
-    ['13b', 'lac.toofew', 'Lactose gets in through only a few {Y} and {Z}, so ATP stays low and growth has paused.'],
+    ['13b', 'lac.toofew', 'There is only a little of {Y} and {Z} yet, so ATP stays low and growth has paused.'],
     ['14', 'aa.low', 'Amino acids are running short, so ribosomes are moving more slowly.'],
     ['15', 'divided', 'The cell divided; this daughter received about half of everything.'],
-    ['16a', 'gene.waiting', '{G} {is} switched on; RNA polymerase has not started on {it} yet.'],
-    ['16b', 'gene.tx', '{G} {is} being transcribed; no protein yet.'],
-    ['16c', 'gene.rising', '{N} {is} accumulating; each mRNA is read by many ribosomes before it decays.'],
-    ['16d', 'gene.up', '{G} {is} transcribed more often now, so {its} protein climbs to a higher level.'],
-    ['16e', 'gene.down', '{G} {is} transcribed less often now; {its} protein is diluted as the cell grows.'],
-    ['16f', 'gene.leftover', 'Transcription of {G} has stopped, but {its} mRNA is still being translated.'],
+    ['16a', 'gene.waiting', '{G} {is} switched on, but RNA polymerase has not started copying {it} yet.'],
+    ['16b', 'gene.tx', '{G} {is} being copied into mRNA; no protein yet.'],
+    ['16c', 'gene.rising', '{N} {is} building up; each mRNA is read by many ribosomes before it breaks down.'],
+    ['16d', 'gene.up', '{G} {is} copied more often now, so {its} protein climbs to a higher level.'],
+    ['16e', 'gene.down', '{G} {is} copied less often now, so {its} protein thins out as the cell grows and divides.'],
+    ['16f', 'gene.leftover', 'Copying of {G} has stopped, but ribosomes are still reading {its} mRNA.'],
     ['16g', 'gene.gone', 'The mRNA for {n} is gone; the protein remains and is shared out at each division.'],
     ['17a', 'burden.lac', 'With no lactose here, {n} does no work, and making it slows growth over a few generations.'],
     ['17b', 'burden', 'Ribosomes busy with {n} are not making other proteins, so growth slows over a few generations.'],
@@ -140,8 +140,8 @@
         case 'its': return w.plural ? 'their' : 'its';
         case 'it': return w.plural ? 'them' : 'it';
         case 's': return w.plural ? '' : 's';
-        case 'Y': return y.name || 'LacY';
-        case 'Z': return z.name || 'LacZ';
+        case 'Y': return y.noun;
+        case 'Z': return z.noun;
       }
       return m;
     });

@@ -455,7 +455,9 @@ never advance by themselves. Under reduced motion the sheet appears without a sl
 
 A full sheet with the level title, the goal sentence, "Core" objectives (checkbox glyphs, not
 interactive), "Expert (required for majors)" objectives, the estimated time, and a sticky
-"Start" button. The goal chip in the HUD reopens it during a run.
+"Start" button. The goal chip in the HUD reopens it during a run. An optional `TEXT.task.context`
+(one or more paragraphs, each ≤ 140 characters) comes above the goal and introduces the protein
+by what it does, in plain words, before its name is used (§16.12).
 
 ### 5.4 Prediction widgets
 
@@ -2178,6 +2180,40 @@ at 99, content-version restore, the rebuilt demo (`level-runner.test.js`); two t
 content code in the decoder (`level-replay.test.js`); the new 1.1 narrator rules are checked for
 truth whenever they speak (`level-1-1.test.js`). Browser: LV-2 and LV-10 to LV-14 (§12.2), and
 LV-3's default marks, badges and side route.
+
+### 16.12 Plain-language pass (Alex's review, 2026-09-24)
+
+Alex's rule: the text builds understanding rather than testing it, so every student-facing string
+should read on first try, on a phone, for a first-year non-major. The calibration was 1.1's second
+echo screen ("Your transporters are different proteins that do the same job. After a meal,
+insulin makes muscle cells add more to their membranes."). Applied to every level `TEXT`,
+`BTC.content` and the narrator's rules:
+
+- **Proteins by their job first.** Gene cards read "Lactose transporter" (lacY), "Lactose-splitting
+  enzyme" (lacZ), "Sugar-modifying enzyme" (lacA) and "Flagellum protein" (fliC); the textbook
+  names (lactose permease, β-galactosidase, galactoside acetyltransferase, flagellin) move to the
+  About rows. The narrator's `{Y}`/`{Z}` now expand to these nouns, not "LacY"/"LacZ" (LAB_UI §7.2).
+  "Permease" is gone from the stories; 1.2 and 1.4 say "transporters" in their stories, questions
+  and narration, and name LacY once, after the plain description.
+- **Context before the goal.** `TEXT.task.context` (§5.3) in 1.1 (glucose gives ATP), 1.2 (lactose,
+  the milk sugar, gets in only through the lactose transporter, LacY), 1.4 (proteases, the setting)
+  and 1.7 (what the lac genes are for; what writing the DNA means). A prediction item's `intro`
+  may be a list of paragraphs: 1.7's table explains the repressor, the operator and allolactose in
+  two, and the Expert CRP question gets one line on CRP and cAMP.
+- **Terms explained where the student first meets them:** ribosome (a new first line in Prologue
+  scene 4), beta cell, RNA polymerase, proteases, promoter, operator, operon (a third 1.7 echo
+  screen splits the old second one), the medium. "Transcribed", "translated", "accumulating",
+  "decays", "bound", "proteome", "cytoplasm" and "septum" give way to "copied", "read", "building
+  up", "breaks down", "attached", "the cell's other proteins", "inside the cell" and "wall".
+- **HUD.** The long goal forms say "lactose transporters" / "transporters" with the numbers first,
+  so a squeezed chip keeps the numbers. Under 400 px the short forms keep "LacY": at 360 px the goal
+  chip has about 115 px beside the timer and counter, and "Transporters 333/600" needs 157 px. The
+  focus card directly below the cell reads "Lactose transporter lacY".
+
+Right answers and the misconception each wrong option targets are unchanged. **Content
+versions:** 1.1 → 3, 1.2 → 3, 1.4 → 4, 1.7 → 3 (question, option and feedback wording). The
+Prologue stays 1 (one feedback line reworded, as in §16.11). The tone lines kept in §16.11 are
+unchanged.
 
 
 ---

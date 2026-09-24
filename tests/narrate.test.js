@@ -48,20 +48,20 @@ test('c-1 / U-3: the lint catches what it must (negative controls), and the LAB_
   assert.deepEqual(N.lint('Growth has stopped.'), []);
   const m = N.createMemory(), hidden = N.createMemory({ showNames: false });
   const say = (key, gene, mem) => N.expand(N.RULES.find((r) => r.key === key).template, mem || m, gene);
-  assert.equal(say('gene.tx', 'fliC'), 'The flagellin gene is being transcribed; no protein yet.');
-  assert.equal(say('gene.tx', 'gly'), 'The glucose-processing genes are being transcribed; no protein yet.');
-  assert.equal(say('gene.leftover', 'fliC'), 'Transcription of the flagellin gene has stopped, but its mRNA is still being translated.');
-  assert.equal(say('gene.gone', 'lacZ'), 'The mRNA for β-galactosidase is gone; the protein remains and is shared out at each division.');
-  assert.equal(say('burden', 'fliC'), 'Ribosomes busy with flagellin are not making other proteins, so growth slows over a few generations.');
-  assert.equal(say('gene.noatp', 'lacY'), 'The lactose permease gene is switched on, but with almost no ATP nothing is transcribed.');
-  assert.equal(say('gene.down', 'ptsG'), 'The glucose transporter gene is transcribed less often now; its protein is diluted as the cell grows.');
-  assert.equal(say('gene.up', 'gly'), 'The glucose-processing genes are transcribed more often now, so their protein climbs to a higher level.');
+  assert.equal(say('gene.tx', 'fliC'), 'The flagellum protein gene is being copied into mRNA; no protein yet.');
+  assert.equal(say('gene.tx', 'gly'), 'The glucose-processing genes are being copied into mRNA; no protein yet.');
+  assert.equal(say('gene.leftover', 'fliC'), 'Copying of the flagellum protein gene has stopped, but ribosomes are still reading its mRNA.');
+  assert.equal(say('gene.gone', 'lacZ'), 'The mRNA for the lactose-splitting enzyme is gone; the protein remains and is shared out at each division.');
+  assert.equal(say('burden', 'fliC'), 'Ribosomes busy with the flagellum protein are not making other proteins, so growth slows over a few generations.');
+  assert.equal(say('gene.noatp', 'lacY'), 'The lactose transporter gene is switched on, but with almost no ATP nothing is copied into mRNA.');
+  assert.equal(say('gene.down', 'ptsG'), 'The glucose transporter gene is copied less often now, so its protein thins out as the cell grows and divides.');
+  assert.equal(say('gene.up', 'gly'), 'The glucose-processing genes are copied more often now, so their protein climbs to a higher level.');
   assert.equal(say('starve.noenzyme', 'gly'), 'The glucose-processing enzymes are too scarce to break down glucose quickly, so ATP is low and growth slows.');
   assert.equal(say('starve.noenzyme', 'gly', hidden), 'Protein B is too scarce to break down glucose quickly, so ATP is low and growth slows.');
-  assert.equal(say('lac.toofew', null), 'Lactose gets in through only a few LacY and LacZ, so ATP stays low and growth has paused.');
-  assert.equal(say('gene.tx', 'fliC', hidden), 'Gene G is being transcribed; no protein yet.');
-  assert.equal(say('lac.noY', null, hidden), 'Lactose is outside, but without protein E it does not get in.');
-  assert.equal(say('burden.lac', 'lacZ'), 'With no lactose here, β-galactosidase does no work, and making it slows growth over a few generations.');
+  assert.equal(say('lac.toofew', null), 'There is only a little of the lactose transporter and the lactose-splitting enzyme yet, so ATP stays low and growth has paused.');
+  assert.equal(say('gene.tx', 'fliC', hidden), 'Gene G is being copied into mRNA; no protein yet.');
+  assert.equal(say('lac.noY', null, hidden), 'Lactose is outside, but without protein E none of it gets in.');
+  assert.equal(say('burden.lac', 'lacZ'), 'With no lactose here, the lactose-splitting enzyme does no work, and making it slows growth over a few generations.');
 });
 
 // ---------------------------------------------------------------------------

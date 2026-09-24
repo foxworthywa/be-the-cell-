@@ -237,6 +237,10 @@ test('the Prologue: scenes gate on each line and on the question; cards; an unsc
   assert.equal(r.sceneInfo().scene.id, 's2');
   while (r.sceneInfo().scene.id !== 's4') r.sceneNext();
   info = r.sceneInfo();
+  assert.equal(info.who, 'narrator', 'scene 4 first says what a ribosome is');
+  assert.equal(info.question, null, 'the question waits for the ribosome line');
+  assert.ok(r.sceneNext().ok);
+  info = r.sceneInfo();
   assert.equal(info.who, 'ribosome');
   assert.ok(info.question, 'the question comes with the ribosome line');
   assert.deepEqual(r.sceneNext(), { ok: false, reason: 'question' });

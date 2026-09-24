@@ -44,7 +44,7 @@ test('U-3: job lines are ≤ 60 characters; every rejection code has text; names
   for (const code of CMD.CODES) assert.ok(C.rejections[code], `no text for rejection ${code}`);
   assert.equal(C.geneWords('fliC', false).name, 'Gene G');
   assert.equal(C.geneWords('ptsG', false).job, 'Unknown');
-  assert.equal(C.geneWords('lacZ', true).name, 'β-galactosidase');
+  assert.equal(C.geneWords('lacZ', true).name, 'Lactose-splitting enzyme');
   // Seven genes in slot order, matching the engine's catalog.
   const cat = require('../src/engine/btc-catalog.js');
   assert.deepEqual(C.GENE_IDS, cat.STRAINS['m1-lab'].genes.map((g) => g.id));

@@ -33,7 +33,7 @@
     },
     alt: {
       body: 'Line drawing of a person, with the pancreas marked.',
-      pancreas: 'Line drawing of the pancreas, with one islet drawn larger beside it.',
+      pancreas: 'Line drawing of the pancreas, with one islet, a cluster of insulin-making cells, drawn larger beside it.',
       betaCell: 'Line drawing of one beta cell, with its insulin gene marked inside the nucleus.',
       ribosome: 'Line drawing of a ribosome on an mRNA, with a protein chain coming out of it.',
     },
@@ -46,16 +46,17 @@
         { who: 'narrator', text: 'This is your pancreas. It is making insulin right now, whether or not you are paying attention.' },
       ],
       s3: [
-        { who: 'narrator', text: 'One beta cell. Its insulin gene sits in the nucleus, and it stays there.' },
+        { who: 'narrator', text: 'One beta cell, one of the cells that make insulin. Its insulin gene sits in the nucleus, and it stays there.' },
       ],
       s4: [
+        { who: 'narrator', text: 'One ribosome, the machine that builds proteins. It is reading an mRNA.' },
         { who: 'ribosome', text: 'I read whatever mRNA lands on me. I have never once made a decision.' },
       ],
       s5: [
         { who: 'narrator', text: 'Your cells do this for thousands of genes at once. To see how, start with the simplest cell that does it all.' },
       ],
       s6: [
-        { who: 'narrator', text: 'A bacterium. Its ribosomes do the same job as yours, and it uses the same genetic code.' },
+        { who: 'narrator', text: 'A bacterium. Its ribosomes do the same job as yours, and it uses the same genetic code to turn mRNA into protein.' },
         { who: 'narrator', text: 'It has no nucleus, so its ribosomes start on mRNA that is still being made.' },
       ],
       s7: [
@@ -74,7 +75,7 @@
         { t: 'It is the insulin gene itself, moved out of the nucleus.', mc: 'DNA_DIRECT',
           fb: 'The gene never leaves. The mRNA is a copy, and the gene can be copied again and again.' },
         { t: 'The ribosome made it.', mc: 'OTHER',
-          fb: 'Ribosomes read mRNA; they do not write it. RNA polymerase copied it from the gene.' },
+          fb: 'Ribosomes read mRNA; they do not write it. An enzyme called RNA polymerase copied it from the gene.' },
       ],
     },
     cards: { ribosome: 'Ribosome', code: 'Genetic code', noNucleus: 'No nucleus' },

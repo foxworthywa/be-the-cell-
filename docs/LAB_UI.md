@@ -465,14 +465,14 @@ There is one card per gene, in slot order. (Display-order variants, `variant.slo
 | 0 | ptsG | Glucose transporter | ptsG | Carries glucose across the membrane. | no | 1 |
 | 1 | gly | Glucose-processing enzymes | gapA et al. | Break glucose down, making ATP. | yes | 1 |
 | 2 | aaSyn | Amino-acid-making enzymes | (many) | Build amino acids from sugar. | yes | 1 |
-| 3 | aaImp | Amino-acid importers | (several) | Bring amino acids in from the medium. | yes | ¼ |
-| 4 | lacY | Lactose permease | lacY | Carries lactose across the membrane. | no | Off |
-| 5 | lacZ | β-galactosidase | lacZ | Splits lactose into glucose and galactose. | no | Off |
-| 6 | fliC | Flagellin | fliC | Flagellum building block; does no work here. | no | Off |
+| 3 | aaImp | Amino-acid importers | (several) | Bring amino acids in from outside. | yes | ¼ |
+| 4 | lacY | Lactose transporter | lacY | Carries lactose across the membrane. | no | Off |
+| 5 | lacZ | Lactose-splitting enzyme | lacZ | Splits lactose into glucose and galactose. | no | Off |
+| 6 | fliC | Flagellum protein | fliC | Part of the swimming tail; does no work here. | no | Off |
 
 Each entry also carries the phrases the narrator needs:
-- `genePhrase` (e.g. "the flagellin gene" / "the glucose-processing genes");
-- `noun` (e.g. "flagellin" / "the glucose-processing enzymes");
+- `genePhrase` (e.g. "the flagellum protein gene" / "the glucose-processing genes");
+- `noun` (e.g. "the flagellum protein" / "the glucose-processing enzymes");
 - `plural`.
 
 When `labConfig.showNames` is false, names become "Gene A"…"Gene G" (by display slot), jobs become "Unknown", and the nouns become "gene A" and "protein A".
@@ -708,17 +708,17 @@ This section is **authoritative for the narrator**. Engine spec §12's v1.0 phra
 
 ### 7.2 Priority list
 
-The first rule whose condition holds wins. `{G}` is the gene phrase, `{n}` the noun, `{N}` the noun capitalised, and `{is}`/`{its}`/`{it}` (is/are, its/their, it/them) and the verb ending `{s}` agree with `plural`; `{Y}`/`{Z}` are "LacY"/"LacZ" or their hidden-name nouns. A sentence's first letter is capitalised when it is a–z (so "β-galactosidase" stays lower case). Timing windows are in **sim time**.
+The first rule whose condition holds wins. `{G}` is the gene phrase, `{n}` the noun, `{N}` the noun capitalised, and `{is}`/`{its}`/`{it}` (is/are, its/their, it/them) and the verb ending `{s}` agree with `plural`; `{Y}`/`{Z}` are the lacY/lacZ nouns ("the lactose transporter"/"the lactose-splitting enzyme") or their hidden-name nouns. A sentence's first letter is capitalised when it is a–z (so a noun such as "β-galactosidase" would stay lower case). Timing windows are in **sim time**.
 
 | # | key | condition | sentence |
 |---|---|---|---|
 | 1 | drug.both | drug.rif = full and drug.cm = full, energy ≠ none | Both drugs are on: no new mRNA is started, and ribosomes are stalled. |
 | 2 | drug.cm | drug.cm = full, energy ≠ none (with no ATP there is no mRNA left to speak of; the true cause below wins) | Chloramphenicol stalls ribosomes; the mRNA is still here, but almost no protein is made. |
-| 3 | drug.rif.late | drug.rif = full and ≥ 10 min since on | Under rifampicin the old mRNA is almost gone, so protein synthesis is winding down. |
-| 4 | drug.rif | drug.rif = full | Rifampicin blocks RNA polymerase; mRNA already made is read until it decays. |
+| 3 | drug.rif.late | drug.rif = full and ≥ 10 min since on | Under rifampicin the old mRNA is almost gone, so protein making is winding down. |
+| 4 | drug.rif | drug.rif = full | Rifampicin blocks RNA polymerase, so no new mRNA is made; mRNA already made is read until it breaks down. |
 | 5 | drug.cm.low | drug.cm = low, energy ≠ none | Some ribosomes are stalled by chloramphenicol, so protein is made more slowly and growth slows. |
-| 6 | drug.rif.low | drug.rif = low | Rifampicin is slowing transcription, so less new mRNA is made. |
-| 6b | drug.rif.off | both drugs off, ≤ 10 min since rifampicin went from on (any dose) to off, energy ≠ none, medium ≠ none (the more recent of 6b/6c wins) | Rifampicin is gone, so RNA polymerase starts new mRNA again and protein synthesis picks up. |
+| 6 | drug.rif.low | drug.rif = low | Rifampicin is slowing RNA polymerase, so less new mRNA is made. |
+| 6b | drug.rif.off | both drugs off, ≤ 10 min since rifampicin went from on (any dose) to off, energy ≠ none, medium ≠ none (the more recent of 6b/6c wins) | Rifampicin is gone, so RNA polymerase starts new mRNA again and protein making picks up. |
 | 6c | drug.cm.off | both drugs off, ≤ 10 min since chloramphenicol went from on to off, energy ≠ none, medium ≠ none | Chloramphenicol is gone, so ribosomes run again on the mRNA that is left and growth picks up. |
 | 7 | starve.nosugar | medium = none and energy ≠ normal | There is no sugar in the medium, so no new ATP is made and every machine that uses ATP slows to a stop. |
 | 8 | starve.dormant | `dormant` active, medium ∈ {glucose, both}, carbon = none, glucoseImport ≠ normal | With no ATP, no new transporters can be made, so no sugar gets in and nothing restarts. |
@@ -726,18 +726,18 @@ The first rule whose condition holds wins. `{G}` is the gene phrase, `{n}` the n
 | 10 | starve.fewimport | glucoseLevel = high, carbon ∈ {glucose, both}, energy ∈ {low, none}, glucoseStep = import | Too little glucose is getting in, so ATP is low and growth has slowed. |
 | 10b | starve.noenzyme | as rule 10 but glucoseStep = enzymes; gene = gly | {N} {is} too scarce to break down glucose quickly, so ATP is low and growth slows. |
 | 11 | recover | within 5 min of `energy_ok` or `revived` that followed `energy_low` | Sugar is getting in through transporters that were already there, and ATP is coming back. |
-| 11b | gene.noatp | last commanded gene in phase waiting (on, nothing initiated) and energy = none | {G} {is} switched on, but with almost no ATP nothing is transcribed. |
-| 12 | lac.noY | lactoseBlock = no-lacY and medium = lactose | Lactose is outside, but without {Y} it does not get in. |
+| 11b | gene.noatp | last commanded gene in phase waiting (on, nothing initiated) and energy = none | {G} {is} switched on, but with almost no ATP nothing is copied into mRNA. |
+| 12 | lac.noY | lactoseBlock = no-lacY and medium = lactose | Lactose is outside, but without {Y} none of it gets in. |
 | 13 | lac.noZ | lactoseBlock = no-lacZ | Lactose gets in, but without {Z} it is not split. |
-| 13b | lac.toofew | medium = lactose, lactoseBlock = null, energy ≠ normal, growth = arrested | Lactose gets in through only a few {Y} and {Z}, so ATP stays low and growth has paused. |
+| 13b | lac.toofew | medium = lactose, lactoseBlock = null, energy ≠ normal, growth = arrested | There is only a little of {Y} and {Z} yet, so ATP stays low and growth has paused. |
 | 14 | aa.low | aa = low | Amino acids are running short, so ribosomes are moving more slowly. |
 | 15 | divided | justDivided (≤ 90 s since `division`) | The cell divided; this daughter received about half of everything. |
-| 16a | gene.waiting | phase waiting | {G} {is} switched on; RNA polymerase has not started on {it} yet. |
-| 16b | gene.tx | phase transcribing | {G} {is} being transcribed; no protein yet. |
-| 16c | gene.rising | phase rising | {N} {is} accumulating; each mRNA is read by many ribosomes before it decays. |
-| 16d | gene.up | phase up | {G} {is} transcribed more often now, so {its} protein climbs to a higher level. |
-| 16e | gene.down | phase down | {G} {is} transcribed less often now; {its} protein is diluted as the cell grows. |
-| 16f | gene.leftover | phase leftover | Transcription of {G} has stopped, but {its} mRNA is still being translated. |
+| 16a | gene.waiting | phase waiting | {G} {is} switched on, but RNA polymerase has not started copying {it} yet. |
+| 16b | gene.tx | phase transcribing | {G} {is} being copied into mRNA; no protein yet. |
+| 16c | gene.rising | phase rising | {N} {is} building up; each mRNA is read by many ribosomes before it breaks down. |
+| 16d | gene.up | phase up | {G} {is} copied more often now, so {its} protein climbs to a higher level. |
+| 16e | gene.down | phase down | {G} {is} copied less often now, so {its} protein thins out as the cell grows and divides. |
+| 16f | gene.leftover | phase leftover | Copying of {G} has stopped, but ribosomes are still reading {its} mRNA. |
 | 16g | gene.gone | phase gone | The mRNA for {n} is gone; the protein remains and is shared out at each division. |
 | 17a | burden.lac | uselessGene ∈ {lacZ, lacY}; gene = uselessGene | With no lactose here, {n} does no work, and making it slows growth over a few generations. |
 | 17b | burden | uselessGene set; gene = uselessGene | Ribosomes busy with {n} are not making other proteins, so growth slows over a few generations. |
@@ -749,7 +749,7 @@ The first rule whose condition holds wins. `{G}` is the gene phrase, `{n}` the n
 | 21b | growth.slow | growth = slow | Growth is slower than usual. |
 | 22 | growth.normal | growth = normal (the only case left) | The cell is growing steadily on glucose. |
 
-Rules 11b and 16 apply only to the **last commanded** gene. With `showNames` false, "LacZ" and "LacY" in rules 12, 13, 13b and 19 are replaced by the hidden-name nouns. Rule 22 fires only at normal growth, so "steadily" is always true.
+Rules 11b and 16 apply only to the **last commanded** gene. With `showNames` false, the lacY and lacZ nouns in rules 12, 13, 13b and 19 are replaced by the hidden-name nouns. Rule 22 fires only at normal growth, so "steadily" is always true.
 
 **Why the order and conditions are as they are (v1.1):**
 - **Rule 7 before rule 8.** An empty medium is the cause whenever the medium is empty, so the dormancy line (rule 8) cannot mislead a student who set glucose to None: after 10 min without glucose the narrator still says there is no sugar. Rule 8 now fires only when glucose is outside but the transporters are missing (for example a ptsG knockout, or the death spiral), which is where its sentence is true. It never fires in a lactose-only medium.
@@ -763,13 +763,13 @@ Rules 11b and 16 apply only to the **last commanded** gene. With `showNames` fal
 - **Rules 17a and 17b** key on ribosomes translating the gene **now** (engine spec §11.5), with a 2.5%/1.0% hysteresis band so the line does not flicker as mRNA comes in bursts. They say growth "slows over a few generations", because the cost shows in the doubling time only after an hour or so. After a switch-off they stop within about a minute of the mRNA being gone, while the leftover protein is still diluting; the cost is in making protein, not in holding it.
 
 **More examples as rendered** (all pass the lint):
-- "The flagellin gene is being transcribed; no protein yet."
-- "The glucose-processing genes are being transcribed; no protein yet."
-- "Transcription of the flagellin gene has stopped, but its mRNA is still being translated."
-- "The mRNA for β-galactosidase is gone; the protein remains and is shared out at each division."
-- "Ribosomes busy with flagellin are not making other proteins, so growth slows over a few generations."
-- "The lactose permease gene is switched on, but with almost no ATP nothing is transcribed."
-- "The glucose transporter gene is transcribed less often now; its protein is diluted as the cell grows."
+- "The flagellum protein gene is being copied into mRNA; no protein yet."
+- "The glucose-processing genes are being copied into mRNA; no protein yet."
+- "Copying of the flagellum protein gene has stopped, but ribosomes are still reading its mRNA."
+- "The mRNA for the lactose-splitting enzyme is gone; the protein remains and is shared out at each division."
+- "Ribosomes busy with the flagellum protein are not making other proteins, so growth slows over a few generations."
+- "The lactose transporter gene is switched on, but with almost no ATP nothing is copied into mRNA."
+- "The glucose transporter gene is copied less often now, so its protein thins out as the cell grows and divides."
 
 The template-by-gene expansion test keeps every combination ≤ 140 and lists (as a diagnostic) every expansion over 110 characters; the longest reachable ones are about 100–117.
 

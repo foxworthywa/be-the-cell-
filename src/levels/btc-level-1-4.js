@@ -33,30 +33,35 @@
   // [half-life (min), target setting]: every combination except half-life 5 min at ×2 (content version 2).
   const VARIANTS = Object.freeze([[3, 1], [3, 2], [4, 1], [4, 2], [5, 1]]);
   const LN2 = 0.6931471805599453;
-  // Content version (LEVELS §3.2: bumped on any change to variants, goals, scoring or questions): 2: half-life 5 min at ×2 removed; 3: the M2 review reworded the Expert question, p2 and the debrief feedback.
-  const CONTENT = 3;
+  // Content version (LEVELS §3.2: bumped on any change to variants, goals, scoring or questions): 2: half-life 5 min at ×2 removed; 3: the M2 review reworded the Expert question, p2 and the debrief feedback;
+  // 4: the plain-language pass (§16.12) names the protein by its job ("transporters") in the predictions and the debrief.
+  const CONTENT = 4;
 
   const TEXT = {
     title: 'Nothing lasts',
     challenge: 'Hold a protein steady as it breaks down.',
     task: {
-      goal: 'Hold LacY between {lo} and {hi} for 15 minutes.',
+      // Read before the goal (LEVELS §5.3): proteases and the setting in plain words.
+      context: ['Proteases are enzymes that cut up proteins. Here the lactose transporters (LacY) carry a tag that proteases fit.',
+        'The setting is how often their gene is copied, from ¼ to 4 times the usual rate.'],
+      goal: 'Keep the number of lactose transporters between {lo} and {hi} for 15 minutes.',
       core: ['Hold it for 15 minutes in a row, within 45 minutes.', 'Change the setting at most twice.'],
       expert: ['Work out the level at ×1 from the rates, within 25%.', 'Hold it with a single setting, set once.'],
     },
     story: {
       intro: [
-        { who: 'narrator', text: 'The permeases from last time are gone. Nobody took them; the cell kept dividing, and they were shared out.' },
+        { who: 'narrator', text: 'The lactose transporters from last time are gone. Nobody took them; the cell kept dividing, and they were shared out.' },
         { who: 'commander', text: 'Then build a stockpile, and keep it.' },
-        { who: 'narrator', text: 'These LacY carry a tag that proteases fit. Half are cut up every {halfLife} minutes, whatever the orders.' },
+        { who: 'narrator', text: 'This time the transporters carry a tag that fits proteases, the enzymes that cut up proteins.' },
+        { who: 'narrator', text: 'Half of them are cut up every {halfLife} minutes, whatever the orders.' },
       ],
       outro: [
-        { who: 'narrator', text: 'A steady level is not a still one. While the count held, LacY was made and cut up at the same rate.' },
+        { who: 'narrator', text: 'A steady level is not a still one. While the count held, new transporters were made as fast as old ones were cut up.' },
         { who: 'protease', denies: true, text: "I don't cut anything on purpose. Tagged proteins fit me, and then they are in pieces." },
       ],
       // The outro when the count never held in the band (the first line would not be true).
       missed: [
-        { who: 'narrator', text: 'The count never held inside the band for fifteen minutes. Each setting has its own level, where making and cutting up balance.' },
+        { who: 'narrator', text: 'The count never stayed inside the target range for fifteen minutes. Each setting has its own level, where making and cutting up balance.' },
         { who: 'protease', denies: true, text: "I don't cut anything on purpose. Tagged proteins fit me, and then they are in pieces." },
       ],
       // The outro when the gene was switched off during the run (the first line would not be true).
@@ -66,16 +71,16 @@
       ],
     },
     p1: {
-      prompt: 'You switch LacY on at one setting and leave it. What will the count do?',
+      prompt: 'You switch the transporter gene on at one setting and leave it. What will the transporter count do?',
       options: [
         { t: 'Rise, then level off where making and breaking down balance.', ok: true,
-          fb: 'The more LacY there is, the faster proteases cut it up, until removal matches making.' },
+          fb: 'The more transporters there are, the more proteases cut up each minute, until cutting up matches making.' },
         { t: 'Keep rising for as long as the gene is on.', mc: 'MOLECULES_LAST',
-          fb: 'It would if nothing broke LacY down. Here more is cut up as the count grows, so it levels off.' },
+          fb: 'It would if nothing broke the transporters down. Here more are cut up as the count grows, so it levels off.' },
         { t: 'Jump straight to a fixed level.', mc: 'INSTANT',
           fb: 'It takes minutes to rise: mRNA first, then protein, and the count approaches its level gradually.' },
         { t: 'Rise, then fall back to zero.', mc: 'OTHER',
-          fb: 'With the gene still on, new LacY keeps replacing what is cut up, so the count holds.' },
+          fb: 'With the gene still on, new transporters keep replacing the ones cut up, so the count holds.' },
       ],
     },
     ss: {
@@ -83,68 +88,69 @@
       unit: 'LacY',
     },
     p2: {
-      prompt: 'You are about to switch LacY off. What will its count do?',
+      prompt: 'You are about to switch the transporter gene off. What will the transporter count do?',
       options: [
-        { t: 'Hold for a minute or two while the last mRNA is read, then fall, fast at first and then more slowly, as proteases cut it up.', ok: true,
-          fb: 'Proteases keep cutting it up, and once the last mRNA is gone nothing replaces what they cut.' },
+        { t: 'Hold for a minute or two while the last mRNA is read, then fall, fast at first and then more slowly, as proteases cut them up.', ok: true,
+          fb: 'Proteases keep cutting them up, and once the last mRNA is gone nothing replaces what they cut.' },
         { t: 'Stay where it is now.', mc: 'MOLECULES_LAST',
-          fb: 'The count held only while new LacY replaced the old. Without new LacY, it falls.' },
+          fb: 'The count held only while new transporters replaced old ones. Without new ones, it falls.' },
         { t: 'Drop to zero at once.', mc: 'INSTANT',
-          fb: 'Each LacY is cut up at its own moment, so the count falls gradually, not all at once.' },
+          fb: 'Each transporter is cut up at its own moment, so the count falls gradually, not all at once.' },
         { t: 'Keep rising for a long time.', mc: 'OTHER',
           fb: 'Leftover mRNA adds a little for a minute or two, but breakdown soon wins.' },
       ],
     },
     epilogue: {
-      prompt: 'Now switch LacY off and watch the next 12 minutes.',
-      button: 'Switch LacY off',
+      prompt: 'Now switch the transporter gene off and watch the next 12 minutes.',
+      button: 'Switch the gene off',
     },
     d1: {
-      prompt: 'While the gene stayed on, the LacY count held steady. What was happening?',
+      prompt: 'While the gene stayed on, the transporter count held steady. What was happening?',
       options: [
-        { t: 'LacY was being made and cut up at the same rate.', ok: true,
-          fb: 'A steady level is a balance: new LacY replaced the old as fast as proteases cut it up.' },
-        { t: 'The cell stopped making LacY once there was enough.', mc: 'CELL_DECIDES',
-          fb: 'Nothing in the cell counts LacY. At a fixed setting it was made at a steady rate, and breakdown rose until it matched.' },
-        { t: 'Nothing: the LacY already made simply stayed.', mc: 'MOLECULES_LAST',
-          fb: 'Each LacY lasted only minutes. The count held because new ones replaced them.' },
+        { t: 'New transporters were being made as fast as old ones were cut up.', ok: true,
+          fb: 'A steady count is a balance: new transporters replaced old ones as fast as proteases cut them up.' },
+        { t: 'The cell stopped making transporters once there were enough.', mc: 'CELL_DECIDES',
+          fb: 'Nothing in the cell counts them. At a fixed setting they were made at a steady rate, and cutting up rose until it matched.' },
+        { t: 'Nothing: the transporters already made simply stayed.', mc: 'MOLECULES_LAST',
+          fb: 'Each transporter lasted only minutes. The count held because new ones replaced them.' },
         { t: 'The mRNA ran out.', mc: 'OTHER',
           fb: 'mRNA was made the whole time the gene was on. Without it, the count would have fallen.' },
       ],
     },
     d2: {
-      prompt: 'Proteases become twice as fast, and the setting stays the same. Where does LacY level off?',
+      prompt: 'Proteases now cut twice as fast, and the gene setting stays the same. Where does the transporter count level off?',
       options: [
         { t: 'About half as high.', ok: true,
-          fb: 'The same making rate now balances at half the count, because each LacY lasts half as long.' },
+          fb: 'Each transporter now lasts half as long, so the same rate of making balances at half the count.' },
         { t: 'At the same level, reached more slowly.', mc: 'OTHER',
-          fb: 'Faster breakdown lowers the level itself: it settles where removal equals making.' },
+          fb: 'Faster cutting up lowers the level itself: the count settles where cutting up equals making.' },
         { t: 'It keeps its level; breakdown only matters once the gene is off.', mc: 'MOLECULES_LAST',
-          fb: 'Breakdown runs all the time. With faster proteases, less LacY is needed to match the making rate.' },
+          fb: 'Cutting up goes on all the time. With faster proteases, a smaller count is cut up as fast as new ones are made.' },
         { t: 'About twice as high.', mc: 'OTHER',
-          fb: 'Faster breakdown removes LacY sooner, so less of it builds up.' },
+          fb: 'Faster proteases remove each transporter sooner, so fewer build up.' },
       ],
     },
     echo1: 'Your proteins are made and broken down all the time. Some last minutes, others for years.',
     echo2: 'Red blood cells lose their nucleus, read their leftover mRNA for a day or two, then make no new protein. They last about 120 days.',
     cards: { turnover: 'Protein turnover' },
     hud: {
-      goal: 'LacY {count} · band {lo}–{hi} · held {h} of 15 min', goalShort: 'LacY {count} · {h}/15 min',
-      ready: 'LacY {count} · ready to switch off', off: 'LacY {count} · gene off', offShort: 'LacY {count}',
+      // The long form names the protein by its job; under 400 px only "LacY" fits beside the timer and counter.
+      goal: '{count} transporters · target {lo}–{hi} · held {h} of 15 min', goalShort: 'LacY {count} · {h}/15 min',
+      ready: '{count} transporters · ready to switch off', off: '{count} transporters · gene off', offShort: 'LacY {count}',
       timer: '{time} left', epilogueTimer: '{time} of 12 min',
       counter: 'changes {c} · target 2', counterShort: '{c}/2 changes',
       counterOver: 'changes {c} · over par (2)', counterOverShort: '{c}/2 changes',
     },
-    band: 'band',
+    band: 'target',
     result: { used: 'You changed the setting {c} times; par is 2 or fewer.', usedOne: 'You changed the setting once; par is 2 or fewer.' },
     narr: {
-      rising: 'LacY is made faster than it is cut up, so the count rises until the two rates meet.',
-      dropping: 'At this setting LacY is cut up faster than it is made, so the count falls until the two rates meet.',
-      balance: 'LacY is made and cut up at about the same rate, so the count holds steady.',
-      over: 'At this setting making and breakdown balance above the band, so the count settles there.',
-      under: 'At this setting making and breakdown balance below the band, so the count settles there.',
-      falling: 'No new LacY is being made, and proteases keep cutting up the rest.',
-      down: 'LacY is made less often now, and proteases keep cutting it up, so its count settles at a lower level.',
+      rising: 'Transporters are made faster than they are cut up, so the count rises until the two rates meet.',
+      dropping: 'At this setting transporters are cut up faster than they are made, so the count falls until the two rates meet.',
+      balance: 'Transporters are made and cut up at about the same rate, so the count holds steady.',
+      over: 'At this setting making and cutting up balance above the target range, so the count settles there.',
+      under: 'At this setting making and cutting up balance below the target range, so the count settles there.',
+      falling: 'No new transporters are being made, and proteases keep cutting up the rest.',
+      down: 'Transporters are made less often now, and proteases keep cutting them up, so the count settles at a lower level.',
     },
   };
 
@@ -193,7 +199,7 @@
       const epilogue = !!state && state.phase === 'epilogue';
       return {
         showNames: true, genesVisible: ['lacY'], controls: { genes: true, medium: false, drugs: false },
-        // In the epilogue the one change is the "Switch LacY off" button.
+        // In the epilogue the one change is the "Switch the gene off" button.
         lockedGenes: epilogue ? ['lacY'] : [],
         mediumRows: { glucose: 'locked', lactose: 'locked', aminoAcids: 'locked' },
         speedOptions: [10, 60, 600], defaultSpeed: 60, startPaused: true,
