@@ -149,7 +149,7 @@ Closing line (draft): "There was never anyone in charge. There was only this, ha
 Chapter 1 uses a bacterium as the simplest cell that does it all, never as the topic itself. Six mechanisms make sure students carry what they learn to their own cells.
 
 1. **Start in the student's body.** The prologue zooms from the student into a pancreatic cell making insulin, then onto a ribosome reading mRNA. Only then: "To see how this works, start with the simplest cell that does it all."
-2. **Stamp every card.** Each molecule, tool and concept the student collects in chapter 1 is stamped **Universal** or **Bacteria-only**. The Bacteria-only list stays short: operons, no nucleus, transcription and translation happening together, a circular chromosome.
+2. **Stamp every card.** Each molecule, tool and concept the student collects in chapter 1 is stamped **Universal** or **Not in your cells**. That list stays short: operons, no nucleus, transcription and translation happening together, a circular chromosome.
 3. **"Meanwhile, in you" after every chapter 1 level.** One or two screens show the same process in a human cell, using a real example (table below).
 4. **A bridge level with both cells side by side.** In "Magic bullet", the student picks a drug target that stops an infection without harming the patient. Only targets that differ between the two cells work, such as the bacterial ribosome or cell wall. Shared targets, like the genetic code, would harm the patient too.
 5. **Chapter 2 opens with a replay.** Level 2.1 repeats level 1.1 in a human cell. First the student predicts which strategies carry over, and that prediction is scored.
@@ -159,7 +159,7 @@ Chapter 1 uses a bacterium as the simplest cell that does it all, never as the t
 | --- | --- |
 | 1.1 Transporter | Glucose transporters let your gut and muscle cells take in sugar. |
 | 1.2 Many copies | A pancreatic beta cell makes insulin from many copies of one mRNA. |
-| 1.4 Turnover | Your proteins are replaced constantly. Red blood cells lose their nucleus, can't make new proteins, and wear out in about 120 days. |
+| 1.4 Turnover | Your proteins are replaced constantly. Red blood cells lose their nucleus, read their leftover mRNA for a day or two, then make no new protein. They last about 120 days. |
 | 1.5 Mutation | Sickle-cell disease: one amino-acid change reshapes hemoglobin. |
 | 1.6 Virus | Flu viruses use your ribosomes. mRNA vaccines deliver an mRNA that your ribosomes translate. |
 | 1.7 Regulation | Your cells switch genes on and off with regulatory proteins called transcription factors (no operons). |
@@ -345,7 +345,7 @@ Small-group testing starts as soon as the free-play lab and the first levels exi
 | Story | A dry, understated "letting go" arc with a narrator (see Story) |
 | Accessibility | The baseline in Platform and delivery; nothing more |
 | Offline play | Yes, since it costs nothing in quality; quality comes first |
-| Start | Go given; M0 and M1 under way |
+| Start | M0, M1 and M2 done and live: free-play lab, prologue, levels 1.1, 1.2, 1.4 and 1.7 with Expert objectives, Canvas completion codes, engine 1.1. Next: student think-aloud |
 
 - [ ] Which weeks of the spring term does this unit run? That sets when levels 2.1–2.3 must be ready.
 - [ ] Who is in the small test group, and when can they start? Five to eight students is enough.
