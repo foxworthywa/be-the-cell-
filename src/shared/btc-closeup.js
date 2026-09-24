@@ -117,7 +117,7 @@
       doesNotFit: '{Name} does not fit this pocket.',
       nofitShort: '{Name}: does not fit',
       short: Object.freeze({ glucose: 'glucose', lactose: 'lactose', aa: 'amino acid', allolactose: 'allolactose' }),
-      whatNotFit: 'What does not fit?',
+      whatNotFit: 'Show a sugar that does not fit',
       picture: 'picture, not the model',
       stateBound: 'Clamped on the DNA: copying cannot start.',
       stateFree: 'Allolactose in its pocket: it has let go of the DNA.',

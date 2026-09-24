@@ -146,7 +146,7 @@ The status strip, narrator and tab bar stay in place; only the content pane chan
 │ └──────────────────────────────────┘ │
 │ ┌──────────────────────────────────┐ │
 │ │▮ Glucose-processing enzymes  gly │ │
-│ │   stands for ~10 genes            │ │
+│ │   stands for about 10 genes       │ │
 │ │ …                                 │ │
 │ └──────────────────────────────────┘ │
 │   … (7 cards, about 150 px each) …   │
@@ -442,7 +442,7 @@ There is one card per gene, in slot order. (Display-order variants, `variant.slo
 |---|---|---|
 | Colour chip | 12 × 28 px bar in the gene colour | `BTC.palette.gene[id]` |
 | Name | display name, 17 px semibold, with the gene symbol in muted italic after it | `BTC.content.genes[id].name`, `.symbol` |
-| "Stands for" badge | lumped genes only: "stands for ~10 genes" or "~100 genes" | `genes[i].standsForGenes` |
+| "Stands for" badge | lumped genes only: "stands for about 10 genes" or "about 100 genes" | `genes[i].standsForGenes` |
 | State chip | see §3.3 | `genes[i].geneState` |
 | Job line | one line, ≤ 60 characters | `BTC.content.genes[id].job` |
 | Promoter control | segmented radiogroup `Off · ¼ · ½ · 1 · 2 · 4`, labelled "promoter strength" (visually hidden label; the aria label is spoken). The gene's **default** level has a small tick under it | commands `setPromoter` |
@@ -1154,7 +1154,7 @@ Every access is wrapped in try/catch. The app MUST behave correctly when storage
 - The restored cell is **paused**. Graph history starts at the restore point, with a "resumed" marker.
 - Commands still waiting in the restored cell's queue (`cell.pending`, source `user`) are shown as pending on their controls again, so a control never shows the old value and then changes on its own.
 - A toast reads: "Resumed your last cell. [Start over]", but only when the cell was run or changed (snapshot tick > 0, a logged command, or a pending one). An untouched tick-0 cell is saved on every visit, and announcing it was noise.
-- Saved preferences from another build are cleaned on load: unknown genes are dropped from `graphGenes` (fallback `['fliC', 'ptsG']`), and `focusGene`, `window` and `plot4` fall back to their defaults if not recognised.
+- Saved preferences from another build are cleaned on load: unknown genes are dropped from `graphGenes` (fallback `['ptsG', 'fliC']`), and `focusGene`, `window` and `plot4` fall back to their defaults if not recognised.
 
 **Errors in a frame.** `BTC.Loop` wraps each frame in try/catch. On an error it stops (so the button no longer says "Running"), calls `onError`, and the app shows a toast "Something went wrong. Start over, or reload the page." with a Start over action, logs to the console and stores `{msg, stack, build, tick}` under `btc.lastError` (try/catch). The first render at boot is guarded the same way, so the service worker and the debug hook still register.
 
@@ -1313,7 +1313,7 @@ A review of the built lab (biology, code, phone UX and teaching-text lenses) led
 | 5 | `aaImportOn` from the import flux (> 5% of amino acids used), so amino acids at the default importer level give `growth.aa` | §7.1; engine §11.5 |
 | 6 | Cell view: the watched gene's strands on top with a halo, its polysome 4 px at 60%, the crowd at 45%; rod orientation hysteresis; outside scale on the canvas; scale bar "1 µm · width ×2"; the focus-ribosome scale moved from the legend to the key sheet; legend clamped to 2 lines | §0.3, §2.2, §2.3, §2.7, §2.9 |
 | 7 | Compact: fixed narrator height (3 lines); focus bar with mRNA and protein on their own lines ("+ n being made"); short screens hide the "Change" word; the offline/resumed toast sits above the tab bar | §1.2, §2.8, §7.4 |
-| 8 | Default focus gene fliC (Off at start); graph genes default `['fliC', 'ptsG']` | §1.1, §3.6 |
+| 8 | Default focus gene fliC (Off at start); graph genes default `['fliC', 'ptsG']` (since the slice's phone review: ptsG, on and working at the start, and `['ptsG', 'fliC']`; docs/PROLOGUE.md §5.4) | §1.1, §3.6 |
 | 9 | Graphs: a second, ring-mode recorder keeps full resolution for windows up to 6 h and the sparklines; one shared gutter pair for all plots, y labels in a left gutter, end labels kept inside, command labels by priority, drug bands labelled; ATP "< 0.01 mM"; the spending bar says "Almost no ATP is being made or spent." below 1% of the reference | §5.1, §5.2 |
 | 10 | Restore: pending commands shown again; the resumed toast only for a cell that was run or changed; saved preferences cleaned. Loop errors stop the loop and show a toast | §10.5 |
 | 11 | Speed keys 1–5 work while a button has focus; the keyboard-shortcut boxes are hidden on touch screens; non-compact layouts pad the narrator and panes by the bottom safe-area inset | §6, §11.3 |
@@ -1350,7 +1350,7 @@ Four reviews (code, phone UX, biology, text) of the M2 build; LEVELS.md §16.11 
 | 4 | A level's change of names (1.1's reveal) resets the narrator, so the line on screen is said again with the new name | §7.4 |
 | 5 | Narrator rule 18: "Amino acids come in from the medium, so fewer have to be made inside and the cell grows faster." | §7.2 |
 | 6 | About sheet: "In the free lab each gene has its own switch, and you set it; in real cells, regulator proteins that bind signals switch genes." and "In real E. coli, LacI and CRP keep the lac genes nearly off while glucose is present; level 1.7 builds that in."; the gly card's About no longer names glycolysis; the lacZ card's About adds that LacZ turns a little lactose into allolactose | §3.2, §4.4 |
-| 7 | HUD counters: short forms keep a unit ("1/3 tests", "32/48 mRNA", "1/2 changes"); `counter.over` marks a count past par in `--warn-ink` (bold) and the long form says "over par". The run's end refreshes the HUD in the same frame (the loop has stopped, so the 250-ms refresh never came) | §12 |
+| 7 | HUD counters: short forms keep a unit ("1/3 tests", "32/48 mRNA", "1/2 changes"); `counter.over` marks a count past par in `--warn-ink` (bold) and the long form says so ("more than needed" since the slice's phone review: no student reads "par"). The run's end refreshes the HUD in the same frame (the loop has stopped, so the 250-ms refresh never came) | §12 |
 | 8 | Sketch sliders: ±100 (was ±50), the value is a text field that takes a typed number, and Done stays disabled until one value has been set (a flat line at zero could be locked in) | §12 |
 | 9 | Toasts on home and the Prologue's drawings sit at the top (they covered home's buttons and the Prologue's sheet) | §9.4 |
 | 10 | Manifest and page description: "A game about genes and proteins, in which you are in charge of a cell. In principle." | §9.1 |

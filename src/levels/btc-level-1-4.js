@@ -139,10 +139,10 @@
       ready: '{count} transporters · ready to switch off', off: '{count} transporters · gene off', offShort: 'LacY {count}',
       timer: '{time} left', epilogueTimer: '{time} of 12 min',
       counter: 'changes {c} · target 2', counterShort: '{c}/2 changes',
-      counterOver: 'changes {c} · over par (2)', counterOverShort: '{c}/2 changes',
+      counterOver: 'changes {c} · more than needed (2)', counterOverShort: '{c}/2 changes',
     },
     band: 'target',
-    result: { used: 'You changed the setting {c} times; par is 2 or fewer.', usedOne: 'You changed the setting once; par is 2 or fewer.' },
+    result: { used: 'You changed the setting {c} times; 2 or fewer is enough.', usedOne: 'You changed the setting once; 2 or fewer is enough.' },
     narr: {
       rising: 'Transporters are made faster than they are cut up, so the count rises until the two rates meet.',
       dropping: 'At this setting transporters are cut up faster than they are made, so the count falls until the two rates meet.',

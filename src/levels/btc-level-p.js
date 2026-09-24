@@ -66,13 +66,13 @@
       genesLetters: 'the gene’s letters', copy: 'the copy (mRNA)', rnap: 'RNA polymerase',
       coding: 'the gene’s letters (coding strand)', template: 'the strand the copy is built on (template strand)',
       ribosome: 'ribosome', mRNA: 'mRNA', codon: 'codon', chain: 'chain', thisCodon: 'this codon',
-      dotsEnlarged: 'dots enlarged', drawnSmaller: 'machine drawn smaller than scale', lettersLarger: 'letters drawn larger than scale',
+      dotsEnlarged: 'dots enlarged', copyLarger: 'the copy drawn larger than scale', drawnSmaller: 'machine drawn smaller than scale', lettersLarger: 'letters drawn larger than scale',
       realSpeed: 'shown at about real speed', flat: 'shape drawn flat and simplified', slower: 'shown much slower than in your cells',
       outside: 'outside the cell', membrane: 'membrane', oily: 'oily middle', inside: 'inside the cell', glucose: 'glucose',
       lactose: 'a bigger sugar', blood: 'blood', insulin: 'insulin', muscle: 'muscle cell', transporters: 'proteins that carry glucose',
       stored: 'stored inside the cell',
       aChain: 'A chain', bChain: 'B chain', cutAway: 'cut away', links: 'links',
-      copied: 'letters copied {k} of {n}', copies: 'copies made {n}', aminoAcids: 'amino acids {c} of {n}',
+      copied: 'letters copied {k} of {n}', copies: 'copies finished {n}', aminoAcids: 'amino acids {c} of {n}',
       copyDone: 'the finished copy: {n} letters', geneStays: 'the gene stays',
       pocket: 'pocket', notFit: 'does not fit', pictureOnly: 'picture, not a model',
       fourRibosomes: 'four ribosomes on one copy', fold: 'the chain folds',
@@ -108,7 +108,7 @@
       ringLabel: 'Look closer', tapLetter: 'Tap a letter to see its partner.', pairs: '{a} pairs with {b}.',
       keys: 'Letter keys', letterKey: 'Letter {x}', runCopy: 'Let it run', copyAgain: 'Copy again', runRead: 'Let it run',
       fullTable: 'Full table', tableTitle: 'The genetic code', tableNote: 'Every group of three letters and the amino acid it stands for, or stop.',
-      startWord: 'start', stopWord: 'stop', thisCodon: 'This codon: {codon}',
+      startWord: 'start', stopWord: 'stop', thisCodon: 'This codon: {codon}', rowAa: '{name} ({three})', rowStart: '{name} ({three}), {start}',
       fillCount: '{i} of {n} letters placed', fillDone: 'Six letters placed. Now let the machine copy the rest.',
       running: 'Copying…', reading: 'Reading…', readDone: 'Both codons read. Now let the ribosome read the rest.',
       copiesHint: 'Each tap starts one more copy.',
@@ -179,13 +179,18 @@
         { who: 'narrator', text: 'Next, a cell you can run yourself.' },
       ],
     },
+    // What an activity's prompt gives way to once it is done (pm11).
+    done: {
+      c4: 'The machine copied the rest of the gene, all {n} letters.',
+      e3: 'The ribosome read on, codon by codon, adding one amino acid each time.',
+    },
     // The letter fill (§2.3.3): nothing is marked wrong; the right letter always goes in.
     fill: {
       noT: 'The copy has no T. Across from A, the copy has U.',
       other: 'Across from {dna}, the copy has {rna}.',
     },
     // The codon decode (§2.3.5).
-    decode: { wrong: 'Find {codon} in the left column: it stands for {three} ({name}).' },
+    decode: { wrong: 'Find {codon} in the left column: it stands for {name} ({three}).' },
     // Guess D1 (§2.3.4) and guess F4 (§2.3.6): "What happened" for every option, never right or wrong.
     d1: {
       prompt: 'The copy is finished. What happens to the gene now?',
@@ -235,7 +240,7 @@
     { id: 'c1', picture: 'tx', tx: 'closed', lines: TEXT.scenes.c1 },
     { id: 'c2', picture: 'tx', tx: 'arrive', lines: TEXT.scenes.c2 },
     { id: 'c3', picture: 'tx', tx: 'open', lines: TEXT.scenes.c3 },
-    { id: 'c4', picture: 'tx', tx: 'fill', lines: TEXT.scenes.c4, activity: copyAct },
+    { id: 'c4', picture: 'tx', tx: 'fill', lines: TEXT.scenes.c4, activity: copyAct, done: TEXT.done.c4 },
     { id: 'c5', picture: 'txDone', lines: TEXT.scenes.c5, note: 'introns' },
     { id: 'd1', picture: 'nucleusCopy', lines: TEXT.scenes.d1, guess: Object.assign({ id: 'd1', showAt: 'd2' }, TEXT.d1) },
     { id: 'd2', picture: 'export', lines: TEXT.scenes.d2, activity: { kind: 'show', total: 1.2 } },
@@ -243,7 +248,7 @@
     { id: 'd3b', picture: 'copies', lines: TEXT.scenes.d3b },
     { id: 'e1', picture: 'tl', tl: 'arrive', lines: TEXT.scenes.e1 },
     { id: 'e2', picture: 'tl', tl: 'frames', lines: TEXT.scenes.e2 },
-    { id: 'e3', picture: 'tl', tl: 'read', lines: TEXT.scenes.e3, activity: readAct },
+    { id: 'e3', picture: 'tl', tl: 'read', lines: TEXT.scenes.e3, activity: readAct, done: TEXT.done.e3 },
     { id: 'e3end', picture: 'tl', tl: 'done', lines: TEXT.scenes.e3end },
     { id: 'e4', picture: 'polysome', lines: TEXT.scenes.e4 },
     { id: 'f1', picture: 'fold', lines: TEXT.scenes.f1 },

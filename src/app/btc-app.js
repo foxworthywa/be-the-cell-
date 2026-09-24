@@ -224,6 +224,7 @@
     app.resume = () => {
       if (!app.canRun() || app.ff) return;
       if (app.level) app.level.autoRun = true;
+      app.labTryDone(true);
       app.loop.start(); afterRunChange(); app.logEvent('resume', {});
     };
     /** Time may run: always in the lab; in a level only while its run (or demo, epilogue, or live Prologue scene) is on. */
@@ -247,6 +248,7 @@
     app.setFocus = (id) => {
       if (id === app.focusGene || !app.geneVisible(id)) return;
       app.focusGene = id; app.ui.focusGene = id;
+      app.labTryDone(true);
       focusIdx = Math.max(0, app.geneModel ? app.geneModel.ids.indexOf(id) : C.GENE_IDS.indexOf(id));
       const gg = app.ui.graphGenes;
       if (gg.indexOf(id) < 0) { if (gg.length >= 3) gg.shift(); gg.push(id); }
@@ -292,6 +294,7 @@
       const r = app.cell.command(cmd);
       if (r.ok) app.pending.set(key, r.seq, valueKey);
       else LY.toast(C.rejections[r.error] || C.rejections['bad-value']);
+      if (r.ok && app.mode === 'lab') app.labTryDone(true);
       if (app.mode === 'level') app.levelChanged();
       // The Watch step: a command the student sends may be the step's act (PROLOGUE §2.4.3).
       const L = app.level;
@@ -402,6 +405,8 @@
     function commandLabel(ev) {
       const G = C.graphs.marker, lv = C.graphs.markerLevels, r = ev.resolved, a = ev.args || {};
       if (ev.cmdType === 'setPromoter') {
+        // A screen with only the Off/On switch (tiered levels) marks the switch in words: "gene on", "gene off" (PM1).
+        if (app.tierUI && app.tierUI.focusBar && app.tierUI.focusBar.control === 'onoff') return r.level === 'off' ? G.geneOff : G.geneOn;
         // With names hidden (1.1) a command is marked with the gene's letter until its job has been seen.
         const tag = app.geneModel && app.geneModel.ids.indexOf(a.gene) >= 0 ? app.geneModel.words(a.gene).tag : C.genes[a.gene] ? C.genes[a.gene].symbol : a.gene;
         return F.fill(G.promoter, { symbol: tag, level: r.level === null ? '' : lv[r.level] });
@@ -588,6 +593,7 @@
       app.requestPaint();
     }
     app.setTab = (tab) => {
+      if (app.mode === 'lab') app.labTryDone(true);         // the lab's first line goes as the student looks round
       app.tab = mapTab(tab, app.layout);
       app.ui.tab = tab;
       app.savePrefs();
@@ -793,6 +799,7 @@
      * views.zoom.onChange when the level opens.
      */
     app.zoomChanged = (level) => {
+      if (app.mode === 'lab') app.labTryDone(true);
       const L = app.level;
       if (app.mode === 'level' && L && !L.live && L.runner.phase === 'watch') {
         if (L.runner.watchZoom(level)) views.levelUI.afterWatch();
@@ -813,6 +820,7 @@
       app.savePrefs();
       app.logEvent('ui_mode', { mode });
       if (app.mode !== 'lab') return;
+      if (mode !== 'simple') app.labTryDone(false);
       setLabConfig(labConfigFor(mode, BTC.tiers));
       refreshGeneModel();
       remountPanels();
@@ -839,9 +847,28 @@
       remountPanels();
       resetNarrator();
       app.requestPaint();
+      requestAnimationFrame(() => app.labTry());
+    };
+
+    /**
+     * The lab's first open in Simple mode: one guide line over the cell, once per student, pointing at the switch.
+     * It goes with its button, or as soon as the student switches a gene, picks another, opens a tab, looks closer or
+     * runs the cell (done: true marks it met); leaving the lab or Simple mode only hides it.
+     */
+    app.labTry = () => {
+      if (app.mode !== 'lab' || ui.labMode !== 'simple' || !views.guide || !app.progress || app.progress.introduced('lab.try')) return;
+      views.guide.show({ key: 'lab.try', who: 'narrator', text: C.tiers.labTry, point: 'control.dial',
+        buttons: [{ label: C.tiers.next, action: 'lab-try-ok', primary: true, onClick: () => app.labTryDone(true) }] });
+    };
+    app.labTryDone = (done) => {
+      const g = views.guide;
+      if (!g || !g.cur || g.cur.key !== 'lab.try') return;
+      if (done && app.progress) app.progress.markIntroduced('lab.try');
+      g.hide();
     };
 
     app.enterHome = () => {
+      app.labTryDone(false);
       LY.closeSheet();
       app.loop.stop();
       if (app.mode === 'lab') stashLab();
@@ -862,6 +889,7 @@
       const o = opts || {};
       const def = BTC.levels.byId[id];
       if (!def) { LY.toast(C.game.missing); if (app.screen !== 'home') app.enterHome(); return; }
+      app.labTryDone(false);
       LY.closeSheet();
       app.loop.stop();
       if (app.mode === 'lab') stashLab();
@@ -1206,6 +1234,21 @@
       views.status.update(app.cell.observe(), app.facts);
       app.refreshControls();
     }
+    /**
+     * A level's run may speed itself up once nothing is left to decide (1.2: the gene off with enough on the way, or the
+     * milk here): once per run and rule, only ever faster, with a note that says so (speed is how fast you watch).
+     */
+    function runSpeedUps(r) {
+      const L = app.level;
+      if (!L || !r.def.speedUps || r.phase !== 'run' || !r.run || r.run.endReason || r.beat || app.cell !== r.run.cell) return;
+      const st = r.run.monitor.save ? r.run.monitor.save() : null;
+      for (const su of r.def.speedUps) {
+        const k = r.runs + ':' + su.key;
+        if ((L.sped || (L.sped = {}))[k] || !su.when(st, r.variant)) continue;
+        L.sped[k] = true;
+        if (app.speed() < su.speed) { app.setSpeed(su.speed); if (su.note) LY.toast(r.text(su.note)); app.logEvent('speed', { s: su.speed, auto: su.key }); }
+      }
+    }
     /** Per frame in a level: the end of a run, the HUD (≤ 4 Hz), the debounced autosave, a changed labConfig (1.1's reveals). */
     function levelFrame(dtReal, force) {
       const L = app.level;
@@ -1251,7 +1294,7 @@
       // The Watch step: a state the model reached (the loop may have just stopped there), or a note, changes the callout.
       if (r.phase === 'watch' && r.watchCell) {
         const w = r.watch, info = r.watchInfo();
-        const key = [w.index, w.stage, w.line, w.hold, app.loop.running, info && info.note, w.watchedId].join('|');
+        const key = [w.index, w.stage, w.line, w.hold, app.loop.running, info && info.note, w.watchedId, info && info.speed && info.speed.now].join('|');
         if (key !== L.watchKey) {
           L.watchKey = key;
           // The watched copy (a step's until {watch: true}) is outlined in the Gene close-up, when there is one.
@@ -1275,7 +1318,7 @@
         }
       }
       L.sinceHud += dtReal;
-      if (force || L.sinceHud >= 0.25) { L.sinceHud = 0; updateHud(); }
+      if (force || L.sinceHud >= 0.25) { L.sinceHud = 0; updateHud(); runSpeedUps(r); }
       if (L.dirtyAt !== null && performance.now() - L.dirtyAt >= 2000) saveLevelNow();
     }
 

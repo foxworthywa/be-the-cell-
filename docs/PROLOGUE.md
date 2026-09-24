@@ -311,8 +311,19 @@ the gap between what the Commander expects and what the cell does.
 
 Both are listed on the home screen before 1.1 ("Prologue 1 · How a gene becomes a machine",
 "Prologue 2 · A cell's economy"). Levels stay open in any order (Levels §14 decision 1); 1.1's task
-card links "Watch Prologue 2 first" when P2 is not done (open question 9). A returning student can
-Skip within a part (to the next activity, never past an unanswered activity, as today).
+card links "Watch Prologue 2 first" when P2 is not done (open question 9). Only a returning student
+(one who has finished the part before) sees "Skip to the next activity" within a part, and it never
+passes an unanswered activity; on a first play there is no Skip (it jumped from B1 past C3's U-for-T
+rule: the phone play-through, PM6).
+
+**Guess sheets on a phone** (PM7): a sheet with a guess to pick, a code table or an activity is a tall
+sheet (up to 85% of the height, the drawing above it smaller), its line in a smaller size, "See what
+happens" kept in reach at the bottom, and a fade at the bottom edge while more is below. All four D1
+options and the button fit at 375 × 667. "See what happens" goes straight on to the scene that shows
+what happens (D1 to D2's pore, F4 to F5's transporter; PB3): the student never sees the same still
+again. Once an activity is done its prompt gives way to what happened: C4 "The machine copied the rest
+of the gene, all {n} letters."; E3 "The ribosome read on, codon by codon, adding one amino acid each
+time." (pm11).
 
 **Codes.** The format of Levels §10.1 is unchanged. Both parts carry `G1`, `ENA`, `PNA`; `D`
 carries how many of the part's two guesses were first picked on the explained cause, then the
@@ -377,7 +388,8 @@ to the nucleus (the ER), where the chain's first 24 amino acids dock them before
 #### 2.3.1 The zoom ladder (scenes A0–A9)
 
 Ten rungs from the student to the letters. Each rung is a drawing **to its scale bar**; anything
-drawn larger than scale is labelled on the drawing ("dots enlarged"). Drawings are inline SVG in
+drawn larger than scale is labelled on the drawing and says what ("the copy drawn larger than scale"),
+and no label sits on an outline or points at nothing (pm14). Drawings are inline SVG in
 palette tokens (as today's Prologue), ≤ 6 KB each, pure (`svg(rung, text)`), light and dark.
 
 | Rung | Drawing (content drawn to scale unless noted) | Field of view at 360 px | Scale bar | Line (exact student text) |
@@ -473,7 +485,7 @@ the DNA stays. The gate is the marker's arrival (state of the scene model).
 | Scene | Line (exact) | Interaction | Gate |
 |---|---|---|---|
 | D2 | "The mRNA leaves through a pore in the nucleus. The gene stays inside and can be copied again." | – | Next |
-| D3 | "Tap to copy the gene again." | "Copy again" button (48 px); each tap runs one more transcription at 30 letters a second; counter "copies made {n}" | three copies made |
+| D3 | "Tap to copy the gene again." | "Copy again" button (48 px); each tap runs one more transcription at 30 letters a second; counter "copies finished {n}" (C4's copy counts, pm12) | three copies made |
 | D3b | "One gene can give many copies, and each copy can be read many times." | – | Next |
 
 #### 2.3.5 Translation (scenes E1–E4)
@@ -487,13 +499,14 @@ beads and plain beads after that.
 |---|---|---|---|
 | E1 | "Out in the cell, a machine called a ribosome reads the mRNA three letters at a time." | the ribosome slides from the leader to the first AUG | Next |
 | E2 | "Each group of three letters, a codon, stands for one amino acid or for stop. Amino acids are the building blocks of a protein." | – | Next |
-| E3 | prompt: "Which amino acid does this codon stand for?" | **codon decode**, twice (AUG, then GCC): a small code table of six 48 px rows, each a button: AUG Met (start) · GCC Ala · CUG Leu · UGG Trp · GGC Gly · UAG stop; "Full table" opens all 64 codons from `BTC.seq.CODE` | both decoded |
+| E3 | prompt: "Which amino acid does this codon stand for?" | **codon decode**, twice (AUG, then GCC): a small code table of six 48 px rows, each a button with the name first (pm15): AUG methionine (Met), start · GCC alanine (Ala) · CUG leucine (Leu) · UGG tryptophan (Trp) · GGC glycine (Gly) · UAG stop; "Full table" opens all 64 codons from `BTC.seq.CODE` | both decoded |
 | E3 run | "Let it run" | the ribosome reads the rest at 5 codons a second (about real speed for your cells; "shown at about real speed" stays for the whole run); the chain grows bead by bead; counter "amino acids {c} of 110" | stop codon reached |
 | E3 end | "UAG means stop. The chain is finished: 110 amino acids, in the order the gene spelled out." | – | Next |
 | E4 | "Several ribosomes can read the same mRNA at once, each a little further along." | four ribosomes drawn on the mRNA, each chain the computed prefix at its codon | Next |
 
 Decode feedback (nothing marked wrong): a wrong row shows "Find {codon} in the left column: it
-stands for {three} ({name})." and the right row is highlighted; the student taps it to continue.
+stands for {name} ({three})." above the rows (in view on a short phone, PM7) and the right row is
+highlighted; the student taps it to continue.
 
 #### 2.3.6 Folding, the job, and the machine (scenes F1–F7)
 
@@ -562,7 +575,7 @@ cell (engine 1.1.0) and are filled from the calibration constants, not typed int
 | S2 | sugar outside, a transporter | "Food first: sugar gets in only through transporter machines in the membrane." |
 | S3 | enzymes, ATP diamonds | "Enzyme machines inside break the sugar down and make ATP, the cell's energy currency." · "Here, with no oxygen, each glucose gives 2 ATP." (two lines) |
 | S4 | ATP arrows to building, upkeep | "ATP is spent on everything the cell does. The biggest single cost is building proteins: about 4 ATP to join each amino acid on." |
-| S5 | a transporter with a price tag | "So one transporter, about 450 amino acids long, costs about 1,800 ATP: the energy from about 900 glucose." |
+| S5 | a transporter with a price tag ("450 amino acids" over "about 1,800 ATP") | "So one transporter costs about 1,800 ATP to build: the energy from about 900 glucose." (one number fewer, pm10) |
 | S6 | gene → mRNA → ribosome | "Genes hold the instructions for every machine. mRNA copies carry them to the ribosomes." |
 | S7 | a worn machine being cut up | "Machines wear out and are cut up, and new ones are made all the time." |
 | S8 | the cell elongates and divides (drawing) | "When the economy runs well, the cell grows, copies its DNA and divides in two." |
@@ -603,8 +616,18 @@ narrator, and the guide's pointer. Speed 1 s = 10 s at the start; the guide offe
   act: {kind: 'command', expect: {type: 'setPromoter', gene: 'ptsG', on: true}} | {kind: 'zoom', to: 'gene'} | null,
   gate: {kind: 'tap'} | {kind: 'act'} | {kind: 'state', test: 'firstMRNA', gene: 'ptsG', pause: true},
   cause: 'one sentence shown after the gate' | null,
-  offer: [{label, zoom: 'gene' | 'protein'}] }                             // optional "Look closer" buttons
+  offer: [{label, zoom: 'gene' | 'protein'}],                             // optional "Look closer" buttons
+  wait: 'what the cell is doing while the step waits' | null,              // its own line, never a silent wait
+  speed: 60 | {to: 60, test: 'watchedGoneOrOld'} }                         // the step moves the cell to 1 s = 1 min
 ```
+
+**Waits** (the phone play-through, PM4): no step sits more than about 30 s of real time at the default
+speed with nothing new on screen. A step's `wait` line is shown while it waits (in place of "Watching the
+cell…" alone), and a step with `speed` moves the cell to that speed once (at once, or when its test turns
+true) and says so in the callout: "Sped up: 1 s = 1 min." The callout keeps off what it points at: it goes
+below or above the ring when its place would cover it, and a line read with Next may lie over the controls
+below the cell view to do so (the pocket of the protein close-up on a phone). While a callout shows, the
+narrator bar under the cell is hidden (one voice at a time, PM2).
 
 **State tests** (pure functions of `cell.observe()` and the step monitor, evaluated after every
 tick by a monitor attached like a level's; when one turns true the loop stops after that tick and
@@ -636,8 +659,8 @@ the pointer appears; the same run replayed stops at the same tick):
 | H7 | the first finished mRNA strand | "The first mRNA copy is finished. Each wavy strand is one copy." | – | state `firstMRNA` (pause) → tap | "The gene was copied first." |
 | H8 | ribosome glyphs on it | "Ribosomes are reading it, each building one transporter chain." | – | state `firstRibosome` → tap; offer "Look closer" (Gene) | – |
 | H9 | the transporter counter | "The first transporters are finished. Their count is here." | – | state `firstProtein` → tap | "Ribosomes built them from the copies." |
-| H10 | a membrane glyph | "They sit across the membrane. A hollow mark means fewer than half a dot's worth." | – | state `inPlace` → tap; "Speed up" offered | – |
-| H11 | glucose markers | "Glucose now comes in through them. Each moving mark stands for {N} glucose." | – | state `workOver(1)` → tap; offer "Look at one transporter" (Protein) | "Glucose came in only once transporters sat in the membrane." |
+| H10 | a membrane glyph | "They sit across the membrane. A hollow mark means only a few so far." | – | state `inPlace` → tap; the cell moves to 1 s = 1 min ("Sped up: 1 s = 1 min.") | – |
+| H11 | glucose markers | "Glucose now comes in through them. In the whole-cell view, each moving mark stands for {N} glucose." (while it waits: "More transporters are being built. Glucose comes in faster as their number grows.") | – | state `workOver(1)` → tap; offer "Look at one transporter" (Protein) | "Glucose came in only once transporters sat in the membrane." |
 | H12 | energy word | "With glucose coming in, energy is back to normal. Growth picks up over the next half hour." | – | state `energyNormal` → tap | – |
 | H13–H14 | – | the closing story lines of §2.8.2 (the Commander's "It did exactly what I told it.", the narrator's cause, and the set-up for 1.1) | – | tap per line | – |
 
@@ -651,7 +674,7 @@ Prompt: "When you switch this gene on, what will you see first?"
 | "Energy going up." | `ENERGY_FIRST` | "Energy rose last: it comes from glucose, and glucose waited for the transporters." |
 | "New transporters in the membrane." | `OTHER` | "Transporters came second. Ribosomes can build them only from mRNA copies, so the copies came first." |
 
-H5's feedback appears at H9 (after the order has been seen): "What happened: …".
+H5's feedback appears at H11, once glucose is coming in (at H9 the energy was still low: PM3): "What happened: …".
 
 **If the student does something else** (not a gate, just honest handling): switching the gene off
 during H7–H11 is allowed (the switch is real); the pointer then says "The gene is off, so no new
@@ -848,7 +871,7 @@ only here and are added to the scenes' `lines` arrays in this order.
 | S3 | enzymes, ATP | narrator | "Enzyme machines inside break the sugar down and make ATP, the cell's energy currency." | T |
 | S3 | same | narrator | "Here, with no oxygen, each glucose gives 2 ATP." | T |
 | S4 | spending | narrator | "ATP is spent on everything the cell does. The biggest single cost is building proteins: about 4 ATP to join each amino acid on." | T |
-| S5 | a price tag | narrator | "So one transporter, about 450 amino acids long, costs about 1,800 ATP: the energy from about 900 glucose." | T |
+| S5 | a price tag | narrator | "So one transporter costs about 1,800 ATP to build: the energy from about 900 glucose." | T |
 | S6 | gene → copy → ribosome | narrator | "Genes hold the instructions for every machine. mRNA copies carry them to the ribosomes." | T |
 | S7 | a worn machine cut up | narrator | "Machines wear out and are cut up, and new ones are made all the time." | T |
 | S8 | growth and division | narrator | "When the economy runs well, the cell grows, copies its DNA and divides in two." | T |
@@ -1234,7 +1257,7 @@ key sheet lists every readout with the same sentence.
 | Tier | 0 (drawings) | 1 | 2 | 3 | 4 | 5 | 4 | all |
 | Status strip | – | pause, clock, speed | + energy word, growth word | same as 1.1 | same | same | same | M1: + generation, doubling, device limit |
 | Zooms | – | Cell, Gene, Protein; opens on Cell | all; opens on Gene for the watch, Cell for the run | all; opens on Gene | all; opens on Gene | all; opens on Gene (lac region) | all; opens on Cell | all |
-| Focus bar | – | 2 big counters; Off/On | 2 big counters; Off/On per card | 3 counters (copies now, copies made, transporters); Off/On | counters + rates; the dial | read-only in the run | 2 counters; the dial | M1 focus bar |
+| Focus bar | – | 2 big counters; Off/On | 2 big counters; Off/On per card | watch: 3 counters (copies now, copies made, transporters); Try: 2 (copies now; transporters with "+ about {x} on the way" under them); Off/On | counters + rates; the dial | read-only in the run | 2 counters; the dial | M1 focus bar |
 | Tabs | – | Cell | Cell, Genes (simple), Medium (simple) | Cell, Graph | Cell, Graph | Cell, Graph (design editor before the run) | Cell, Genes, Medium, Graph | M1: Cell, Genes, Medium, Graphs |
 | Graph | – | none | none | one line: transporters; target line; "milk arrives" mark | one line: transporters; the enough zone | two lines (lac proteins, LacI) with sugar bands | one line: focus gene's protein | M1 graphs, chips, lin/log, window, scrub, spending bar |
 | Medium | – | fixed | lactose and amino acids (Expert), as now | fixed (schedule) | fixed | schedule | glucose, lactose, amino acids | + drugs |
@@ -1251,6 +1274,11 @@ time and log scale in 1.9.
 - Simple keeps every lever that changes the cell (all seven dials, the medium), so free play is not
   weakened; it hides only readouts and graph options.
 - `?lab=1&all=1` opens All controls (think-aloud and instructor use).
+- The lab's first focus is the glucose transporter (it is on and working at the start; the flagellum
+  protein, the old default, is off and does no work here), and the first time the lab opens in Simple
+  one guide line points at the dial: "Try a gene: switch one on or off, run the cell, and watch its
+  copies and its protein." It goes with its button or the student's first action (a switch, another
+  gene, a tab, a close-up, Run), once per student (the phone play-through, PM10).
 
 ---
 
@@ -1391,19 +1419,19 @@ and 25, and the words change with it.
 | Step | Lines (exact) | Guess | Act / gate | Cause after the gate (exact) |
 |---|---|---|---|---|
 | W1 | "This is the lactose transporter gene. It is switched off, so nothing is being copied." | **g1** (below) | act: switch lacY on (the student's tap; logged) | – |
-| W1b | "The first copy is outlined. Watch how many transporters it is read into." | – | state `firstMRNA` sets the watched copy (the first mature lacY mRNA after the switch-on); the counter "this copy: read into {n}" runs; gate `watchedGone` (pause) | "This copy was read into {n} transporters in {t}, then broken down. Meanwhile {k} more copies were made." |
+| W1b | "The first copy is outlined. Watch how many transporters ribosomes build from it before it is broken down." (while it waits: "Ribosomes are reading the copies. The count waits until the first ten copies have all been broken down.") | – | state `firstMRNA` sets the watched copy (the first mature lacY mRNA after the switch-on); the counter "this copy: read into {n}" runs; gate `watchedGoneAndTen` (pause): the watched copy **and** the first ten copies made from it on are broken down (PB1: one copy can give 1 or 40). Speed: 1 s = 1 min once the watched copy is gone or has been read for 3 min (`watchedGoneOrOld`) | "This copy gave {nTr} in {t}, then it was broken down. Copies last different times: the first {b} gave {avg} each on average." ({nTr}: "1 transporter", "37 transporters"; {avg}: the mean of those ten copies' own counts, so no survivor bias) |
 | W2 | "Ribosome after ribosome reads each copy until it is broken down." | **g2** (below) | act: switch lacY off | – |
-| W2b | "The gene is off. Count the copies still left." | – | counters "copies left {m}" and "transporters made since off: +{a}"; gate `allMRNAGone` (pause) | "Switching the gene off stopped new copies from being started. The copies already made were still read, so {a} more transporters arrived." |
-| W3 | "So one copy gives about twenty transporters, and they keep arriving for a few minutes after the gene is off." | – | tap | – |
+| W2b | "The gene is off. Count the copies still left." (while it waits: "No new copies are started. The copies left are still read, and are broken down one by one.") | – | counters "copies left {m}" and "transporters made since off: +{a}"; gate `fewCopiesLeft` (pause): a tenth of the copies there were at the switch-off are left (PM5: the very last copy took up to 19 game-min); at 1 s = 1 min | "Switching the gene off stopped new copies from being started. The copies already made were still read: {a} more transporters in {tOff}." |
+| W3 | "So one copy gives about {avg} transporters, and they keep arriving until the last copy is broken down." | – | tap | – |
 
-**Guess g1:** "When you switch the gene on, how many transporters will one mRNA copy be read into before it is broken down?"
+**Guess g1:** "When you switch the gene on, how many transporters will ribosomes build from one mRNA copy before it is broken down?"
 
 | Option (exact) | mc | What happened (fb, exact; shown at W1b's gate) |
 |---|---|---|
-| "One." | `OTHER` | "Ribosome after ribosome read the same copy. This one gave {n} before it was broken down." |
-| "About twenty." (the cause) | – | "Ribosome after ribosome read it until it was broken down. This one gave {n}; the average is about twenty." |
-| "Thousands." | `OTHER` | "Each copy lasts only minutes, so it gives tens, not thousands. This one gave {n}." |
-| "It is never broken down, so it keeps going." | `MOLECULES_LAST` | "Copies are broken down within minutes. This one lasted {t} and gave {n}." |
+| "One." | `OTHER` | "Ribosome after ribosome read each copy. This one gave {nTr}; on average a copy gave {avg}." |
+| "About twenty." (the cause) | – | "Ribosome after ribosome read each copy until it was broken down. This one gave {nTr}; on average a copy gave {avg}." |
+| "Thousands." | `OTHER` | "Each copy lasts only minutes, so it gives tens, not thousands. This one gave {nTr}; on average a copy gave {avg}." |
+| "It is never broken down, so it keeps going." | `MOLECULES_LAST` | "Copies are broken down within minutes. This one lasted {t} and gave {nTr}." |
 
 **Guess g2:** "What will happen if you switch the gene off now?"
 
@@ -1418,18 +1446,28 @@ and 25, and the words change with it.
 - Picture: two machine cards: "Carries lactose into the cell · Lactose transporter · lacY" (state: "none yet") and "Splits lactose into two sugars: glucose and galactose · Lactose-splitting enzyme · lacZ" (state: "ready").
 - Scenario: "At minute {D} the glucose runs out and milk sugar arrives."
 - Why it matters: "Without enough lactose transporters, the cell will be short of energy and grow slowly on milk sugar."
-- Goal: "Have {T} lactose transporters in the membrane by minute {D}."
-- Core: "Reach {T} by minute {D}." · "Switch the gene off when enough are on the way: every extra copy costs energy."
+- Goal: "Before the milk arrives at minute {D}, get {T} lactose transporters into the membrane: enough to feed the cell on milk sugar."
+- Core (bullets, not boxes): "Switch the gene on early: transporters arrive minutes after the switch." · "Switch the gene off when the transporters plus the ones on the way reach {T}."
 - Expert (required for majors): "Finish with no more than {Tmax} transporters: switch off at the right moment." (`Tmax = round(1.15·T, 100)`).
 
-**Try (the run; tier 3):** Gene zoom by default; counters "mRNA copies now {m}", "copies made {M}",
-"Transporters {n} / {T}"; Graph tab: transporters over time with the dashed target line at T and a
-mark at minute D ("milk arrives"); control: Off/On (On = ×4).
-- HUD: goal "{n} / {T} transporters" (bar), after D "Milk sugar here · {n} transporters"; timer
-  "milk in {time}", after D "watching {time} more"; counter "{M} copies" (over par: "{M} copies · over par").
-  On a phone (under 400 px): goal "Transporters {n} / {T}" (the protein by its job, no symbol), and the
-  counter chip gives way to it (the copies made are in the focus bar just below) until over par, when it
-  reads "over par" and the goal drops its "/ {T}"; in the watch the goal reads "Watching the gene".
+**Try (the run; tier 3):** Gene zoom by default; counters "mRNA copies {m}" and "Lactose transporters {n}"
+with, under the transporters, "+ about {x} on the way" (PB2: {x} = `ppm` × the copies here or being made,
+to 10; nothing while none are on the way; the number the switch-off turns on, folded into the one
+counter rather than a new readout; the counters take the width they need so it is never cut, and on a
+short screen's one-row focus bar it reads "{n} +{x} on the way", the HUD just above naming the
+transporters); Graph tab: transporters over time with the dashed
+target line at T and a mark at minute D ("milk arrives"); control: Off/On (On = ×4), the graph's command
+marks "gene on" / "gene off". Before the run starts its story adds: "Each copy still here will be read into
+about twenty more transporters. The transporter counter adds them up as “on the way”." and "Switch the gene
+on, then run the cell."
+- HUD (PM1): goal "{n} of {T} lactose transporters" (bar), after D "Milk sugar here · {n} transporters";
+  timer "milk in {time}", after D "watching {time} more"; no copies counter (the counters under the cell
+  show them). On a phone: "Transporters {n} of {T}" and "Milk here · {n} transporters"; in the watch the
+  goal reads "Watching the gene".
+- Speed (PM4): once the gene is off with enough on the way (transporters + `ppm` × copies ≥ T), and again
+  at the milk, the run moves to 1 s = 1 min by itself (once each, only ever faster) with a note:
+  "Sped up to 1 s = 1 min: enough transporters are on the way." / "… while the cell lives on milk sugar."
+  (`def.speedUps`). An introducing callout pauses the run until its Next (pm3).
 - At D (schedule): glucose goes, lactose arrives, the switch locks ("Set by this level."), the view
   moves to Cell zoom (the student sees lactose markers entering through the transporters) and the
   economy readouts appear with their introducing sentences if new: sugar coming in, energy, growth.
@@ -1445,11 +1483,15 @@ mark at minute D ("milk arrives"); control: Off/On (On = ×4).
 #### 6.2.5 Goal and scoring
 - **G:** transporters ≥ T at some tick ≤ D·60 (as now).
 - **E:** `M` = lacY copies made from tick 0 to the end. `E = 1` if `M ≤ mPar`, else `clamp(1 − (M −
-  mPar)/mPar, 0, 1)`. The result sheet turns waste into energy: "Extra copies and the transporters
-  they made cost about {x} ATP: the energy from about {y} glucose." (`x` from the engine's ledger
-  for translation and transcription attributable to lacY above the reference solution's; `y = x/2`).
+  mPar)/mPar, 0, 1)`. The result's bar reads "Copies made: just enough" or "… more than needed" (no
+  number, no "par": `TEXT.resultWords`). When more than needed it says what the extras cost, in
+  transporters rather than millions of ATP (PM1): "The extra copies made about {extra} more transporters
+  than the cell could use. Building them used energy that could have gone into growing." ({extra} = final
+  − T, to 100), and why: "When you switched off, {m} copies were still being read, so about {a} more
+  transporters arrived after that." (never off before D: "The gene stayed on until the milk came. Switch
+  it off when the transporters plus the ones on the way reach {T}.").
 - **D:** 2 questions (below). **X:** bit 0 — final transporters ≤ Tmax with G met.
-- **What the student sees at the end:** "On milk sugar the cell grew at {pct}% of its glucose speed."
+- **What the student sees at the end:** "On milk sugar the cell grew at {pct}% of its speed on glucose. Enough transporters means close to full speed."
   (60-s mean λ in the last 5 minutes ÷ λ_ref, whole percent).
 - **Flags:** 0 `KEPT_ON_PAST_TARGET` (`MIDDLEMAN`), 1 `G1_MOLECULES_LAST` (g1), 2 `G2_INSTANT` (g2),
   3 `G2_MOLECULES_LAST` (g2), 4 `DEB_MIDDLEMAN`, 5 `DEB_PROTEIN_SELF_COPY`, 6 `DEB_CELL_DECIDES`, 7
@@ -1498,16 +1540,18 @@ the story and are repeated here so the whole thread can be read at once.
 | I3 | same | You | "Then build every transporter now, and stop when the milk arrives." | S |
 | I4 | same | narrator | "Each transporter is built from an mRNA copy of its gene. Before you plan, watch one copy at work." | S |
 | W1 | the lacY gene, off | narrator | "This is the lactose transporter gene. It is switched off, so nothing is being copied." | T (guess g1, switch on) |
-| W1b | the first copy outlined, its counter running | narrator | "The first copy is outlined. Watch how many transporters it is read into." | T |
-| W1b gate | the copy breaks up | narrator | "This copy was read into {n} transporters in {t}, then broken down. Meanwhile {k} more copies were made." | R |
+| W1b | the first copy outlined, its counter running | narrator | "The first copy is outlined. Watch how many transporters ribosomes build from it before it is broken down." | T |
+| W1b gate | the copy and the first ten copies broken down | narrator | "This copy gave {nTr} in {t}, then it was broken down. Copies last different times: the first {b} gave {avg} each on average." | R |
 | W2 | many copies with ribosomes | narrator | "Ribosome after ribosome reads each copy until it is broken down." | T (guess g2, switch off) |
 | W2b | copies left counting down | narrator | "The gene is off. Count the copies still left." | T |
-| W2b gate | the last copy gone | narrator | "Switching the gene off stopped new copies from being started. The copies already made were still read, so {a} more transporters arrived." | R |
+| W2b gate | a tenth of the copies left | narrator | "Switching the gene off stopped new copies from being started. The copies already made were still read: {a} more transporters in {tOff}." | R |
 | W2c | same | Ribosome | "I read each copy that reaches me until it is broken down. Nobody tells me the gene is off." | R |
-| W3 | same | narrator | "So one copy gives about twenty transporters, and they keep arriving for a few minutes after the gene is off." | R |
-| W3b | same | You | "About twenty from each copy. Then a handful of copies will do." | S |
+| W3 | same | narrator | "So one copy gives about {avg} transporters, and they keep arriving until the last copy is broken down." | R |
+| W3b | same | You | "About {avg} from each copy. Then a handful of copies will do." | S |
 | W3c | same | narrator | "Feeding a cell on milk sugar takes thousands of transporters, so it takes a few hundred copies." | R |
 | T1 | the run, paused, after the task card | narrator | "Switch off too late and energy goes on copies that are not needed. Switch off too early and too few transporters arrive." | S |
+| T1b | same | narrator | "Each copy still here will be read into about twenty more transporters. The transporter counter adds them up as “on the way”." | T |
+| T1c | same | narrator | "Switch the gene on, then run the cell." | T |
 | T2 | minute D: glucose gone, lactose markers at the transporters | narrator | "The glucose is gone. From now on the cell lives on what its transporters let in." | S |
 | O-fed1 | echo, when G was met within par | narrator | "The milk sugar arrived, and the transporters were already in place, so the cell kept growing." | R |
 | O-fed2 | same | narrator | "You switched one gene on and off at the right moments. The copies and the ribosomes did the rest." | R |
@@ -1738,10 +1782,10 @@ events; no absolute timestamps are added.
 | ZC-7 | `narrate.test.js` (extended) | `z.*` rules pass the full template lint and are true whenever they speak (scripted scenarios) |
 | TI-1 | `ui-level-pure.test.js` | each level's `labConfig.ui` is valid; the table of §5.3 holds (no hidden control is reachable; every introduced readout has its sentence) |
 | TI-2 | same | Simple and All modes of the lab expose the same commands |
-| L12-1…6 | `level-1-2.test.js` | the §6.2.7 solutions meet their expectations on 3 seeds per variant (40 in calibration); the watch gates open for the reference; the milk phase's growth line is true of the run; `LC.l12.ppm` lies in 15–25, so "about twenty" stays true |
+| L12-1…6 | `level-1-2.test.js` | the §6.2.7 solutions meet their expectations on 3 seeds per variant (40 in calibration); the watch gates open for the reference; W1b's gate opens only once the watched copy is gone and ten copies made from it on are broken down, its {avg} is their mean (8–40), the singular reads "1 transporter", W3 carries the same {avg}; W2b opens with a tenth of the copies left; the milk phase's growth line is true of the run; the Try's HUD has no copies counter and no "par"; `LC.l12.ppm` lies in 15–25, so "about twenty" stays true |
 | C-1 | `level-content.test.js` (extended) | every student string of this file's levels (TEXT of P, P2, 1.2 and later 1.1, 1.4, 1.7), step lines, guesses, introducing sentences and machine card lines pass the lint of §1.1 |
 | ST-1 | `story.test.js` | every story line has a speaker in {narrator, commander, ribosome}; every Commander line is answered by the next line the student reads, a narrator's; **per play path** (not per file: 1.2's three outros are three paths) at most 4 Commander and 1 Ribosome lines (P 4 + 1, P2 4 + 1, 1.2 3–4 + 1 after the review cut D1's Commander line, S5's and H13's Ribosome line); every outro variant's first line is true of the run it is shown after (1.2's reference, keepOn and weak solutions, 3 seeds each). The job tags (S, R, T) live in §2.8 and §6.2.8, not in the level data |
-| ST-2 | same | terms: in play order from P1 (story lines, guesses and their feedback where shown, causes, notes, machine cards, About rows, task, result and debrief text), a term of the §1.2 vocabulary (`TERMS`, with the step that introduces each) appears only at or after its introducing step, and that step uses it |
+| ST-2 | same | terms: in play order from P1 (story lines, guesses and their feedback where shown, causes, notes, wait and done lines, machine cards, About rows, task, the run's counter and speed notes, result and debrief text), a term of the §1.2 vocabulary (`TERMS`, with the step that introduces each) appears only at or after its introducing step, and that step uses it |
 
 ### 10.2 Browser checks (`tools/ui-check-opening.js`, `tools/ui-check-zoom.js`, run by `tools/ui-check.js`)
 
@@ -1752,10 +1796,10 @@ visible button, key, row and segment ≥ 44 × 44. Screenshots go to `test-artif
 
 | Id | Check |
 |---|---|
-| BO-1 | Part 1 by taps from home to its completion: every rung with its scale bar text present and inside the viewport; Closer and Back; the rail's sheet; a pinch-out and pinch-in by synthesized touch events step one rung each |
+| BO-1 | Part 1 by taps from home to its completion: every rung with its scale bar text present and inside the viewport; Closer and Back; the rail's sheet; a pinch-out and pinch-in by synthesized touch events step one rung each; "See what happens" goes on at once to the scene that shows it (D1 to D2, F4 to F5; PB3); no Skip anywhere on a first play (PM6) |
 | BO-2 | the letter fill: keys ≥ 44 px, a T pick for template A shows the U sentence, the sixth letter is U, "Let it run" disabled before six letters, the run ends at 465 |
 | BO-3 | the codon decode: six rows ≥ 48 px, "Full table" lists 64 codons, the chain ends at 110 |
-| BO-4 | Part 2: the economy scenes; the watch with its pointer ring on the right element at each gate (element bounding box contains the ring centre); the run stops at each gate on the real loop at 1 s = 10 s and 1 s = 1 min |
+| BO-4 | Part 2: the economy scenes; the watch with its pointer ring on the right element at each gate (element bounding box contains the ring centre); the run stops at each gate on the real loop at 1 s = 10 s and 1 s = 1 min; the switch answers its tap with no toast; at H10 the cell moves to 1 s = 1 min and the callout says so, and H11 waits with its own line (PM4) |
 | BO-5 | reduced motion: no transitions over 100 ms; the Protein zoom shows its four-panel strip |
 | BZ-1 | Cell zoom unchanged (the M2 screenshots match within tolerance) |
 | BZ-2 | Gene zoom for ptsG, lacY ×4 (many copies: "showing 6 of …"), lacZ (long gene: scale bar 200 nm), a gene off ("No copies of this gene right now."); the canvas ≥ 220 px tall with the HUD |

@@ -41,10 +41,13 @@ async function run(browser, port, OUT, check) {
     const page = s.page, probs = [], shot = shotter(s, 'P1', probs), tap = tapper(s);
     await tap('.level-row[data-level="P"]');
     const rungs = [], bars = [];
-    let backOk = null, ringOk = null, railOk = null, fill = null, decode = null, table = null;
+    let backOk = null, ringOk = null, railOk = null, fill = null, decode = null, table = null, skips = 0;
+    const sees = [];
     for (let guard = 0; guard < 160; guard++) {
       if ((await phase(page)) !== 'scenes') break;
       const i = await info(page);
+      // PM6: on a first play there is no Skip (it would skip the teaching); it comes once the part is finished.
+      skips += await page.locator('[data-action="skip"]:visible, .lv-skip:visible').count();
       if (i.scene.rung && rungs[rungs.length - 1] !== i.scene.rung) {
         rungs.push(i.scene.rung);
         // Its scale bar is drawn and inside the viewport, above the sheet.
@@ -81,6 +84,13 @@ async function run(browser, port, OUT, check) {
         await tap('.lv-option >> nth=' + (n - 1));
         if (full) await shot(i.scene.id + '-guess');
         await tap('[data-action="guess-see"]');
+        // PB3: "See what happens" goes on to the scene that shows it (D1 to D2, F4 to F5), never back to the same still.
+        const show = i.scene.guess && i.scene.guess.showAt;
+        if (show && show !== i.scene.id) {
+          const now = (await info(page)).scene.id;
+          sees.push(i.scene.id + '>' + now + (now === show ? ':ok' : ':no'));
+          if (full) await shot(now + '-after-see');
+        }
         continue;
       }
       const a = i.activity;
@@ -138,6 +148,9 @@ async function run(browser, port, OUT, check) {
       !!fill && fill.keys && fill.runBefore === 0 && /\bU\b/.test(fill.fb) && fill.sixth === 'U' && fill.total === 465, JSON.stringify(fill));
     check('BO-3 ' + s.tag + ' the codons: six rows ≥ 48 px (44 on a short screen), the full table has 64 codons, the chain is 110 long',
       !!decode && decode.rows.length === 6 && decode.rows.every((h) => h >= (vp[1] < 600 ? 44 : 48)) && table === 64 && decode.chain === 110, JSON.stringify({ decode, table }));
+    check('BO-1 ' + s.tag + ' PB3: "See what happens" goes on at once to the scene that shows it (D1 to D2, F4 to F5)',
+      sees.length === 2 && sees.every((x) => /:ok$/.test(x)), sees.join(' '));
+    check('BO-1 ' + s.tag + ' PM6: no Skip on a first play of part 1', skips === 0, String(skips));
     check(tag + ' part 1 ends on its completion screen: an unscored code, "What is simplified", "Next: Prologue 2"; the result is stored',
       done.phase === 'complete' && /^BTC2-P0-/.test(done.code || '') && /Prologue 2/.test(done.next) && done.simplified && done.stored === 1, JSON.stringify(done));
     finish(s, 'BO-1', probs);
@@ -155,6 +168,8 @@ async function run(browser, port, OUT, check) {
     }
     // The watch: each step's callout; a waiting step runs on the real loop (1 s = 10 s) and stops at its gate.
     const stops = [], pointed = [];
+    let h10 = null, h11 = null;
+    const toasts = [];
     for (let guard = 0; guard < 120; guard++) {
       if ((await phase(page)) !== 'watch') break;
       const w = await R(page, 'window.__btc.app.test.level.watch.info()');
@@ -162,7 +177,13 @@ async function run(browser, port, OUT, check) {
       const intro = await R(page, "!!document.querySelector('.guide:not([hidden]) [data-action=\"intro-next\"]')");
       if (intro) { await tap('[data-action="intro-next"]'); continue; }
       if (w.stage === 'guess') { await shot(w.id + '-guess'); await tap('.lv-option >> nth=0'); await tap('[data-action="guess-see"]'); continue; }
-      if (w.stage === 'act') { await shot(w.id + '-act'); await tap('.tb-ctrl .seg[data-key="on"]'); await page.waitForTimeout(300); continue; }
+      if (w.stage === 'act') {
+        await shot(w.id + '-act'); await tap('.tb-ctrl .seg[data-key="on"]'); await page.waitForTimeout(300);
+        // The switch was taken: no rejection toast.
+        const t = await R(page, "(() => { const t = document.getElementById('toast'); return t && !t.hidden ? t.textContent : ''; })()");
+        if (t) toasts.push(w.id + ': ' + t);
+        continue;
+      }
       if (w.stage === 'until' || w.stage === 'wait') {
         if (w.id === 'h4' || w.id === 'h7') {
           // The real loop: Run, then wait for the loop to stop by itself at the gate's tick.
@@ -171,10 +192,16 @@ async function run(browser, port, OUT, check) {
           await page.waitForFunction(() => !window.__btc.app.isRunning(), null, { timeout: 60000 });
           const st = await R(page, "{ tick: window.__btc.cell.tick, gate: window.__btc.app.test.level.runner().watch.gateTick['" + w.id + ":until'], id: window.__btc.app.test.level.watch.info().id }");
           stops.push(w.id + ':' + (st.tick === st.gate && st.id === w.id));
-        } else await R(page, 'window.__btc.app.test.level.watch.untilGate(40000)');
+        } else {
+          // PM4: H11 says what the cell is doing while it waits (no silent "Watching the cell…").
+          if (w.id === 'h11' && !h11) { h11 = await R(page, "{ speed: window.__btc.app.speed(), text: (document.querySelector('.guide:not([hidden])') || {}).textContent || '' }"); await shot('h11-wait'); }
+          await R(page, 'window.__btc.app.test.level.watch.untilGate(40000)');
+        }
         await page.waitForTimeout(250);
         continue;
       }
+      // PM4: at H10 the watch speeds up to 1 s = 1 min by itself and says so.
+      if (w.id === 'h10' && !h10) h10 = await R(page, "{ speed: window.__btc.app.speed(), text: (document.querySelector('.guide:not([hidden])') || {}).textContent || '' }");
       // The pointer's ring: on its element (a counter, the switch, the energy bar, the legend), or on the cell view.
       if (w.point) {
         pointed.push(w.id + ':' + await page.evaluate((pt) => {
@@ -196,6 +223,9 @@ async function run(browser, port, OUT, check) {
     await shot('complete');
     check('BO-4 ' + s.tag + ' part 2: on the real loop at 1 s = 10 s, the cell stops by itself at the tick of each gate (H4, H7)', stops.length === 2 && stops.every((x) => /:true$/.test(x)), stops.join(' '));
     check('BO-4 ' + s.tag + ' part 2: the pointer\'s ring is on the element (or the cell) each step is about', pointed.length >= 8 && pointed.every((x) => /:ok$/.test(x)), pointed.join(' '));
+    check('BO-4 ' + s.tag + ' part 2: the switch answers the tap with no toast', toasts.length === 0, toasts.join(' | '));
+    check('BO-4 ' + s.tag + ' PM4: at H10 the watch speeds up to 1 s = 1 min and says so; H11 waits with its own line',
+      !!h10 && h10.speed === 60 && /Sped up: 1 s = 1 min/.test(h10.text) && !!h11 && h11.speed === 60 && /More transporters are being built/.test(h11.text), JSON.stringify({ h10, h11 }).slice(0, 400));
     check('BO-4 ' + s.tag + ' part 2 ends on its completion screen: an unscored code, "Next: level 1.1"', done.phase === 'complete' && /^BTC2-P2-/.test(done.code || '') && /1\.1/.test(done.next), JSON.stringify(done));
     finish(s, 'BO-4', probs);
     await s.context.close();

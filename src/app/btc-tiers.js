@@ -259,10 +259,12 @@
       this.name = h('span', { class: 'tb-name' });
       this.sym = h('span', { class: 'sym' });
       this.counters = {};
-      const row = h('span', { class: 'tb-counters', 'data-n': String(fb.counters.length) });
+      const row = h('span', { class: 'tb-counters' + (fb.onTheWay ? ' has-sub' : ''), 'data-n': String(fb.counters.length) });
       for (const k of fb.counters) {
         const num = h('span', { class: 'tb-num num' }), lab = h('span', { class: 'tb-label' });
-        this.counters[k] = { num, lab, box: h('span', { class: 'tb-counter' + (k === 'rates' ? ' is-rates' : ''), 'data-counter': k }, [num, lab]) };
+        // The protein counter may add the ones still on the way (1.2's Try: about perCopy for each copy still here).
+        const sub = k === 'protein' && fb.onTheWay ? h('span', { class: 'tb-sub num' }) : null;
+        this.counters[k] = { num, lab, sub, box: h('span', { class: 'tb-counter' + (k === 'rates' ? ' is-rates' : ''), 'data-counter': k }, [num, lab, sub]) };
         row.appendChild(this.counters[k].box);
       }
       // The name, then the counters under it (beside it on a short screen); with several genes the whole row is the
@@ -294,13 +296,25 @@
       const set = (k, n, label) => { const c = this.counters[k]; if (!c) return; LY.setText(c.num, n); LY.setText(c.lab, label); };
       set('mRNA', F.count(gv.mRNA), T.mRNA);
       set('made', F.count(gv.mRNAMade), T.made);
-      // Three counters side by side on a phone: the protein's noun in one word ("Transporters"), the full one read aloud.
-      const short = this.ui.focusBar.counters.length >= 3 && app.layout === 'compact';
+      // Three counters side by side on a phone, or a counter with its "on the way" line in the one row of a short
+      // screen: the protein's noun in one word ("Transporters"), the full one read aloud.
+      const tiny = app.layout === 'compact' && typeof document !== 'undefined' && document.body.hasAttribute('data-short');
+      const short = app.layout === 'compact' && (this.ui.focusBar.counters.length >= 3 || (tiny && !!this.ui.focusBar.onTheWay));
       // Counted in working machines: a four-chain lactose-splitting enzyme is one (F.machines).
       set('protein', F.count(F.machines(gv)), proteinsWord(model, id, true, short));
       if (this.counters.protein) {
-        const full = proteinsWord(model, id) + ' ' + F.count(F.machines(gv));
-        if (this.counters.protein.box.getAttribute('aria-label') !== full) this.counters.protein.box.setAttribute('aria-label', full);
+        const c = this.counters.protein, ow = this.ui.focusBar.onTheWay;
+        let full = proteinsWord(model, id) + ' ' + F.count(F.machines(gv));
+        if (c.sub && ow) {
+          // Each copy still here, or being made, will be read into about perCopy more (a copy's future is memoryless), to 10;
+          // nothing while none are on the way, and the short form in a short screen's one row.
+          const x = Math.round((ow.perCopy * (gv.mRNA + gv.nascent)) / 10) * 10;
+          const t = x > 0 ? F.fill(tiny && ow.short ? ow.short : ow.text, { x: F.count(x) }) : '';
+          LY.setText(c.sub, t);
+          c.box.classList.toggle('has-way', !!t);
+          if (t) full += ' ' + F.fill(ow.text, { x: F.count(x) });
+        }
+        if (c.box.getAttribute('aria-label') !== full) c.box.setAttribute('aria-label', full);
       }
       if (this.counters.rates) {
         // A trailing mean over about a minute of simulated time (the instantaneous rates flicker tick to tick).

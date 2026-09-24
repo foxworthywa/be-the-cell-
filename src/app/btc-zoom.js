@@ -463,7 +463,7 @@
       if (this.els.legendFull) { LY.setText(this.els.legendFull, legend); LY.setText(this.els.legendShort, legend); }
     }
 
-    /** The row under the picture: "What does not fit?" (Protein zoom, when nothing that does not fit is present). */
+    /** The row under the picture: "Show a sugar that does not fit" (Protein zoom, when nothing that does not fit is present). */
     extraFor(level) {
       const T = this.CU.TEXT.protein;
       if (level === 'protein') {

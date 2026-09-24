@@ -11,9 +11,7 @@
  * to 599 px the goal keeps its long form (its words) and the timer, counter and action take their short ones, so
  * the goal chip is never squeezed to a stub by the other two (it was about 100 px at 480 px before). The
  * short counter keeps one word of unit ("2/3 tests", "32/32 mRNA", "1/2 changes"), and counter.over (past par)
- * marks it in the warning colour, with "over par" in its long form. A counter may give a `tiny` form for under
- * 400 px ('' hides the chip there): 1.2's goal "Transporters 1,404 / 5,800" needs the room, and its copies are in
- * the focus bar just below; the chip comes back as "over par".
+ * marks it in the warning colour, with "more than needed" in its long form (the student never reads "par").
  * A goal with a gauge {lo, hi, max, value} (1.4) draws a band gauge along the chip's
  * bottom instead of a progress bar: the band marked, a tick at the value. State is
  * never colour alone: the goal chip carries words. When the run ends with the
@@ -62,9 +60,8 @@
         value: Math.max(0, Math.min(1, goal.gauge.value / goal.gauge.max)),
       } : null,
       timer: (m.timer && ((mid && m.timer.short) || m.timer.text)) || '',
-      counter: m.counter && !(narrow && act)
-        ? (narrow && typeof m.counter.tiny === 'string' ? m.counter.tiny : mid && m.counter.short ? m.counter.short : m.counter.text) : '',
-      // Over par: the long form says so in words; both forms are marked (a colour on top of the numbers).
+      counter: m.counter && !(narrow && act) ? (mid && m.counter.short ? m.counter.short : m.counter.text) : '',
+      // Over par: the long form says so in words ("more than needed"); both forms are marked (a colour on top of the numbers).
       over: !!(m.counter && m.counter.over),
       label: F.fill(G.taskLabel, { text: goal.text || '' }),
     };

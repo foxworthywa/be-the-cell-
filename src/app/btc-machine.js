@@ -402,27 +402,63 @@
     c.strokeStyle = color; c.lineWidth = Math.max(1.5, s * 0.07); c.stroke();
   }
 
+  // The folded shape's bead places (unit disc, a dent at the top like a pocket), cached per bead count: a sunflower
+  // packing, filled from the middle out, skipping the dent, then ordered so that beads next to each other on the chain
+  // land near each other (a greedy walk), so the chain visibly gathers into one compact shape.
+  const foldCache = {};
+  function foldPlaces(k) {
+    if (foldCache[k]) return foldCache[k];
+    const GA = Math.PI * (3 - Math.sqrt(5)), dent = 0.42, pts = [];
+    const M = Math.ceil(k * 1.2) + 4;
+    for (let m = 0; pts.length < k && m < 4 * M; m++) {
+      const rr = Math.sqrt((m + 0.5) / M), a = m * GA;
+      let d = ((a + Math.PI / 2) % TAU + TAU) % TAU; if (d > Math.PI) d -= TAU;
+      if (Math.abs(d) < dent && rr > 0.38) continue;                     // the dent (a pocket-like notch at the top)
+      pts.push([rr * Math.cos(a), rr * Math.sin(a)]);
+    }
+    // A chain order: start at the dent's left lip, then always the nearest free place.
+    const out = [], used = new Array(pts.length).fill(false);
+    let cur = [-0.5, -0.85];
+    for (let i = 0; i < pts.length; i++) {
+      let best = -1, bd = Infinity;
+      for (let j = 0; j < pts.length; j++) if (!used[j]) { const dx = pts[j][0] - cur[0], dy = pts[j][1] - cur[1], dd = dx * dx + dy * dy; if (dd < bd) { bd = dd; best = j; } }
+      used[best] = true; out.push(pts[best]); cur = pts[best];
+    }
+    foldCache[k] = out;
+    return out;
+  }
   /**
-   * A chain folding into its machine (§4.1 Fold): n beads in a line (t = 0) gather onto the
-   * machine's outline (t = 1). Oily beads (hatched) are drawn thicker. oily: a function i → bool.
+   * A chain folding into its shape (§4.1 Fold; PM8): n beads in a line (t = 0) gather into one compact shape with a
+   * dent like a pocket (t = 1), the chain drawn as a thin line through them. Oily beads (hatched) are drawn thicker.
+   * oily: a function i → bool. len: the line's length; r: the bead radius.
    */
   function drawChainFold(c, P, color, n, t, x, y, len, r, oily) {
-    const k = Math.max(2, n);
+    const k = Math.max(2, n), pl = foldPlaces(k);
+    const R = r * 2.35 * Math.sqrt(k * 1.2 + 4) / 2 * 1.05;           // beads about touching in the packed shape
+    const e = t * t * (3 - 2 * t);
+    const at = (i) => {
+      const lx = x - len / 2 + (len * i) / (k - 1), ly = y + Math.sin(i * 0.9) * r * 0.6 * (1 - e);
+      const fx = x + pl[i][0] * R, fy = y + pl[i][1] * R;
+      return [lx + (fx - lx) * e, ly + (fy - ly) * e];
+    };
+    if (e > 0.5) {
+      // The folded shape's outline, with its dent, fading in.
+      const dent = 0.42, R2 = R * 1.12;
+      c.globalAlpha = ((e - 0.5) / 0.5) * 0.25;
+      c.beginPath(); c.moveTo(x + Math.cos(-Math.PI / 2 + dent) * R2, y + Math.sin(-Math.PI / 2 + dent) * R2);
+      c.arc(x, y, R2, -Math.PI / 2 + dent, -Math.PI / 2 - dent + TAU);
+      c.lineTo(x, y - R * 0.3); c.closePath();
+      c.fillStyle = color; c.fill(); c.globalAlpha = 1;
+    }
+    c.beginPath();
+    for (let i = 0; i < k; i++) { const p = at(i); if (i === 0) c.moveTo(p[0], p[1]); else c.lineTo(p[0], p[1]); }
+    c.strokeStyle = color; c.globalAlpha = 0.45; c.lineWidth = Math.max(1, r * 0.35); c.stroke(); c.globalAlpha = 1;
     c.beginPath();
     for (let i = 0; i < k; i++) {
-      const lx = x - len / 2 + (len * i) / (k - 1), ly = y;
-      const a = (i / k) * TAU - Math.PI / 2, rr = len * 0.22 * (1 + 0.18 * Math.sin(i * 1.7));
-      const fx = x + Math.cos(a) * rr, fy = y + Math.sin(a) * rr;
-      const bx = lx + (fx - lx) * t, by = ly + (fy - ly) * t;
-      const br = oily && oily(i) ? r * 1.4 : r;
-      c.moveTo(bx + br, by); c.arc(bx, by, br, 0, TAU);
+      const p = at(i), br = oily && oily(i) ? r * 1.4 : r;
+      c.moveTo(p[0] + br, p[1]); c.arc(p[0], p[1], br, 0, TAU);
     }
     c.fillStyle = color; c.fill();
-    if (t > 0.6) {
-      c.globalAlpha = (t - 0.6) / 0.4 * 0.28;
-      c.beginPath(); c.arc(x, y, len * 0.26, 0, TAU); c.fillStyle = color; c.fill();
-      c.globalAlpha = 1;
-    }
   }
 
   // ---------------------------------------------------------------------------
@@ -531,7 +567,7 @@
           drawMol(c, P, M.nonfit, mx, myPx, s, flat, 1);
           if (o.labels.nonfit) this.label(c, P, o.labels.nonfit, 8, Math.max(o.top + 30, myPx), 'left', true);
         } else if (o.showPicture && M.nonfit) {
-          // "What does not fit?": a still picture of the nearest molecule that does not fit, at the rim.
+          // "Show a sugar that does not fit": a still picture of the nearest molecule that does not fit, at the rim.
           drawMol(c, P, M.nonfit, g.x + 1.2 * s, g.y + (rimY - halfH - 0.08) * s, s, flat, 1);
           this.label(c, P, o.labels.picture, 8, Math.max(o.top + 30, g.y + (rimY - halfH - 0.08) * s), 'left', true);
         }

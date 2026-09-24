@@ -51,8 +51,9 @@
       },
       context: ['At minute {D} the glucose runs out and milk sugar arrives.',
         'Without enough lactose transporters, the cell will be short of energy and grow slowly on milk sugar.'],
-      goal: 'Have {T} lactose transporters in the membrane by minute {D}.',
-      core: ['Reach {T} by minute {D}.', 'Switch the gene off when enough are on the way: every extra copy costs energy.'],
+      goal: 'Before the milk arrives at minute {D}, get {T} lactose transporters into the membrane: enough to feed the cell on milk sugar.',
+      core: ['Switch the gene on early: transporters arrive minutes after the switch.',
+        'Switch the gene off when the transporters plus the ones on the way reach {T}.'],
       expert: ['Finish with no more than {tMax} transporters: switch off at the right moment.'],
     },
     story: {
@@ -64,6 +65,8 @@
       ],
       onRun: [
         { who: 'narrator', text: 'Switch off too late and energy goes on copies that are not needed. Switch off too early and too few transporters arrive.' },
+        { who: 'narrator', text: 'Each copy still here will be read into about {ppmWords} more transporters. The transporter counter adds them up as “on the way”.' },
+        { who: 'narrator', text: 'Switch the gene on, then run the cell.' },
       ],
       milk: [
         { who: 'narrator', text: 'The glucose is gone. From now on the cell lives on what its transporters let in.' },
@@ -90,31 +93,39 @@
     },
     steps: {
       w1: [{ who: 'narrator', text: 'This is the lactose transporter gene. It is switched off, so nothing is being copied.' }],
-      w1b: [{ who: 'narrator', text: 'The first copy is outlined. Watch how many transporters it is read into.' }],
+      w1b: [{ who: 'narrator', text: 'The first copy is outlined. Watch how many transporters ribosomes build from it before it is broken down.' }],
       w2: [{ who: 'narrator', text: 'Ribosome after ribosome reads each copy until it is broken down.' }],
       w2b: [{ who: 'narrator', text: 'The gene is off. Count the copies still left.' }],
       w2c: [{ who: 'ribosome', text: 'I read each copy that reaches me until it is broken down. Nobody tells me the gene is off.' }],
       w3: [
-        { who: 'narrator', text: 'So one copy gives about {ppmWords} transporters, and they keep arriving for a few minutes after the gene is off.' },
-        { who: 'commander', text: 'About {ppmWords} from each copy. Then a handful of copies will do.' },
+        { who: 'narrator', text: 'So one copy gives about {avg} transporters, and they keep arriving until the last copy is broken down.' },
+        { who: 'commander', text: 'About {avg} from each copy. Then a handful of copies will do.' },
         { who: 'narrator', text: 'Feeding a cell on milk sugar takes thousands of transporters, so it takes a few hundred copies.' },
       ],
     },
+    // One copy's life is chance (a copy may be broken down after one transporter); the gate waits for the first ten copies
+    // to be broken down, so their average is there beside it (PB1). The first ten by when they were made, not the first
+    // ten to go: those are the short-lived ones, and their average would be too low. {nTr}: "1 transporter", "7 transporters".
     causes: {
-      w1b: 'This copy was read into {n} transporters in {t}, then broken down. Meanwhile {k} more copies were made.',
-      w2b: 'Switching the gene off stopped new copies from being started. The copies already made were still read, so {a} more transporters arrived.',
+      w1b: 'This copy gave {nTr} in {t}, then it was broken down. Copies last different times: the first {b} gave {avg} each on average.',
+      w2b: 'Switching the gene off stopped new copies from being started. The copies already made were still read: {a} more transporters in {tOff}.',
+    },
+    one: 'transporter', many: 'transporters',
+    wait: {
+      w1b: 'Ribosomes are reading the copies. The count waits until the first ten copies have all been broken down.',
+      w2b: 'No new copies are started. The copies left are still read, and are broken down one by one.',
     },
     notes: {
       on: 'The gene is on again, so new copies are being made. Switch it off to carry on.',
       off: 'The gene is off, so no copy is being made. Switch it on to carry on.',
     },
     g1: {
-      prompt: 'When you switch the gene on, how many transporters will one mRNA copy be read into before it is broken down?',
+      prompt: 'When you switch the gene on, how many transporters will ribosomes build from one mRNA copy before it is broken down?',
       options: [
-        { t: 'One.', mc: 'OTHER', fb: 'Ribosome after ribosome read the same copy. This one gave {n} before it was broken down.' },
-        { t: 'About {ppmWords}.', cause: true, fb: 'Ribosome after ribosome read it until it was broken down. This one gave {n}; the average is about {ppmWords}.' },
-        { t: 'Thousands.', mc: 'OTHER', fb: 'Each copy lasts only minutes, so it gives tens, not thousands. This one gave {n}.' },
-        { t: 'It is never broken down, so it keeps going.', mc: 'MOLECULES_LAST', fb: 'Copies are broken down within minutes. This one lasted {t} and gave {n}.' },
+        { t: 'One.', mc: 'OTHER', fb: 'Ribosome after ribosome read each copy. This one gave {nTr}; on average a copy gave {avg}.' },
+        { t: 'About {ppmWords}.', cause: true, fb: 'Ribosome after ribosome read each copy until it was broken down. This one gave {nTr}; on average a copy gave {avg}.' },
+        { t: 'Thousands.', mc: 'OTHER', fb: 'Each copy lasts only minutes, so it gives tens, not thousands. This one gave {nTr}; on average a copy gave {avg}.' },
+        { t: 'It is never broken down, so it keeps going.', mc: 'MOLECULES_LAST', fb: 'Copies are broken down within minutes. This one lasted {t} and gave {nTr}.' },
       ],
     },
     g2: {
@@ -158,17 +169,20 @@
       mRNATemp: 'mRNA copies are temporary',
       mRNATempNote: 'Your cells’ mRNA copies are also broken down after a while. That is how a cell stops making a protein soon after its gene is switched off.',
     },
+    // The Try's top bar: the goal and the time only (the copies are counted just under the cell, PM1).
     hud: {
-      goal: '{count} / {T} lactose transporters', goalShort: 'Transporters {count} / {T}', goalOverShort: 'Transporters {count}',
-      milk: 'Milk sugar here · {count} transporters', milkShort: 'Milk here · {count}',
+      goal: '{count} of {T} lactose transporters', goalShort: 'Transporters {count} of {T}',
+      milk: 'Milk sugar here · {count} transporters', milkShort: 'Milk here · {count} transporters',
       timer: 'milk in {time}', timerShort: 'milk in {time}', watchTimer: 'watching {time} more', watchTimerShort: '{time} more',
-      counter: '{m} copies', counterShort: '{m} copies', counterOver: '{m} copies · over par', counterOverShort: '{m} · over par', counterOverTiny: 'over par',
       copy: 'This copy: read into {n}', copyGone: 'Read into {n}, then broken down', copyShort: 'Read into {n}',
       sinceOff: '+{a} transporters since the switch-off', sinceOffShort: '+{a} since off',
       watchGoal: 'Watching the lactose transporter gene', watchGoalShort: 'Watching the gene',
       watchCounter: '{m} copies made', watchCounterShort: '{m} made', clock: 'minute {t}',
     },
     graph: { target: 'target {T}', milk: 'milk arrives' },
+    // The transporter counter in the Try (PB2): the transporters, and about how many the copies still here will give.
+    onTheWay: '+ about {x} on the way', onTheWayShort: '+{x} on the way',
+    spedUp: { enough: 'Sped up to 1 s = 1 min: enough transporters are on the way.', milk: 'Sped up to 1 s = 1 min while the cell lives on milk sugar.' },
     narr: {
       read: 'Ribosomes are reading every copy; each copy gives about {ppmWords} transporters before it is broken down.',
       leftover: 'The gene is off, but the copies already made are still being read.',
@@ -177,11 +191,14 @@
       fed: 'Enough lactose gets in through the transporters, so the cell keeps growing.',
     },
     result: {
-      growth: 'On milk sugar the cell grew at {pct}% of its glucose speed.',
+      growth: 'On milk sugar the cell grew at {pct}% of its speed on glucose. Enough transporters means close to full speed.',
       copies: 'You made {m} copies; about {need} would have given {T} transporters.',
-      cost: 'Extra copies and the transporters they made cost about {atp} ATP: the energy from about {glc} glucose.',
-      hint: 'Each copy already made gives about {ppmWords} more transporters, so switch off before the count reaches the target.',
+      cost: 'The extra copies made about {extra} more transporters than the cell could use. Building them used energy that could have gone into growing.',
+      hint: 'When you switched off, {m} copies were still being read, so about {a} more transporters arrived after that.',
+      hintOn: 'The gene stayed on until the milk came. Switch it off when the transporters plus the ones on the way reach {T}.',
     },
+    // The result's bar in plain words (no percentage, no "par"): copies made, just enough or more than needed (PM1).
+    resultWords: { efficiency: 'Copies made', within: 'just enough', over: 'more than needed', mark: 'enough', hideValue: true },
   };
 
   const cmd = (level) => ({ type: 'setPromoter', gene: 'lacY', level });
@@ -200,15 +217,25 @@
     return x <= L.parFree ? 1 : clamp01(1 - (0.2 * (x - L.parFree)) / (L.parX - L.parFree));
   }
 
-  /** The watch cell's monitor: the watched copy (BTC.MRNAWatch), copies made meanwhile, transporters since the switch-off. */
+  /** "1 transporter", "7 transporters". */
+  const transporters = (n) => (n === 1 ? '1 ' + TEXT.one : comma(n) + ' ' + TEXT.many);
+
+  /**
+   * The watch cell's monitor: the watched copy (BTC.MRNAWatch), copies made meanwhile, transporters since the switch-off,
+   * and the own count of each of the first TRACK copies made (the same share of the gene's new ribosomes as the watched
+   * copy's, Engine §7.5), so their average can stand beside the one watched (PB1).
+   */
+  const TRACK = 10;
+  const WATCH_OLD_S = 180;          // W1b: the watch speeds up once the outlined copy has been read this long
   function watchMonitor() {
-    let st = { m: 0, mRNA: 0, nascent: 0, level: 'off', n: 0, alive: false, life: 0, k: 0, base: 0, watching: false, offTick: -1, pOff: 0, a: 0, tick: 0 };
+    let st = { m: 0, mRNA: 0, nascent: 0, level: 'off', n: 0, alive: false, life: 0, k: 0, base: 0, watching: false, offTick: -1, pOff: 0, a: 0, tick: 0,
+      dt: 1, track: {}, seen: 0, goneN: 0, goneSum: 0 };
     let w = null;
     return {
       start(cell) { const g = cell.observe().geneById.lacY; st.m = g.mRNAMade; },
       onTick(cell, ctx) {
         const v = cell.observe(), g = v.geneById.lacY;
-        st.tick = cell.tick; st.m = g.mRNAMade; st.mRNA = g.mRNA; st.nascent = g.nascent;
+        st.tick = cell.tick; st.m = g.mRNAMade; st.mRNA = g.mRNA; st.nascent = g.nascent; st.dt = v.scale.dt_s;
         const on = isOn(g);
         if (ctx && ctx.watchedId !== null && ctx.watchedId !== undefined && !st.watching) {
           w = new MRNAWatch('lacY');
@@ -219,14 +246,31 @@
           st.n = w.started; st.alive = w.alive; st.life = w.lifetime(cell.tick);
           if (w.alive) st.k = g.mRNAMade - st.base;
         }
+        // Each tracked copy alive at this tick's start takes its share; one no longer here was broken down.
+        const share = g.tlCopies > 0 && g.tlStarts_perS > 0 ? (g.tlStarts_perS * st.dt) / g.tlCopies : 0;
+        const here = {};
+        for (let j = 0; j < g.mRNA; j++) here[g.mRNAIds[j]] = true;
+        for (const id of Object.keys(st.track)) {
+          st.track[id] += share;
+          if (!here[id]) { st.goneN++; st.goneSum += st.track[id]; delete st.track[id]; }
+        }
+        // The first copies made join, oldest first (ids are never reused, and a copy broken down is no longer in the list).
+        if (st.seen < TRACK && g.mRNA > 0) {
+          const ids = Array.from(g.mRNAIds.slice(0, g.mRNA)).sort((x, y) => x - y);
+          for (const id of ids) if (st.seen < TRACK && st.track[id] === undefined && id > (st.lastId === undefined ? -1 : st.lastId)) { st.track[id] = 0; st.seen++; st.lastId = id; }
+        }
         // The switch-off after the watched copy: transporters made from then on.
         if (st.watching && st.offTick < 0 && st.level !== 'off' && !on) { st.offTick = cell.tick; st.pOff = g.proteinMade; }
         if (st.offTick >= 0) st.a = g.proteinMade - st.pOff;
         st.level = on ? g.level : 'off';
       },
-      vars() { return { n: Math.round(st.n), t: lifeWords(st.life), k: st.k, a: comma(st.a), m: st.mRNA }; },
-      save() { return Object.assign({}, st, { w: w ? w.save() : null }); },
-      restore(s) { st = Object.assign({}, s); w = s.w ? MRNAWatch.restore(s.w) : null; delete st.w; },
+      vars() {
+        const n = Math.round(st.n), avg = st.goneN ? Math.round(st.goneSum / st.goneN) : Math.round(L.ppm);
+        return { n, nTr: transporters(n), t: lifeWords(st.life), k: st.k, a: comma(st.a), m: st.mRNA, b: st.goneN, avg,
+          tOff: lifeWords(st.offTick >= 0 ? (st.tick - st.offTick) * st.dt : 0) };
+      },
+      save() { return Object.assign({}, st, { track: Object.assign({}, st.track), w: w ? w.save() : null }); },
+      restore(s) { st = Object.assign({}, s, { track: Object.assign({}, s.track || {}) }); w = s.w ? MRNAWatch.restore(s.w) : null; delete st.w; },
     };
   }
 
@@ -280,16 +324,17 @@
             focusBar: counters, tabs: ['cell'], introduce: ['counter.mRNA', 'counter.made', 'counter.protein'] },
         });
       }
-      // The Try: the counters, Off/On (On = ×4) and one graph with the target and the milk's arrival; from minute D the
-      // economy readouts (sugar coming in, energy, growth) join, each introduced once.
+      // The Try: the copies now and the transporters with about how many the copies still here will give ("on the way",
+      // PB2: the number the decision needs, in the one transporter counter), Off/On (On = ×4) and one graph with the
+      // target and the milk's arrival; from minute D the economy readouts (sugar coming in, energy, growth) join.
       const milk = !!mon.milk;
       return Object.assign(base, {
         speedOptions: [10, 60], defaultSpeed: 10, startPaused: true, tabs: ['cell', 'graphs'], graphWindow: (v.D + MILK_MIN) * 60,
         ui: { tier: 3, status: { energy: milk, growth: milk, sugarIn: milk }, zoom: { levels: ['cell', 'gene', 'protein'], initial: 'gene' },
-          focusBar: counters, tabs: ['cell', 'graph'],
+          focusBar: { counters: ['mRNA', 'protein'], control: 'onoff', onLevel: ON, onTheWay: { perCopy: L.ppm, text: TEXT.onTheWay, short: TEXT.onTheWayShort } }, tabs: ['cell', 'graph'],
           graph: { series: [{ gene: 'lacY', kind: 'protein' }], target: { y: v.T, label: K.fill(TEXT.graph.target, { T: comma(v.T) }) },
             marks: [{ t: v.D * 60, label: TEXT.graph.milk }], window: (v.D + MILK_MIN) * 60 },
-          introduce: milk ? ['readout.sugarIn', 'status.energy', 'status.growth'] : ['counter.made', 'graph.protein', 'graph.target'] },
+          introduce: milk ? ['readout.sugarIn', 'status.energy', 'status.growth'] : ['graph.protein', 'graph.target'] },
       });
     },
     /** The screen changes when the milk arrives (the economy readouts join). */
@@ -298,15 +343,50 @@
     watch: {
       gene: 'lacY', onLevel: ON,
       monitor: watchMonitor,
+      tests: {
+        /** The watched copy and the first ten copies made from it on (ids from the watched one up) are all broken down. */
+        watchedGoneAndTen: (v, p, mem, ctx) => {
+          const g = v.geneById.lacY, w = ctx.watchedId;
+          if (w === null || w === undefined) return false;
+          const first = mem.first || (mem.first = []), here = {};
+          for (let j = 0; j < g.mRNA; j++) here[g.mRNAIds[j]] = true;
+          if (first.length < TRACK) {
+            const ids = Array.from(g.mRNAIds.slice(0, g.mRNA)).filter((id) => id >= w && first.indexOf(id) < 0 && id > (first.length ? first[first.length - 1] : -1)).sort((x, y) => x - y);
+            for (const id of ids) if (first.length < TRACK) first.push(id);
+          }
+          return !here[w] && first.length === TRACK && first.every((id) => !here[id]);
+        },
+        /**
+         * The outlined copy is gone, or has been read for three minutes: past that its count only grows, so the watch
+         * need not sit at 1 s = 10 s (a copy can last ten minutes and more; PM4).
+         */
+        watchedGoneOrOld: (v, p, mem, ctx) => {
+          const g = v.geneById.lacY, w = ctx.watchedId;
+          if (w === null || w === undefined) return false;
+          const dt = v.tick > 0 ? v.t_s / v.tick : 1;
+          for (let j = 0; j < g.mRNA; j++) if (g.mRNAIds[j] === w) return (v.tick - g.mRNABirthTick[j]) * dt >= WATCH_OLD_S;
+          return true;
+        },
+        /** A tenth (or less) of the copies there were when this began are left, mature or being made. */
+        fewCopiesLeft: (v, p, mem) => {
+          const g = v.geneById.lacY, c = g.mRNA + g.nascent;
+          if (mem.start === undefined) mem.start = c;
+          return c <= Math.floor(mem.start / 10);
+        },
+      },
       steps: [
         { id: 'w1', lines: TEXT.steps.w1, point: 'control:promoter', guess: Object.assign({ id: 'g1', showAt: 'w1b' }, TEXT.g1),
           act: { kind: 'command', expect: { type: 'setPromoter', gene: 'lacY', on: true } }, gate: { kind: 'act' } },
+        // PB1: the outlined copy gone and ten copies broken down, so its count stands beside an average.
         { id: 'w1b', until: { test: 'firstMRNA', watch: true, pause: true }, lines: TEXT.steps.w1b, point: 'mrna:first',
-          gate: { kind: 'state', test: 'watchedGone', pause: true }, cause: TEXT.causes.w1b, offerSpeed: 60 },
+          gate: { kind: 'state', test: 'watchedGoneAndTen', pause: true }, cause: TEXT.causes.w1b, wait: TEXT.wait.w1b, offerSpeed: 60,
+          // Once the outlined copy is gone (or has been read for three minutes), the rest of the wait goes at 1 s = 1 min.
+          speed: { to: 60, test: 'watchedGoneOrOld' } },
         { id: 'w2', lines: TEXT.steps.w2, point: 'control:promoter', guess: Object.assign({ id: 'g2', showAt: 'w2b' }, TEXT.g2),
           act: { kind: 'command', expect: { type: 'setPromoter', gene: 'lacY', on: false } }, gate: { kind: 'act' } },
-        { id: 'w2b', lines: TEXT.steps.w2b, point: 'counter:mRNA', gate: { kind: 'state', test: 'allMRNAGone', pause: true }, cause: TEXT.causes.w2b,
-          notes: [{ test: 'geneOn', text: TEXT.notes.on }], offerSpeed: 60 },
+        // PM5: on once a tenth of the copies are left (the last one can take twenty minutes of game time).
+        { id: 'w2b', lines: TEXT.steps.w2b, point: 'counter:mRNA', gate: { kind: 'state', test: 'fewCopiesLeft', pause: true }, cause: TEXT.causes.w2b,
+          wait: TEXT.wait.w2b, notes: [{ test: 'geneOn', text: TEXT.notes.on }], speed: 60 },
         { id: 'w2c', lines: TEXT.steps.w2c, gate: { kind: 'tap' } },
         { id: 'w3', lines: TEXT.steps.w3, gate: { kind: 'tap' } },
       ],
@@ -335,33 +415,27 @@
       const left = milk ? Math.max(0, END - s.tick) : Math.max(0, Dt - s.tick);
       const H = TEXT.hud, cf = comma(count), Tf = comma(v.T);
       const shortTime = left < 60 ? K.clock(left, true) : Math.ceil(left / 60) + ' min';
-      // Over par once the transporters already made are beyond what par allows (the extra copies are already made).
-      const over = s.made > (1 + L.parX) * v.T;
-      // On a phone (under 400 px) the goal and its target take the room before the milk: the copies made are in the
-      // focus bar just below, so the counter chip gives way ('' hides it) and comes back as "over par"; by then the
-      // count is past the target, so the goal drops "/ T" to make room for it.
-      const counter = over ? { text: K.fill(H.counterOver, { m: comma(s.m) }), short: K.fill(H.counterOverShort, { m: comma(s.m) }), over: true }
-        : { text: K.fill(H.counter, { m: comma(s.m) }), short: K.fill(H.counterShort, { m: comma(s.m) }) };
-      if (!milk) counter.tiny = over ? H.counterOverTiny : '';
+      // The goal and the time only (PM1): the copies are counted under the cell, with the transporters still on the way.
       return {
         goal: milk
           ? { text: K.fill(H.milk, { count: cf }), short: K.fill(H.milkShort, { count: cf }), progress: null, done: !!s.reached }
-          : { text: K.fill(H.goal, { count: cf, T: Tf }), short: K.fill(over ? H.goalOverShort : H.goalShort, { count: cf, T: Tf }),
-            progress: Math.min(1, s.count / v.T), done: !!s.reached },
+          : { text: K.fill(H.goal, { count: cf, T: Tf }), short: K.fill(H.goalShort, { count: cf, T: Tf }), progress: Math.min(1, s.count / v.T), done: !!s.reached },
         timer: { text: K.fill(milk ? H.watchTimer : H.timer, { time: K.clock(left, true) }), short: K.fill(milk ? H.watchTimerShort : H.timerShort, { time: shortTime }) },
-        counter,
       };
     },
 
     monitor(v) {
       const Dt = v.D * 60, END = (v.D + MILK_MIN) * 60;
       let st = { tick: 0, count: 0, made: 0, m: 0, mRNA: 0, nascent: 0, level: 'off', reached: false, reachedTick: -1, onRun: 0, keptOn: false,
-        keptOnTick: -1, onAtDeadline: false, countAtD: 0, milk: false, lamSum: 0, lamN: 0, energy: 'normal', growth: 'normal', commands: 0 };
+        keptOnTick: -1, onAtDeadline: false, countAtD: 0, milk: false, lamSum: 0, lamN: 0, energy: 'normal', growth: 'normal', commands: 0,
+        offTick: -1, offCopies: 0, offMade: 0 };
       return {
         start(cell) { st.count = cell.observe().geneById.lacY.protein; },
         onTick(cell) {
           const v2 = cell.observe(), g = v2.geneById.lacY, on = isOn(g);
           st.tick = cell.tick; st.count = g.protein; st.made = g.proteinMade; st.m = g.mRNAMade; st.mRNA = g.mRNA; st.nascent = g.nascent;
+          // The last switch-off before the milk: the copies still there, and the transporters made from then on (the result's hint).
+          if (st.level !== 'off' && !on && cell.tick <= Dt) { st.offTick = cell.tick; st.offCopies = g.mRNA + g.nascent; st.offMade = g.proteinMade; }
           st.level = on ? g.level : 'off';
           if (!st.reached && g.protein >= v.T && cell.tick <= Dt) { st.reached = true; st.reachedTick = cell.tick; }
           // KEPT_ON_PAST_TARGET: lacY on for 30 game-s in a row after the count first reached T (before the milk).
@@ -379,7 +453,8 @@
         end() { return st.tick >= END ? 'done' : null; },
         result() {
           return { goal: st.reached, reachedTick: st.reachedTick, m: st.m, made: st.made, count: st.count, countAtD: st.countAtD, keptOn: st.keptOn,
-            keptOnTick: st.keptOnTick, onAtDeadline: st.onAtDeadline, growth: st.lamN ? st.lamSum / st.lamN / LAMBDA_REF : 0, commands: st.commands };
+            keptOnTick: st.keptOnTick, onAtDeadline: st.onAtDeadline, growth: st.lamN ? st.lamSum / st.lamN / LAMBDA_REF : 0, commands: st.commands,
+            offTick: st.offTick, offCopies: st.offCopies, afterOff: st.offTick >= 0 ? st.made - st.offMade : 0 };
         },
         save() { return Object.assign({}, st); },
         restore(s) { st = Object.assign({}, s); },
@@ -387,6 +462,15 @@
     },
     /** The milk arrives: a story beat holds the run (T2), then the economy readouts are introduced. */
     runBeats: [{ name: 'milk', when: (st) => !!st && st.milk }],
+    /**
+     * The run speeds itself up to 1 s = 1 min once nothing is left to decide (a note says so): the gene switched off
+     * with the transporters plus those on the way at the target, or the milk here. Speed is how fast you watch.
+     */
+    speedUps: [
+      { key: 'enough', speed: 60, note: TEXT.spedUp.enough,
+        when: (st, v) => !!st && !st.milk && st.level === 'off' && st.made > 0 && st.count + L.ppm * (st.mRNA + st.nascent) >= v.T },
+      { key: 'milk', speed: 60, note: TEXT.spedUp.milk, when: (st) => !!st && st.milk },
+    ],
 
     score(v, m, answers) {
       const d = answers.debrief;
@@ -404,19 +488,26 @@
       const need = Math.ceil(v.T / ppmRun);
       const extraCopies = Math.max(0, (m.m || 0) - need), extraT = Math.max(0, made - v.T);
       const atp = extraT * ECO.lacYaa * ECO.atpPerAa + extraCopies * ECO.lacYnt * ECO.atpPerNt;
-      return { E, P: null, X: m.goal && (m.count || 0) <= v.tMax ? 1 : 0, flags, m: m.m || 0, made, need, extraCopies,
-        atp, glucose: atp / ECO.atpPerGlucose, growth: m.growth || 0 };
+      return { E, P: null, X: m.goal && (m.count || 0) <= v.tMax ? 1 : 0, flags, m: m.m || 0, made, need, extraCopies, extraT,
+        atp, glucose: atp / ECO.atpPerGlucose, growth: m.growth || 0, offCopies: m.offTick >= 0 ? m.offCopies : null, afterOff: m.afterOff || 0 };
     },
     /** The result sheet's lines: growth on milk sugar, then the copies against what was needed, and what the extras cost. */
     resultLines(v, comp) {
       const out = [];
       if (typeof comp.m === 'number') out.push(K.fill(TEXT.result.copies, { m: comma(comp.m), need: comma(comp.need), T: comma(v.T) }));
-      if (comp.extraCopies > 0) out.push(K.fill(TEXT.result.cost, { atp: comma(Math.round(comp.atp / 1000) * 1000), glc: comma(Math.round(comp.glucose / 1000) * 1000) }));
+      // What the extras cost, in transporters the cell could not use (not in millions of ATP, PM1); only when the bar
+      // says "more than needed", so a "just enough" run does not read as a telling-off.
+      if (comp.extraCopies > 0 && comp.extraT >= 50 && comp.E < 0.8) out.push(K.fill(TEXT.result.cost, { extra: comma(Math.max(100, Math.round(comp.extraT / 100) * 100)) }));
       return out;
     },
     /** Shown whether or not the goal was met: how the cell did on milk sugar. */
     resultLead(v, comp) { return typeof comp.growth === 'number' ? [K.fill(TEXT.result.growth, { pct: Math.round(100 * comp.growth) })] : []; },
-    resultHint(v, comp, m, goal) { return goal && comp.E < 0.8 ? [K.fill(TEXT.result.hint, { ppmWords })] : []; },
+    /** Over par: what happened after the switch-off, in the run's own numbers (or that the gene stayed on). */
+    resultHint(v, comp, m, goal) {
+      if (!goal || !(comp.E < 0.8)) return [];
+      if (comp.offCopies === null || comp.offCopies === undefined) return [K.fill(TEXT.result.hintOn, { T: comma(v.T) })];
+      return [K.fill(TEXT.result.hint, { m: comma(comp.offCopies), a: comma(Math.round(comp.afterOff / 100) * 100) })];
+    },
 
     flags: [
       { id: 'KEPT_ON_PAST_TARGET', mc: 'MIDDLEMAN' },

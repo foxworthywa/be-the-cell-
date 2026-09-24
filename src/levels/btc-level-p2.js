@@ -41,7 +41,7 @@
       readFront: 'ribosomes already reading its front', glucose: 'glucose', lactose: 'lactose', blood: 'your blood', milk: 'milk',
       glucoseTr: 'glucose transporter', lactoseTr: 'lactose transporter', enzymes: 'glucose-processing enzymes', splitter: 'lactose-splitting enzyme',
       sugar: 'sugar', transporter: 'transporter', enzyme: 'enzymes', atp: 'ATP', spent: 'spent', building: 'building proteins',
-      other: 'other building', upkeep: 'upkeep', price: 'about {atp} ATP', gene: 'gene', copy: 'mRNA copy', worn: 'worn out, cut up',
+      other: 'other building', upkeep: 'upkeep', price: 'about {atp} ATP', priceAa: '{aa} amino acids', gene: 'gene', copy: 'mRNA copy', worn: 'worn out, cut up',
       divides: 'grows and divides', outside: 'outside', inside: 'inside', membrane: 'membrane', dotsEnlarged: 'drawn larger than scale',
       scale5um: '5 µm', scale1um: '1 µm', scale50nm: '50 nm', letters: 'letters drawn larger than scale',
       fewRibosomes: 'a few of its many thousands of ribosomes', dnaLength: 'drawn far shorter: stretched out, this DNA is about 1.6 mm long',
@@ -85,7 +85,7 @@
         { who: 'narrator', text: 'Here, with no oxygen, each glucose gives {atpPerGlucose} ATP.' },
       ],
       s4: [{ who: 'narrator', text: 'ATP is spent on everything the cell does. The biggest single cost is building proteins: about {atpPerAa} ATP to join each amino acid on.' }],
-      s5: [{ who: 'narrator', text: 'So one transporter, about {trAa} amino acids long, costs about {trAtp} ATP: the energy from about {trGlucose} glucose.' }],
+      s5: [{ who: 'narrator', text: 'So one transporter costs about {trAtp} ATP to build: the energy from about {trGlucose} glucose.' }],
       s6: [{ who: 'narrator', text: 'Genes hold the instructions for every machine. mRNA copies carry them to the ribosomes.' }],
       s7: [{ who: 'narrator', text: 'Machines wear out and are cut up, and new ones are made all the time.' }],
       s8: [{ who: 'narrator', text: 'When the economy runs well, the cell grows, copies its DNA and divides in two.' }],
@@ -107,8 +107,8 @@
       h7: [{ who: 'narrator', text: 'The first mRNA copy is finished. Each wavy strand is one copy.' }],
       h8: [{ who: 'narrator', text: 'Ribosomes are reading it, each building one transporter chain.' }],
       h9: [{ who: 'narrator', text: 'The first transporters are finished. Their count is here.' }],
-      h10: [{ who: 'narrator', text: 'They sit across the membrane. A hollow mark means fewer than half a dot’s worth.' }],
-      h11: [{ who: 'narrator', text: 'Glucose now comes in through them. Each moving mark stands for {N} glucose.' }],
+      h10: [{ who: 'narrator', text: 'They sit across the membrane. A hollow mark means only a few so far.' }],
+      h11: [{ who: 'narrator', text: 'Glucose now comes in through them. In the whole-cell view, each moving mark stands for {N} glucose.' }],
       h12: [{ who: 'narrator', text: 'With glucose coming in, energy is back to normal. Growth picks up over the next half hour.' }],
       h13: [
         { who: 'commander', text: 'It did exactly what I told it.' },
@@ -126,6 +126,8 @@
       h11: 'Glucose came in only once transporters sat in the membrane.',
     },
     offNote: 'The gene is off, so no new copies are started. Switch it on to carry on.',
+    // While a step waits on the model, what is happening (no silent wait, PM4).
+    wait: { h11: 'More transporters are being built. Glucose comes in faster as their number grows.' },
     look: { gene: 'Look closer', protein: 'Look at one transporter' },
     // Q7's machine cards (§4.3): what each does first, then its name. ATP is not named before S3, so these are not the lab's job lines.
     cardsQ7: {
@@ -164,16 +166,18 @@
     { id: 'h2', lines: TEXT.steps.h2, point: 'legend', introduces: ['legend'], gate: { kind: 'tap' } },
     { id: 'h3', lines: TEXT.steps.h3, point: 'side-route', gate: { kind: 'tap' } },
     { id: 'h4', until: { test: 'energyLow', pause: true }, lines: TEXT.steps.h4, point: 'gauge:energy', introduces: ['status.energy'], gate: { kind: 'tap' } },
-    { id: 'h5', lines: TEXT.steps.h5, point: 'control:promoter', guess: Object.assign({ id: 'h5', showAt: 'h9' }, TEXT.h5g), gate: { kind: 'guess' } },
+    // H5's "What happened" waits for glucose to come in (H11), which its options are about (PM3).
+    { id: 'h5', lines: TEXT.steps.h5, point: 'control:promoter', guess: Object.assign({ id: 'h5', showAt: 'h11' }, TEXT.h5g), gate: { kind: 'guess' } },
     { id: 'h6', lines: TEXT.steps.h6, point: 'control:promoter', act: { kind: 'command', expect: { type: 'setPromoter', gene: 'ptsG', on: true } }, gate: { kind: 'act' } },
     { id: 'h7', until: { test: 'firstMRNA', pause: true }, lines: TEXT.steps.h7, point: 'mrna:first', gate: { kind: 'tap' }, cause: TEXT.causes.h7, notes: offNotes },
     { id: 'h8', until: { test: 'firstRibosome', pause: true }, lines: TEXT.steps.h8, point: 'ribosome:focus', gate: { kind: 'tap' }, notes: offNotes,
       offer: [{ label: TEXT.look.gene, zoom: 'gene' }] },
     { id: 'h9', until: { test: 'firstProtein', pause: true }, lines: TEXT.steps.h9, point: 'counter:protein', introduces: ['counter.protein'], gate: { kind: 'tap' },
       cause: TEXT.causes.h9, notes: offNotes },
-    { id: 'h10', until: { test: 'inPlace', pause: true }, lines: TEXT.steps.h10, point: 'glyph:membrane:ptsG', gate: { kind: 'tap' }, notes: offNotes, offerSpeed: 60 },
+    // From H10 the wait for glucose is long (about 20 game-min): the cell goes to 1 s = 1 min by itself, and says so (PM4).
+    { id: 'h10', until: { test: 'inPlace', pause: true }, lines: TEXT.steps.h10, point: 'glyph:membrane:ptsG', gate: { kind: 'tap' }, notes: offNotes, speed: 60 },
     { id: 'h11', until: { test: 'workOver', x: 1, pause: true }, lines: TEXT.steps.h11, point: 'marker:glucose', gate: { kind: 'tap' }, cause: TEXT.causes.h11,
-      notes: offNotes, offer: [{ label: TEXT.look.protein, zoom: 'protein' }], offerSpeed: 60 },
+      wait: TEXT.wait.h11, notes: offNotes, offer: [{ label: TEXT.look.protein, zoom: 'protein' }], offerSpeed: 60 },
     { id: 'h12', until: { test: 'energyNormal', pause: true }, lines: TEXT.steps.h12, point: 'gauge:energy', gate: { kind: 'tap' }, notes: offNotes, offerSpeed: 60 },
     { id: 'h13', lines: TEXT.steps.h13, gate: { kind: 'tap' } },
     { id: 'h14', lines: TEXT.steps.h14, gate: { kind: 'tap' } },
@@ -192,7 +196,7 @@
 
     variant() { return { seed: 0 }; },
     textVars() {
-      return { atpPerGlucose: ECO.atpPerGlucose, atpPerAa: ECO.atpPerAa, trAa: comma(ECO.transporterAa),
+      return { atpPerGlucose: ECO.atpPerGlucose, atpPerAa: ECO.atpPerAa, trAa: comma(ECO.transporterAa), aa: comma(ECO.transporterAa),
         trAtp: comma(ECO.transporterAtp), trGlucose: comma(ECO.transporterGlucose) };
     },
     /** The watch cell (PROLOGUE §2.4.3): the 1.1 starting state with names shown and one gene in play, seeded from the device. */

@@ -206,14 +206,16 @@
       toEnd: 'Run to the end', toEndShort: 'To the end',
       next: 'Next change: unknown',
     },
+    // The bars against the normal lac genes, in plain words (not golf's "par").
+    resultWords: { within: 'as good as the normal genes', over: 'behind the normal genes', mark: 'normal genes' },
     result: {
       growth: 'Growth', waste: 'Waste in glucose', lag: 'Lag on lactose',
-      growthLine: '{d} doublings; par {p}.', wasteLine: '{w}% of the protein made in glucose was lac protein; par {p}%.',
-      lagLine: 'After each switch to lactose, growth took {l} min on average to pick up; par {p} min.', noLactose: 'Growth on lactose fell short in at least one lactose phase.',
+      growthLine: '{d} doublings; the normal lac genes: {p}.', wasteLine: '{w}% of the protein made in glucose was lac protein; the normal lac genes: {p}%.',
+      lagLine: 'After each switch to lactose, growth took {l} min on average to pick up; the normal lac genes: {p} min.', noLactose: 'Growth on lactose fell short in at least one lactose phase.',
       missLactose: 'growth on lactose fell short', missDormant: 'the cell ran out of energy and stopped',
-      chart: 'Doublings over the run: your design (solid) and par (dashed), over the sugar phases.',
-      yours: 'your design', par: 'par (normal lac genes)', x: 'h', y: 'doublings',
-      working: 'Working out par…',
+      chart: 'Doublings over the run: your design (solid) and the normal lac genes (dashed), over the sugar phases.',
+      yours: 'your design', par: 'the normal lac genes', x: 'h', y: 'doublings',
+      working: 'Working out how the normal lac genes do…',
       // The trade-offs a design made, in words (a design can win one bar by losing another).
       tradeWaste: 'Ready for lactose at once, but it paid for that in glucose: the lac proteins made there cost amino acids and ATP.',
       tradeLag: 'Little waste in glucose, but slow to start on lactose: few lac proteins were there when it arrived.',

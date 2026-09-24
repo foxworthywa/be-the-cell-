@@ -54,6 +54,7 @@ body[data-hud] #hud { height: 44px; border-bottom: 1px solid var(--line); backgr
 body[data-layout="compact"][data-short][data-hud] .fb-row2 { display: none; }
 #stage-wrap { grid-area: stage; }
 #narrator { grid-area: narr; }
+body[data-guide] #narrator { visibility: hidden; }
 #paneltabs { grid-area: ptabs; }
 .pane { grid-area: content; }
 #tabbar { grid-area: tabbar; }
@@ -706,7 +707,9 @@ body[data-layout="compact"] .lv-full { height: calc(100vh - 12px - var(--safe-t)
 .lv-goal { font-size: 17px !important; }
 .lv-objectives { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 6px; }
 .lv-objectives li { padding-left: 28px; position: relative; }
-.lv-objectives li::before { content: "☐"; position: absolute; left: 2px; top: -1px; color: var(--muted); font-size: 18px; }
+.lv-objectives li::before { content: "•"; position: absolute; left: 8px; top: -2px; color: var(--muted); font-size: 20px; }
+/* More below the fold: a shadow over the sticky bar says the sheet scrolls (PM7, pm4). */
+.sheet-body.lv-more .lv-sticky { box-shadow: 0 -16px 16px -10px rgba(15, 18, 24, .22); }
 .lv-menu { display: flex; flex-direction: column; gap: 8px; }
 .lv-options { display: flex; flex-direction: column; gap: 8px; }
 .lv-option {
@@ -851,6 +854,10 @@ body[data-layout="compact"] .status.is-tiered .st-sugar { margin-left: auto; }
 body[data-layout="wide"] .st-growth-word, body[data-layout="wide"] .st-sugar { font-size: 15px; }
 body[data-legend="short"] .legend-full { display: none; }
 body[data-legend="short"] .legend-short { display: block; }
+/* With room (not a short viewport), a tiered screen shows the whole legend on up to two lines, as the lab does: the
+   short one stopped at "1 dot = 1,000 proteins · …" while Prologue 2's H2 says the line tells how many. */
+body[data-legend="short"]:not([data-short]) .legend-full { display: -webkit-box; }
+body[data-legend="short"]:not([data-short]) .legend-short { display: none; }
 .focusbar.is-tiered { padding: 2px 12px 4px; }
 .tb-head {
   width: 100%; display: grid; grid-template-columns: auto minmax(0, 1fr) auto; grid-template-areas: "chip title change" "counters counters counters";
@@ -866,6 +873,12 @@ body[data-legend="short"] .legend-short { display: block; }
 .tb-counter { display: flex; flex-direction: column; min-width: 0; line-height: 1.15; }
 .tb-num { font-size: 22px; font-weight: 700; white-space: nowrap; }
 .tb-label { font-size: 13px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.tb-sub { font-size: 13px; font-weight: 600; color: var(--accent); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+body[data-short] .tb-sub { font-size: 12px; }
+/* A short screen's one row has no room for both: the number and "+860 on the way" (the HUD just above names the transporters). */
+body[data-short] .tb-counter.has-way .tb-label { display: none; }
+/* A counter with "+ about 860 on the way" under it takes the room the others do not need (at 360 px an even split cut it). */
+.tb-counters.has-sub, body[data-short] .tb-counters.has-sub { grid-auto-columns: minmax(0, max-content); justify-content: space-between; }
 .tb-counter.is-rates .tb-num { font-size: 14px; font-weight: 600; white-space: normal; }
 .tb-ctrl { padding-top: 4px; }
 /* Wider screens: the counters keep their own width, with the switch beside them. */

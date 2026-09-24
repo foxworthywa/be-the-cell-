@@ -37,7 +37,8 @@ test('L-2: HUD texts filled with every variant\'s values pass the reduced lint',
       const v = def.variant(K.variantSeed(s, def.id, 0));
       for (const st of [null, { count: 0, tick: 0, changes: 0 }, { count: 123456, tick: 99999, changes: 12, reached: true }]) {
         const h = def.hud(v, st);
-        for (const text of [h.goal.text, h.timer.text, h.counter.text, h.counter.short]) {
+        // A level may show no counter chip (1.2's Try: the copies are counted under the cell).
+        for (const text of [h.goal.text, h.timer.text].concat(h.counter ? [h.counter.text, h.counter.short] : [])) {
           assert.ok(text.length <= 140 && text.indexOf('!') < 0 && !N.TELEOLOGY.test(text), def.id + ': ' + text);
           assert.ok(!/\{\w+\}/.test(text), 'an unfilled placeholder: ' + text);
         }

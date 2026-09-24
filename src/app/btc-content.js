@@ -286,7 +286,7 @@
 
     // Gene cards (LAB_UI §3).
     card: {
-      standsFor: 'stands for ~{n} genes',
+      standsFor: 'stands for about {n} genes',
       counts: 'mRNA {m} + {n} being made', protein: 'protein {p}',
       share: 'ribosome share', shareLabel: 'Share of working ribosomes reading this gene\'s mRNA',
       about: 'About', aboutClose: 'Less',
@@ -367,7 +367,7 @@
       },
       marker: {
         promoter: '{symbol} {level}', glucose: 'glucose {v}', lactose: 'lactose {v}', aminoAcids: 'amino acids {v}',
-        drug: '{drug} {v}', resumed: 'resumed', locked: 'controls locked', unlocked: 'controls free',
+        drug: '{drug} {v}', resumed: 'resumed', locked: 'controls locked', unlocked: 'controls free', geneOn: 'gene on', geneOff: 'gene off',
         bandLabel: { rifampicin: 'rif', chloramphenicol: 'Cm' },
       },
       markerLevels: { off: 'off', 0.25: '×¼', 0.5: '×½', 1: '×1', 2: '×2', 4: '×4' },
@@ -493,6 +493,8 @@
       older: 'An older version of this level. It still shows every readout, and it will be redone in the new style.',
       olderChip: 'older version',
       next: 'Next',
+      // The lab's first open in Simple mode: one guide line over the cell (the phone play-through review, PM10).
+      labTry: 'Try a gene: switch one on or off, run the cell, and watch its copies and its protein.',
     },
 
     // Level screens (LEVELS §5.2–5.9).
@@ -503,7 +505,7 @@
       resumed: 'Resumed level {id}.', updated: 'The app was updated; this level starts again.',
       missing: 'That level is not in this version of the app.',
       speakers: { narrator: 'Narrator', commander: 'You', ribosome: 'The Ribosome', laci: 'LacI', protease: 'A protease', glucose: 'A glucose molecule' },
-      next: 'Next', continue: 'Continue', skipStory: 'Skip story',
+      next: 'Next', continue: 'Continue', skipStory: 'Skip story', skipScene: 'Skip to the next activity',
       lineOf: 'Line {i} of {n}',
       task: {
         goal: 'Goal', core: 'Core', expert: 'Expert (required for majors)', time: 'About {n} minutes', start: 'Start',
@@ -540,13 +542,13 @@
         happened: 'What happened: {fb}', youGuessed: 'You guessed: {option}',
         waiting: 'Watching the cell…', paused: 'Run the cell to see it happen.', run: 'Run',
         act: 'Use the switch below the cell.', actZoom: 'Use the Cell, Gene and Protein buttons on the cell.',
-        speedUp: 'Speed up', lookCloser: 'Look closer', label: 'Guide',
+        speedUp: 'Speed up', lookCloser: 'Look closer', label: 'Guide', spedUp: 'Sped up: {speed}.',
       },
       question: { title: 'A question' },
       result: {
         title: 'Result', met: 'Goal met', notMet: 'Goal not met: {reason}',
         reasons: { limit: 'time ran out', deadline: 'not reached by the deadline', done: 'the run ended', goal: 'the goal was not held' },
-        efficiency: 'Efficiency', withinPar: 'within par', overPar: 'over par', parMark: 'par',
+        efficiency: 'Efficiency', withinPar: 'just enough', overPar: 'more than needed', parMark: 'enough',
         predictions: 'Your predictions', predicted: 'You predicted: {option}', happened: 'What happened: {fb}',
         skipped: 'Skipped (Expert).', estimate: 'Your estimate: {v}', estimateRight: 'Within range of what the cell did.',
         estimateWrong: 'Outside the range of what the cell did.',
@@ -555,7 +557,8 @@
         tryAgainDesign: 'Change the DNA and run it again. Your predictions stay as they are.',
       },
       // "Not in your cells", not "Bacteria-only": archaea have no nucleus either, and some animals have operons.
-      echo: { heading: 'Meanwhile, in you', cardsHeading: 'Cards collected', universal: 'Universal', bacteria: 'Not in your cells' },
+      echo: { heading: 'Meanwhile, in you', cardsHeading: 'Cards collected', universal: 'Universal', bacteria: 'Not in your cells',
+        universalNote: 'Universal: your cells do this too.', bacteriaNote: 'Not in your cells: true of this bacterium, not of your own cells.' },
       complete: {
         title: 'Level complete',
         goalMet: 'Goal met', goalNotMet: 'Goal not met', efficiency: 'Efficiency {v}', prediction: 'Prediction {v}',
@@ -563,7 +566,7 @@
         debrief: 'Explain {a} of {b} right first time', expert: 'Expert {v}', expertOf: 'Expert {a} of {b}', total: 'Total {v}', notScored: 'Not scored',
         codeLabel: 'Completion code', copy: 'Copy code', share: 'Share', copied: 'Copied. Paste it into the Canvas quiz.',
         copyFailed: 'Press and hold the code to copy it.', keep: 'Paste your code into Canvas now; this device may not keep it.',
-        canvas: 'Paste it into the Canvas quiz for this level.',
+        canvas: 'Paste it into the Canvas quiz for this level.', canvasUnscored: 'Not scored. Your instructor may still ask for this code.',
         download: 'Download this run', again: 'Play again', next: 'Next level', startNamed: 'Start level {id}', levels: 'Levels',
         shareTitle: 'Be the Cell code', cardsCollected: 'Cards collected: {list}',
       },

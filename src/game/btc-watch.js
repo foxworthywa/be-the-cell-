@@ -20,6 +20,9 @@
  *     act?: {kind: 'command', expect: {type: 'setPromoter', gene, on?: bool, level?}} | {kind: 'zoom', to},
  *     gate: {kind: 'tap'} | {kind: 'act'} | {kind: 'guess'} | {kind: 'state', test, gene?, x?, n?, pause?: true},
  *     cause?: 'one sentence, shown once the gate has opened',
+ *     wait?: 'one sentence shown while the step waits on the model (until or a state gate)',
+ *     speed?: 60 | {to: 60, test, …},                               // the step moves the cell to this speed, at once or once the
+ *                                                                   // state holds (a note says so)
  *     notes?: [{test, gene?, text}],                                // honest help while waiting ("The gene is off, …")
  *     offer?: [{label, zoom}], offerSpeed?: 60 }                    // optional "Look closer" and "Speed up" buttons
  *
@@ -177,6 +180,11 @@
         if (typeof n.text !== 'string' || !n.text) fail(p + '.notes[' + k + '].text', 'missing');
       });
       if (s.cause !== undefined && (typeof s.cause !== 'string' || !s.cause)) fail(p + '.cause', 'one sentence');
+      if (s.wait !== undefined && (typeof s.wait !== 'string' || !s.wait)) fail(p + '.wait', 'one sentence shown while the step waits');
+      if (s.speed !== undefined) {
+        if (typeof s.speed === 'object' && s.speed) { cond(p + '.speed', s.speed); if (!(s.speed.to > 0)) fail(p + '.speed.to', 'a speed'); }
+        else if (!(typeof s.speed === 'number' && s.speed > 0)) fail(p + '.speed', 'a speed (sim s per real s), or {to, test}');
+      }
     });
     for (const s of w.steps) {
       if (s.guess && s.guess.showAt !== undefined && !ids[s.guess.showAt]) fail('watch.steps.' + s.id + '.guess.showAt', 'no step ' + s.guess.showAt);

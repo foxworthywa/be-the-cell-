@@ -124,7 +124,7 @@ async function run(browser, port, OUT, check) {
     await shot('story');
     while ((await L(page, 'phase')) === 'intro') await tap('.lv-next');
     // The watch: one copy outlined and followed in the HUD; the gene off, the transporters since then counted.
-    let readInto = '', sinceOff = '', zoom = '';
+    let readInto = '', sinceOff = '', zoom = '', gate = null, twoVoices = null;
     for (let g = 0; g < 80 && (await L(page, 'phase')) === 'watch'; g++) {
       const w = await R(page, 'window.__btc.app.test.level.watch.info()');
       if (!w || w.done) break;
@@ -132,27 +132,39 @@ async function run(browser, port, OUT, check) {
       if (w.stage === 'guess') { await shot(w.id + '-guess'); await tap('.lv-option >> nth=1'); await tap('[data-action="guess-see"]'); continue; }
       if (w.stage === 'act') { await tap('.tb-ctrl .seg[data-key="' + (w.act.expect.on === false ? 'off' : 'on') + '"]'); await L(page, 'runTicks', 1); continue; }
       if (w.stage === 'until' || w.stage === 'wait') { await R(page, 'window.__btc.app.test.level.watch.untilGate(40000)'); await paint(page); continue; }
-      if (w.id === 'w1b') { readInto = await hudGoal(); zoom = await R(page, 'window.__btc.app.views.zoom.get()'); await shot('w1b'); }
+      if (w.id === 'w1b') {
+        readInto = await hudGoal(); zoom = await R(page, 'window.__btc.app.views.zoom.get()');
+        // PB1: the watched copy is gone and at least ten copies have been broken down; the cause gives their average.
+        gate = await R(page, "(() => { const g = window.__btc.cell.observe().geneById.lacY; return { gone: g.mRNAMade - g.mRNA, cause: document.querySelector('.guide').textContent }; })()");
+        await shot('w1b');
+      }
+      // PM2: one voice at a time: the narrator bar is hidden while a guide callout shows.
+      if (twoVoices === null && (w.stage === 'lines' || w.stage === 'tap')) {
+        twoVoices = await R(page, "(() => { const g = document.querySelector('.guide'), n = document.getElementById('narrator'); return !!g && !g.hidden && !!n && getComputedStyle(n).visibility !== 'hidden'; })()");
+      }
       if (w.id === 'w2b') { sinceOff = await hudGoal(); await shot('w2b'); }
       await tap('[data-action="watch-next"]');
     }
     check('LV-4 ' + s.tag + ' watch in the Gene close-up: the HUD follows the outlined copy, then counts the transporters since the switch-off',
       zoom === 'gene' && /[Rr]ead into \d+/.test(readInto) && /since/.test(sinceOff), JSON.stringify({ zoom, readInto, sinceOff }));
+    check('LV-4 ' + s.tag + ' PB1: the watched copy\'s step waits for at least ten copies broken down, and its cause gives their average',
+      !!gate && gate.gone >= 10 && /gave \d+ each on average/.test(gate.cause), JSON.stringify(gate));
+    check('LV-4 ' + s.tag + ' PM2: the narrator bar is hidden while a guide callout shows', twoVoices === false, String(twoVoices));
     // The task: the two machine cards, the goal and "Start".
     const task = await R(page, "{ phase: window.__btc.app.test.level.phase(), cards: document.querySelectorAll('.lv-cards > *').length, text: document.querySelector('.sheet-body').textContent }");
     await shot('task');
     check('LV-4 ' + s.tag + ' task: the lactose transporter and splitter cards, the goal with its number and minute',
-      task.phase === 'task' && task.cards === 2 && /Have [\d,]+ lactose transporters in the membrane by minute \d+/.test(task.text), JSON.stringify(task).slice(0, 200));
+      task.phase === 'task' && task.cards === 2 && /Before the milk arrives at minute \d+, get [\d,]+ lactose transporters into the membrane/.test(task.text), JSON.stringify(task).slice(0, 200));
     await tap('.lv-sticky .btn.primary');
     while (await R(page, '!!window.__btc.app.test.level.runner().beat')) await tap('.lv-next');
     await intros('run-intro');
     const hud = await page.evaluate(() => ({ h: document.getElementById('hud').getBoundingClientRect().height, stage: document.getElementById('stage').getBoundingClientRect().height,
       goal: document.querySelector('.hud-goal-text').textContent, counter: document.querySelector('.hud-counter').hidden ? '' : document.querySelector('.hud-counter').textContent,
       ellipsis: (() => { const e = document.querySelector('.hud-goal-text'); return e.scrollWidth > e.clientWidth + 0.5; })() }));
-    // On a phone the goal and its target take the room (the copies made are in the focus bar below; the chip gives way).
-    check('LV-4 ' + s.tag + ' run: 44 px HUD with the target (whole, not cut short) and, when wide enough, the copies made; canvas ≥ 220 px',
-      hud.h === 44 && (touch ? /^Transporters 0 \/ [\d,]+$/ : /^0 \/ [\d,]+ lactose transporters$/).test(hud.goal) && !hud.ellipsis
-        && (touch ? hud.counter === '' : /copies/.test(hud.counter)) && (!touch || hud.stage >= 220), JSON.stringify(hud));
+    // The goal and the time only (PM1): the copies are counted under the cell, with the transporters on the way.
+    check('LV-4 ' + s.tag + ' run: 44 px HUD with the goal in words (whole, not cut short), no copies counter; canvas ≥ 220 px',
+      hud.h === 44 && (touch ? /^Transporters 0 of [\d,]+$/ : /^0 of [\d,]+ lactose transporters$/).test(hud.goal) && !hud.ellipsis
+        && hud.counter === '' && (!touch || hud.stage >= 220), JSON.stringify(hud));
     // LacZ is counted in whole four-chain enzymes wherever the student sees a count.
     const lacZ = await page.evaluate(() => {
       const a = window.__btc.app; a.setFocus('lacZ'); a.render(0, true, true, 0);
@@ -168,8 +180,18 @@ async function run(browser, port, OUT, check) {
       await L(page, 'runTicks', 10);
       if (await R(page, "(() => { const g = window.__btc.cell.observe().geneById.lacY, r = window.__btc.app.test.level.runner(), L = window.__btc.BTC.levelConstants.l12; return g.protein + L.ppm * (g.mRNA + g.nascent) >= L.refMargin * r.variant.T; })()")) break;
     }
+    // PB2: the transporter counter adds "+ about N on the way": about ppm per copy still here or being made, to 10.
+    const way = await R(page, "(() => { const g = window.__btc.cell.observe().geneById.lacY, L = window.__btc.BTC.levelConstants.l12, e = document.querySelector('[data-counter=\"protein\"] .tb-sub');"
+      + " return { text: e ? e.textContent : '', cut: !!e && e.scrollWidth > e.clientWidth + 0.5, want: Math.round(L.ppm * (g.mRNA + g.nascent) / 10) * 10 }; })()");
+    check('LV-4 ' + s.tag + ' PB2: the transporter counter shows the transporters on the way, whole (not cut short)',
+      /^\+ about [\d,]+ on the way$/.test(way.text) && !way.cut && Math.abs(Number(way.text.replace(/[^\d]/g, '')) - way.want) <= 10, JSON.stringify(way));
+    await shot('run-on-the-way');
     await tap('.tb-ctrl .seg[data-key="off"]');
     await L(page, 'runTicks', 60);
+    await paint(page);
+    // PM4: off with enough on the way, the run speeds up to 1 s = 1 min by itself and says so.
+    const sped = await R(page, "{ speed: window.__btc.app.speed(), toast: (document.getElementById('toast') || {}).textContent || '' }");
+    check('LV-4 ' + s.tag + ' switched off with enough on the way: sped up to 1 s = 1 min, with a note', sped.speed === 60 && /Sped up/.test(sped.toast), JSON.stringify(sped));
     await shot('run-off');
     // Minute D: the milk arrives; a story beat holds the run, the switch locks, the economy readouts join.
     const D = await R(page, 'window.__btc.app.test.level.runner().variant.D');
@@ -190,7 +212,9 @@ async function run(browser, port, OUT, check) {
     await tap('.hud-goal');
     const result = await R(page, "document.querySelector('.sheet-body').textContent");
     await shot('result');
-    check('LV-4 ' + s.tag + ' result: goal met, growth on milk sugar, the copies against what was needed', /Goal met/.test(end) && /On milk sugar the cell grew at \d+% of its glucose speed/.test(result) && /copies/.test(result), end + ' / ' + result.slice(0, 160));
+    check('LV-4 ' + s.tag + ' result: goal met, growth on milk sugar against glucose, the copies in plain words (no "par")', /Goal met/.test(end)
+      && /On milk sugar the cell grew at \d+% of its speed on glucose/.test(result) && /Copies made/.test(result) && /just enough|more than needed/.test(result) && !/\bpar\b/i.test(result),
+      end + ' / ' + result.slice(0, 200));
     await tap('[data-action="result-continue"]');
     await tap('.lv-option >> nth=0');
     await shot('explain-first-tap');
@@ -233,6 +257,13 @@ async function run(browser, port, OUT, check) {
     const m = await size();
     check('LV-9 375×553 1.2 watch and run: canvas ≥ 220 px with the 44 px HUD', w.stage >= 220 && w.hud === 44 && m.stage >= 220 && m.hud === 44, JSON.stringify({ w, m }));
     await shot('run-short');
+    // The transporters on the way fit the short screen's one-row focus bar, whole.
+    await page.locator('.tb-ctrl .seg[data-key="on"]').first().tap();
+    await L(page, 'runTicks', 300);
+    await paint(page);
+    const way = await R(page, "(() => { const e = document.querySelector('[data-counter=\"protein\"] .tb-sub'), l = document.querySelector('[data-counter=\"protein\"] .tb-label'); return { text: e ? e.textContent : '', cut: !!e && e.scrollWidth > e.clientWidth + 0.5, label: l ? l.textContent : '', labelCut: !!l && l.scrollWidth > l.clientWidth + 0.5 }; })()");
+    check('LV-9 375×553 the transporter counter and its "on the way" fit the one-row focus bar, whole', /^\+[\d,]+ on the way$/.test(way.text) && !way.cut && !way.labelCut, JSON.stringify(way));
+    await shot('run-short-on');
     finish(s, 'LV-9', probs);
     await s.context.close();
   }
@@ -480,9 +511,9 @@ async function run(browser, port, OUT, check) {
     while (await R(page, '!!window.__btc.app.test.level.runner().beat')) await L(page, 'next');
     await page.waitForFunction(() => document.querySelectorAll('.lv-eff.lv-sub').length === 3, null, { timeout: 30000 });
     const res = await page.evaluate(() => ({ bars: Array.from(document.querySelectorAll('.lv-eff.lv-sub')).map((b) => b.getAttribute('data-bar')).join(','),
-      chart: !!document.querySelector('.lv-sketch-chart canvas') }));
-    check('LV-6 ' + s.tag + ' Run to the end reaches the end; the result shows growth, waste and lag against par, and the chart',
-      end.goal && /Continue/.test(end.hud) && res.bars === 'growth,waste,lag' && res.chart, JSON.stringify({ end, res }));
+      chart: !!document.querySelector('.lv-sketch-chart canvas'), par: /\bpar\b/i.test(document.querySelector('.sheet-body').textContent) }));
+    check('LV-6 ' + s.tag + ' Run to the end reaches the end; the result shows growth, waste and lag against the normal genes (no "par"), and the chart',
+      end.goal && /Continue/.test(end.hud) && res.bars === 'growth,waste,lag' && res.chart && !res.par, JSON.stringify({ end, res }));
     await shot('result');
     await L(page, 'next');
     await L(page, 'answer', 'l17.d1', 2);

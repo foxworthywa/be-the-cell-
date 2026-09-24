@@ -194,26 +194,30 @@
     for (let k = 0; k < 24; k++) { const a = (k / 24) * 2 * Math.PI; d += 'M' + r1(150 + 110 * Math.cos(a)) + ' ' + r1(150 + 110 * Math.sin(a)) + 'L' + r1(150 + 120 * Math.cos(a)) + ' ' + r1(150 + 120 * Math.sin(a)); }
     s += '<path class="pl-pore" d="' + d + '"/>';
     // Chromosomes, loosely tangled; the insulin gene marked on one.
-    s += '<path class="pl-m" d="M90 110c20-30 50 10 30 30s-40 10-20 40 50-10 40 30M180 90c30 10 10 40 40 40s0 50-30 40M100 200c30 20 60-10 80 10"/>';
+    // (The one at the right keeps low, clear of where the copy lies by the pore and of its label.)
+    s += '<path class="pl-m" d="M90 110c20-30 50 10 30 30s-40 10-20 40 50-10 40 30M200 172c20 10 40-10 50 8s-10 40-40 40M100 200c30 20 60-10 80 10"/>';
     s += '<path class="pl-chr" d="M150 120c20-10 40 20 20 40s-40 0-30 30"/><path class="pl-gline" d="M160 118l12-4"/>';
-    s += txt(176, 108, words.geneHere, 'pl-t');
-    s += txt(18, 22, words.nucleus, 'pl-t') + txt(274, 36, words.pore, 'pl-s', 'end');
+    // Labels clear of the envelope (pm14): the gene's at the top of the nucleus with a line down to it (clear of the
+    // envelope and the other chromosomes), the pore's outside with a line to the pore the copy uses.
+    s += txt(150, 68, words.geneHere, 'pl-t', 'middle') + '<path class="pl-k" d="M156 73L165 112"/>';
+    s += txt(18, 22, words.nucleus, 'pl-t') + txt(300, 44, words.pore, 'pl-s', 'end') + '<path class="pl-k" d="M288 50L' + r1(PORE[0] + 6) + ' ' + r1(PORE[1] - 4) + '"/>';
     return s;
   }
   // The pore the copy leaves by (at the envelope's right, 15° up) and the copy's path out through it.
   const PORE = [150 + 115 * Math.cos(-0.26), 150 + 115 * Math.sin(-0.26)];
   function nucleusCopy(state, words) {
     let s = open(340, 300) + nucleusBase(words);
-    s += wavy(PORE[0] - 70, PORE[0] - 8, PORE[1] + 12, 3) + txt(PORE[0] - 72, PORE[1] + 34, words.mRNA, 'pl-t');
-    return s + txt(330, 292, words.dotsEnlarged, 'pl-s', 'end') + '</svg>';
+    s += wavy(PORE[0] - 70, PORE[0] - 8, PORE[1] + 12, 3) + txt(PORE[0] - 39, PORE[1] + 32, words.mRNA, 'pl-t', 'middle');
+    return s + txt(330, 292, words.copyLarger || words.dotsEnlarged, 'pl-s', 'end') + '</svg>';
   }
   function exportScene(state, words) {
     const p = Math.max(0, Math.min(1, (state && state.p) || 0));
     // Along a fixed path: from beside the pore, through it, to just outside the envelope (the gene stays where it is).
     const x = PORE[0] - 60 + 96 * p, y = PORE[1] + 12 - 30 * p;
     let s = open(340, 300) + nucleusBase(words);
-    s += wavy(x - 22, x + 22, y, 3) + txt(Math.min(334, x + 26), y + 22, words.mRNA, 'pl-t', 'end');
-    return s + txt(330, 292, words.dotsEnlarged, 'pl-s', 'end') + '</svg>';
+    // Its name stays outside the envelope, below the pore, with a line to the moving copy (never over the envelope).
+    s += wavy(x - 22, x + 22, y, 3) + txt(276, 176, words.mRNA, 'pl-t') + '<path class="pl-k" d="M288 164L' + r1(x) + ' ' + r1(y + 5) + '"/>';
+    return s + txt(330, 292, words.copyLarger || words.dotsEnlarged, 'pl-s', 'end') + '</svg>';
   }
   /** D3: the gene copied again and again; each RNA polymerase along the gene has its copy growing behind it. */
   function copies(state, words) {
@@ -225,8 +229,10 @@
       s += '<circle class="pl-rnapc" cx="' + r1(x) + '" cy="76" r="9"/>';
       if (k > 0) s += '<path class="pl-copy" d="M' + r1(x) + ' 86q-10 ' + r1(10 + (60 * k) / N) + ' ' + r1(-Math.min(60, (60 * k) / N)) + ' ' + r1(20 + (60 * k) / N) + '"/>';
     }
-    for (let j = 0; j < Math.min(made, 12); j++) s += wavy(34 + (j % 4) * 72, 94 + (j % 4) * 72, 190 + Math.floor(j / 4) * 30, 3);
-    s += txt(20, 280, fill(words.copies, { n: made }), 'pl-t pl-num');
+    // The copies finished so far: the one made in C4 (it left through a pore), then each made here (pm12).
+    const done = made + 1;
+    for (let j = 0; j < Math.min(done, 12); j++) s += wavy(34 + (j % 4) * 72, 94 + (j % 4) * 72, 190 + Math.floor(j / 4) * 30, 3);
+    s += txt(20, 280, fill(words.copies, { n: done }), 'pl-t pl-num');
     s += txt(320, 280, words.realSpeed, 'pl-s', 'end');
     return s + '</svg>';
   }
@@ -256,18 +262,19 @@
     const W = 340, siteX = 170, y = 240;
     const first = START + 3 * cur - 12;
     let s = open(W, 300), lt = '', frames = '';
-    for (let j = 0; j < 28; j++) {
+    // 26 letters: the strip stays inside the drawing (it ran under the side panel at 1280, pm14); frames only whole.
+    for (let j = 0; j < 26; j++) {
       const i = first + j;
       if (i < 0 || i >= RNA.length) continue;
       const x = siteX + L3 * (j - 12) + L3 / 2;
       const inCds = i >= START && i < START + 3 * TR.codons.length;
       lt += '<text class="pl-lt pl-lt-s' + (RNA[i] === 'U' ? ' pl-u' : ' pl-lt-c') + '" x="' + r1(x) + '" y="' + y + '" text-anchor="middle">' + RNA[i] + '</text>';
-      if (mode !== 'arrive' && inCds && (i - START) % 3 === 0) {
+      if (mode !== 'arrive' && inCds && (i - START) % 3 === 0 && x - L3 / 2 + 3 * L3 <= W - 2) {
         const hot = i === START + 3 * cur;
         frames += '<rect class="pl-frame' + (hot ? ' is-hot' : '') + '" x="' + r1(x - L3 / 2) + '" y="' + (y - 16) + '" width="' + 3 * L3 + '" height="22" rx="4"/>';
       }
     }
-    s += '<path class="pl-copyline" d="M0 ' + (y + 10) + 'H' + W + '"/>' + frames + lt;
+    s += '<path class="pl-copyline" d="M4 ' + (y + 10) + 'H' + (W - 4) + '"/>' + frames + lt;
     // The ribosome, about 25 nm across (58 units here, 10 nm is 46): over the codon it reads.
     s += ribosome(siteX + L3 * 1.5, y - 4, 58);
     // The chain: one bead per amino acid made so far, out of the ribosome's top; the first eight (the chain's start) named.
@@ -477,7 +484,13 @@
       s += txt(212, 127, words.other, 'pl-s') + txt(212, 154, words.upkeep, 'pl-s');
       s += '<path class="pl-atp-h" d="M232 166l6 7-6 7-6-7zM246 166l6 7-6 7-6-7z"/>' + txt(256, 177, words.spent, 'pl-s');
     }
-    if (k >= 5) s += '<path class="pl-tag" d="M122 44L114 54"/><rect class="pl-tag" x="120" y="22" width="112" height="24" rx="6"/>' + txt(176, 39, fill(words.price, { atp: words.priceAtp || '' }), 'pl-s', 'middle');
+    // The transporter's price tag: its length and its cost (S5 says the cost; the length is on the tag, pm10).
+    if (k >= 5) {
+      const aa = words.priceAa && words.priceAaN ? fill(words.priceAa, { aa: words.priceAaN }) : '';
+      s += '<path class="pl-tag" d="M122 44L114 54"/><rect class="pl-tag" x="120" y="' + (aa ? 6 : 22) + '" width="112" height="' + (aa ? 40 : 24) + '" rx="6"/>';
+      if (aa) s += txt(176, 22, aa, 'pl-s', 'middle');
+      s += txt(176, 39, fill(words.price, { atp: words.priceAtp || '' }), 'pl-s', 'middle');
+    }
     if (k >= 6) {
       s += '<path class="pl-gline" d="M70 204h32"/>' + txt(86, 196, words.gene, 'pl-s', 'middle');
       s += '<path class="pl-arrow" d="M106 204h10"/>' + wavy(120, 162, 204, 3) + txt(141, 222, words.copy, 'pl-s', 'middle');

@@ -119,30 +119,58 @@ test('L12-3 (§3.7): the constants were calibrated on this engine and their pass
   assert.ok(L.lacZReady >= 4 * 1000, 'LacZ ready: ' + L.lacZReady + ' chains');
 });
 
-test('L12-4: the watch — the outlined copy is read into about twenty transporters and broken down; switched off, the copies left are still read', () => {
-  for (const vs of sample(1)['T' + L.T[1]].concat(sample(1)['T' + L.T[0]])) {
+test('L12-4: the watch — the outlined copy is read and broken down, and the gate waits for ten copies broken down (their average beside it); switched off, the copies left are still read until a tenth are left', () => {
+  const seeds = sample(2);
+  for (const vs of seeds['T' + L.T[1]].concat(seeds['T' + L.T[0]])) {
     const r = new RUN.LevelRunner({ def, variantSeed: vs, attempt: 1 }).start();
     while (r.phase !== 'watch') { if (r.beat) r.storySkip(); r.next(); }
-    const seen = { left: 0 };
+    const seen = { left: 0, atOff: -1 }, atW1b = {};
+    // What the screen says as w1b's gate opens (its cause and the guess feedback): read when Next is pressed there.
+    const next = r.watchNext.bind(r);
+    r.watchNext = () => {
+      const i = r.watchInfo();
+      if (i && i.id === 'w1b' && i.stage === 'tap' && atW1b.gone === undefined) {
+        const g = r.watchCell.observe().geneById.lacY;
+        atW1b.gone = g.mRNAMade - g.mRNA; atW1b.vars = r.watchVars(); atW1b.cause = i.cause;
+      }
+      return next();
+    };
     const gates = RUN.game.playWatch(r, {
       watch: {
         every: 1,
-        policy(view, tick, api, id) { if (id === 'w2b') seen.left = Math.max(seen.left, view.geneById.lacY.mRNA); },
+        policy(view, tick, api, id) {
+          const g = view.geneById.lacY;
+          if (id === 'w2b') { seen.left = Math.max(seen.left, g.mRNA); if (seen.atOff < 0) seen.atOff = g.mRNA + g.nascent; }
+        },
       },
     }, 40000);
     const m = r.watchMon.save();
     assert.ok(gates['w1b:until'] > 0 && gates.w1b > gates['w1b:until'], 'the first copy is outlined, then read until it is gone');
     assert.equal(m.alive, false, 'the outlined copy is broken down when w1b opens');
-    // One copy's life is chance (its break-down is random); the calibrated mean is about twenty transporters per copy.
-    assert.ok(m.n >= 1 && m.n <= 150, 'read into ' + m.n + ' transporters');
+    // One copy's life is chance (it may be broken down after one transporter); the gate also waits for ten copies broken down.
+    assert.ok(m.n >= 0 && m.n <= 150, 'read into ' + m.n + ' transporters');
+    assert.ok(atW1b.gone >= 10, 'ten copies broken down when w1b opens: ' + atW1b.gone);
+    const vv = atW1b.vars;
+    assert.equal(vv.b, 10, 'the average is over the first ten copies made, all broken down');
+    assert.ok(atW1b.cause.indexOf('gave ' + vv.avg + ' each on average') > 0 && !/\{/.test(atW1b.cause), atW1b.cause);
+    assert.ok(vv.avg >= 8 && vv.avg <= 40, 'about twenty on average: ' + vv.avg);
+    assert.ok(/^1 transporter$|^[\d,]+ transporters$/.test(vv.nTr) && (vv.n !== 1 || vv.nTr === '1 transporter'), vv.nTr);
     assert.ok(m.life > 0, 'the copy lasted ' + m.life + ' s');
     assert.ok(m.k > 0, 'copies were made meanwhile: ' + m.k);
     assert.ok(seen.left > 0, 'copies were still there after the switch-off');
     assert.ok(m.a > 0, 'transporters still arrived after the switch-off: ' + m.a);
-    assert.ok(gates.w2b > gates.w1b, 'w2b opens when the last copy is gone');
+    assert.ok(gates.w2b > gates.w1b, 'w2b opens once a tenth of the copies are left');
     const g = r.watchCell.observe().geneById.lacY;
-    assert.equal(g.mRNA + g.nascent, 0);
+    assert.ok(g.mRNA + g.nascent <= Math.floor(seen.atOff / 10) + 1, 'a tenth left: ' + (g.mRNA + g.nascent) + ' of ' + seen.atOff);
+    // The step lines and causes read the monitor's numbers: W3 says the average.
+    const w3 = def.watch.steps.find((x) => x.id === 'w3');
+    assert.ok(K.fill(w3.lines[0].text, r.watchVars()).indexOf('about ' + r.watchVars().avg + ' transporters') >= 0);
   }
+  // Singular for one transporter.
+  const one = def.watch.monitor();
+  one.restore({ n: 1, st: 1, track: {}, goneN: 12, goneSum: 240, life: 21, offTick: -1, tick: 100, dt: 1 });
+  assert.equal(one.vars().nTr, '1 transporter');
+  assert.equal(one.vars().avg, 20);
 });
 
 test('L12-5: at minute D the milk arrives — the glucose goes, the switch locks, a story beat holds the run; it ends 20 min later with growth on milk sugar', () => {
@@ -185,7 +213,7 @@ test('L12-5: at minute D the milk arrives — the glucose goes, the switch locks
   // The result sheet leads with that growth, then the copies against what was needed.
   const comp = def.score(v, m, { debrief: {} });
   const lead = def.resultLead(v, comp), lines = def.resultLines(v, comp);
-  assert.match(lead[0], /^On milk sugar the cell grew at \d+% of its glucose speed\.$/);
+  assert.match(lead[0], /^On milk sugar the cell grew at \d+% of its speed on glucose\. Enough transporters means close to full speed\.$/);
   assert.match(lines[0], /copies/);
 });
 
@@ -198,14 +226,14 @@ test('L12-6: HUD texts (watch, run, milk; long and short forms) are filled for e
       { watch: true, step: 'w1b', watching: true, alive: false, n: 37, tick: 600, m: 125 }, { watch: true, step: 'w2b', offTick: 590, a: 1125, tick: 800, m: 134 }];
     for (const st of states) {
       const h = def.hud(v, st);
-      for (const text of [h.goal.text, h.goal.short, h.timer.text, h.timer.short, h.counter.text, h.counter.short].filter((x) => x !== undefined)) {
-        assert.ok(text.length <= 40 && !/[{}!]/.test(text) && !N.TELEOLOGY.test(text), text);
+      const c = h.counter || {};
+      for (const text of [h.goal.text, h.goal.short, h.timer.text, h.timer.short, c.text, c.short].filter((x) => x !== undefined)) {
+        assert.ok(text.length <= 40 && !/[{}!]/.test(text) && !N.TELEOLOGY.test(text) && !/\bpar\b/.test(text), text);
       }
-      // "Transporters 6,540 / 6,600" is 194 px at 360 px; with the timer it fits because the counter chip gives way
-      // there (its tiny form is '' until over par, then "over par" beside the goal without its target).
+      // The Try's top bar has the goal and the time only (PM1); "Transporters 6,540 of 6,600" fits a phone beside the timer.
       if (st && !st.watch) {
-        assert.ok(h.goal.short.length <= 26, 'the short goal fits a phone: ' + h.goal.short);
-        if (!st.milk && st.tick < v.D * 60) assert.ok(typeof h.counter.tiny === 'string' && h.counter.tiny.length <= 8, 'the counter gives way on a phone: ' + h.counter.tiny);
+        assert.ok(h.goal.short.length <= 32, 'the short goal fits a phone: ' + h.goal.short);
+        assert.equal(h.counter, undefined, 'no copies chip in the Try');
       }
     }
   }

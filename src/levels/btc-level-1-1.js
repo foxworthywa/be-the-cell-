@@ -133,11 +133,11 @@
       found: 'Found it · growth {pct}% of normal', foundShort: 'Found · growth {pct}%',
       timer: '{time} left',
       counter: 'Experiments {n} · target 3', counterShort: '{n}/3 tests',
-      counterOver: 'Experiments {n} · over par (3)', counterOverShort: '{n}/3 tests',
+      counterOver: 'Experiments {n} · more than needed (3)', counterOverShort: '{n}/3 tests',
     },
     medium: 'The glucose outside is fixed. Lactose and amino acids are yours to add; adding them does not count as an experiment.',
     result: {
-      used: 'You used {n} experiments; par is 3 or fewer.', usedOne: 'You used 1 experiment; par is 3 or fewer.',
+      used: 'You used {n} experiments; 3 or fewer is enough.', usedOne: 'You used 1 experiment; 3 or fewer is enough.',
       second: 'You also saw the job of gene {letter} (Expert).',
     },
     complete: {

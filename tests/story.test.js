@@ -6,7 +6,8 @@
 //         most 1 Ribosome line (counted per path: 1.2's three outros are three paths, not one file); every outro's
 //         first line is true of the run it follows (scripted runs of 1.2's solutions).
 //   ST-2  a term of the shared vocabulary (§1.2) appears only at or after the step that introduces it, in play order
-//         from Part 1: story lines, guesses and their feedback, causes, notes, cards, task, result and debrief text.
+//         from Part 1: story lines, guesses and their feedback, causes, notes, wait and done lines, cards, task, the
+//         run's counter and speed notes, result and debrief text.
 //
 // The job tags of §2.8 and §6.2.8 (S, R, T) live in those tables, not in the level data.
 'use strict';
@@ -53,6 +54,7 @@ function scenesPath(def) {
     if (sc.picture === 'cards') strings(T.cardsF7).forEach((t) => put(sc.id, t));
     if (sc.picture === 'pairs') strings(T.cardsQ7).forEach((t) => put(sc.id, t));
     if (sc.activity && sc.activity.words) strings(sc.activity.words).forEach((t) => put(sc.id, t));
+    if (sc.done) put(sc.id, sc.done);                        // the line that replaces the prompt once the activity is done
     if (sc.guess) guess(sc.id, sc.guess);
   }
   return { out, put, guess, later };
@@ -60,6 +62,7 @@ function scenesPath(def) {
 function watchPath(def, acc) {
   for (const st of def.watch.steps) {
     for (const l of st.lines) acc.put(st.id, l.text, l.who);
+    if (st.wait) acc.put(st.id, st.wait);                    // the line shown while the step waits for the cell
     if (st.guess) acc.guess(st.id, st.guess);
     for (const t of acc.later[st.id] || []) acc.put(st.id, t);
     if (st.cause) acc.put(st.id, st.cause);
@@ -93,9 +96,13 @@ function paths(def) {
   watchPath(L12, acc);
   strings(T.task).forEach((t) => put('task', t));
   for (const l of L12.story.onRun) put('run', l.text, l.who);
+  put('run', T.onTheWay);
+  put('run', T.onTheWayShort);
+  strings(T.spedUp).forEach((t) => put('run', t));
   for (const r of L12.narratorRules) put('run', r.template);
   for (const l of L12.story.extra.milk) put('milk', l.text, l.who);
   strings(T.result).forEach((t) => put('result', t));
+  strings(T.resultWords).forEach((t) => put('result', t));
   for (const q of L12.debrief) { put('debrief', q.prompt); for (const o of q.options) { put('debrief', o.t); put('debrief', o.fb); } }
   const tail = [];
   for (const k of L12.echo.screens) tail.push({ level: L12.id, at: 'echo', text: LV.textAt(L12, k) });

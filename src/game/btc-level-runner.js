@@ -1213,6 +1213,9 @@
         guess: null, act: w.stage === 'act' ? copy(s.act) : null,
         cause: w.open && s.cause ? fill(s.cause) : null, feedback: w.open ? this.feedbackAt(s.id) : [],
         note: null, offer: s.offer ? copy(s.offer) : null, offerSpeed: s.offerSpeed || null, gate: s.gate.kind,
+        // While the step waits on the model: a line saying what is happening (no guided step sits silent, PM4); and a
+        // speed the step moves the cell to (with a note saying so) when the wait would be long at the default speed.
+        wait: s.wait ? fill(s.wait) : null, speed: null,
         // Readouts this step's own line explains (P2's H2, H4, H9): the tiered screen does not introduce them again.
         introduces: s.introduces ? s.introduces.slice() : null,
       };
@@ -1220,6 +1223,11 @@
         const g = s.guess;
         info.guess = { id: g.id, prompt: fill(g.prompt), picked: w.picks[g.id] === undefined ? null : w.picks[g.id],
           options: this.optionOrder(g.id).map((i) => ({ index: i, t: fill(g.options[i].t) })) };
+      }
+      // The speed this step moves the cell to: at once (a number), or once a state holds ({to, test}: w1b once the watched copy is gone).
+      if (s.speed && w.stage !== 'guess') {
+        const to = typeof s.speed === 'number' ? s.speed : s.speed.to;
+        info.speed = { to, now: typeof s.speed === 'number' ? w.stage !== 'until' : !!this.watchCell && this.testCond(s.speed, this.watchCell.observe(), {}) };
       }
       // Honest help while the step waits: the first of its notes whose condition holds now.
       if ((info.waiting || w.stage === 'act') && s.notes && this.watchCell) {
@@ -1279,7 +1287,12 @@
     /** Level narrator rules with the read-only `level` object of §5.5.4 as their fourth argument. */
     narratorRules() {
       const runner = this;
-      return this.def.narratorRules.map((r) => {
+      // The lab's "The mRNA for … is gone; the protein remains and is shared out at each division." is off the
+      // level's point and reads as a verdict at the end of a run: in a level that phase is dropped, so the narrator
+      // reads the cell's growth instead. It never speaks itself.
+      const noGone = { key: 'level.nogone', template: '', gene: null, preempt: false,
+        when: (f, m) => { if (m && m.phase === 'gone') m.phase = null; return false; } };
+      return [noGone].concat(this.def.narratorRules.map((r) => {
         // A rule's gene is fixed (a string) or chosen when it speaks (gene(facts, memory, tick, level): 1.1's reveals).
         const rule = { key: r.key, template: this.text(r.template), gene: typeof r.gene === 'string' ? r.gene : null, preempt: !!r.preempt };
         rule.when = (f, m, t) => {
@@ -1289,7 +1302,7 @@
           return ok;
         };
         return rule;
-      });
+      }));
     }
     levelView() {
       const demo = this.phase === 'demo', watch = this.phase === 'watch';

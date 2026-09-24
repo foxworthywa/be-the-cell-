@@ -42,6 +42,13 @@
   const G = C.game;
   const textAt = (def, key) => String(key).split('.').reduce((x, k) => (x && typeof x === 'object' ? x[k] : undefined), def.text);
   const pct = (x) => (typeof x === 'number' ? String(Math.round(100 * x)) : '–');
+  /** What the cards' stamps mean, for the stamps these cards carry (pm16: "Universal: your cells do this too."). */
+  const stampNote = (cards) => {
+    const E = G.echo, out = [];
+    if (cards.some((c) => c.stamp === 'universal')) out.push(E.universalNote);
+    if (cards.some((c) => c.stamp !== 'universal')) out.push(E.bacteriaNote);
+    return out.join(' ');
+  };
 
   /** The code split at its hyphens into lines of at most perLine characters (the hyphen stays at the line end). */
   function codeLines(code, perLine) {
@@ -91,6 +98,7 @@
       this.debriefIndex = 0;
       this.lastPhase = runner.phase;
       this.completed = false;
+      this.introHeld = false;
     }
     unbind() { this.dropSketch(); this.close(); if (this.app.views && this.app.views.guide) this.app.views.guide.hide(); this.runner = null; this.def = null; }
     dropSketch() { if (this.sketch) { this.sketch.destroy(); this.sketch = null; } }
@@ -149,14 +157,27 @@
         const top = cur.body.scrollTop;          // a rebuild in place keeps the student's place in a long sheet
         cur.body.textContent = '';
         if (opts.title !== undefined) LY.setText(cur.title, opts.title);
+        // Its classes follow what it holds now (a scene's sheet grows tall for a guess or an activity, PM7).
+        const cls = 'sheet ' + (opts.className || '');
+        if (cur.sheet.className !== cls) cur.sheet.className = cls;
         build(cur.body);
         cur.body.scrollTop = top;
         this.focusPrimary(cur.sheet);
+        this.scrollCue(cur.body);
         return cur;
       }
       const st = LY.openSheet(Object.assign({ closable: false, key: k, build }, opts));
       this.focusPrimary(st.sheet);
+      this.scrollCue(st.body);
       return st;
+    }
+    /** A sheet whose content runs on below its sticky actions says so (a shadow), until scrolled to its end (PM7, pm4). */
+    scrollCue(body) {
+      if (!body) return;
+      const upd = () => body.classList.toggle('lv-more', body.scrollHeight - body.clientHeight - body.scrollTop > 8);
+      if (!body.lvCue) { body.lvCue = true; body.addEventListener('scroll', upd, { passive: true }); }
+      upd();
+      if (typeof requestAnimationFrame === 'function') requestAnimationFrame(upd);
     }
     focusPrimary(sheet) {
       // The main button when it is enabled; otherwise the sheet itself, so no answer looks chosen by a focus ring.
@@ -184,9 +205,16 @@
           if (line.last) r.next(); else r.storyNext();
           this.after();
         } }, line.last ? G.continue : G.next);
-        const skip = line.last ? h('span') : h('button', { class: 'btn lv-skip', type: 'button', onclick: () => { r.storySkip(); this.after(); } }, G.skipStory);
+        // Skip only for a student who has finished this level before (PM6): a first play reads the story.
+        const skip = line.last || !this.returning() ? h('span') : h('button', { class: 'btn lv-skip', type: 'button', 'data-action': 'skip', onclick: () => { r.storySkip(); this.after(); } }, G.skipStory);
         body.appendChild(h('div', { class: 'lv-actions' }, [skip, next]));
       });
+    }
+
+    /** Has this student finished this level before? (Skip is offered only then, PROLOGUE §2.1, PM6.) */
+    returning() {
+      const p = this.app.progress;
+      return !!(p && this.def && p.results(this.def.id).length > 0);
     }
 
     // --- the Watch step (PROLOGUE §1.4, §2.4.3): the guide's callout over the live cell -------------
@@ -211,13 +239,27 @@
       let text = F.fill(info.text, { N }), who = info.who, point = info.point;
       // A step whose own line explains a readout (P2's H2, H4, H9): the student has met it; it is not introduced again.
       if (info.introduces && (info.stage === 'lines' || info.stage === 'tap') && app.progress) for (const id of info.introduces) app.progress.markIntroduced(id);
+      // A step that moves the cell to a faster speed (P2's H10; 1.2's waits once nothing new is to be seen) does it once,
+      // and says so while the step lasts: never a silent wait (PM4).
+      const sp = info.speed, spKey = r.attempt + ':' + info.id;
+      if (sp && sp.now && !(this.sped && this.sped[spKey]) && app.speed() < sp.to) {
+        (this.sped || (this.sped = {}))[spKey] = true;
+        app.setSpeed(sp.to);
+      }
+      if (this.sped && this.sped[spKey]) {
+        const lab = app.BTC.content.speeds.find((x) => x.s === app.speed());
+        extra.push({ text: F.fill(W.spedUp, { speed: lab ? lab.label : F.speedLabel(app.speed()) }), kind: 'hint' });
+      }
       if (info.stage === 'until') {
-        // The step appears once the model gets there: until then, what to do to see it.
-        text = ''; who = 'narrator'; point = null;
+        // The step appears once the model gets there: until then, what is happening (the step's wait line) and what to do.
+        text = info.wait || ''; who = 'narrator'; point = null;
         extra.push({ text: app.isRunning() ? W.waiting : W.paused, kind: 'wait' });
       } else if (info.stage === 'act') {
         extra.push({ text: info.act && info.act.kind === 'zoom' ? W.actZoom : W.act, kind: 'hint' });
-      } else if (info.stage === 'wait' && !app.isRunning()) extra.push({ text: W.paused, kind: 'wait' });
+      } else if (info.stage === 'wait') {
+        if (info.wait && (!sp || sp.now)) extra.push({ text: info.wait, kind: 'note' });
+        if (!app.isRunning()) extra.push({ text: W.paused, kind: 'wait' });
+      }
       if (info.cause) extra.push({ text: info.cause, kind: 'cause' });
       for (const f of info.feedback) {
         extra.push({ text: F.fill(W.youGuessed, { option: f.picked }), kind: 'guessed' });
@@ -235,8 +277,10 @@
         const zl = app.views && app.views.zoom ? app.views.zoom.level : 'cell';
         for (const o of info.offer) if (o.zoom !== zl) buttons.push({ label: r.text(o.label || W.lookCloser), action: 'watch-zoom-' + o.zoom, onClick: () => app.setZoom(o.zoom, 'guide') });
       }
+      // cover: at a step read with Next, nothing below the cell view is needed, so the callout may lie over the
+      // controls to keep off what it points at (the pocket of the protein close-up on a phone, pm9).
       this.guide().show({ key: 'step:' + info.id + ':' + info.stage + ':' + info.line, who, text, extra, point,
-        count: F.fill(W.stepOf, { i: info.index + 1, n: info.count }), buttons });
+        count: F.fill(W.stepOf, { i: info.index + 1, n: info.count }), buttons, cover: info.stage === 'lines' || info.stage === 'tap' });
     }
 
     /** After a watch action: saved, shown, and the cell runs on by itself when the next step waits on it and the student had it running. */
@@ -292,13 +336,16 @@
         const sel = TI.TARGETS[id];
         const el = sel ? Array.from(document.querySelectorAll(sel)).find((x) => x.offsetParent !== null && !x.closest('[hidden]')) : null;
         if (!el) continue;                    // not on screen yet (another tab): introduced when it is
+        // A run does not go on under the callout: it waits for Next (at 1 s = 1 min a minute of the run is a second).
+        if (r.phase === 'run' && app.isRunning()) { this.introHeld = true; app.pause(); }
         this.guide().show({ key: 'intro:' + id, who: 'narrator', text: TI.sentence(id, app.geneModel, app.focusGene), point: id,
           buttons: [{ label: G.next, action: 'intro-next', primary: true, onClick: () => {
             app.progress.markIntroduced(id);
             app.logEvent('introduce', { readout: id });
             this.syncGuide();
+            const g = this.guide();
+            if (this.introHeld && !(g.cur && /^intro:/.test(g.cur.key))) { this.introHeld = false; if (this.runner.phase === 'run') app.resume(); }
           } }] });
-        void r;
         return true;
       }
       return false;
@@ -330,7 +377,10 @@
       this.sheet('scene', { className: 'lv-sheet lv-story lv-scene' + (tall ? ' lv-tall' : '') + (busy ? ' lv-act' : ''), backdropClass: 'lv-dim lv-clear pl-through',
         label: G.speakers[info.who] }, (body) => {
         body.appendChild(this.speaker(info.who, info.lines > 1 ? F.fill(G.lineOf, { i: info.line + 1, n: info.lines }) : ''));
-        body.appendChild(h('p', { class: 'lv-line', 'aria-live': 'polite', text: info.text }));
+        // Once the scene's activity is done, its prompt gives way to what happened (pm11: "The machine copied the rest …").
+        const doneLine = info.scene.done && info.activity && info.activity.done ? F.fill(r.text(info.scene.done), { n: F.count(info.activity.total) }) : '';
+        // With a guess to pick, the line is small so the options fit a short phone (PM7).
+        body.appendChild(h('p', { class: 'lv-line' + (g && !g.seen ? ' lv-line-small' : ''), 'aria-live': 'polite', text: doneLine || info.text }));
         // A9: tap a letter to see its partner (optional exploring; the gate is Next).
         if (info.scene.explore && info.lastLine) body.appendChild(h('p', { class: 'sheet-note pl-pairnote', 'aria-live': 'polite', text: U.tapLetter || '' }));
         // A guess before the scene's show (PROLOGUE §2.3.4): pick, then "See what happens"; never marked right or wrong.
@@ -371,7 +421,13 @@
         // A guess not yet seen: the sheet's main button is "See what happens" (never hidden below the options).
         const next = g && !g.seen
           ? h('button', { class: 'btn primary lv-next lv-see', type: 'button', 'data-primary': '', 'data-action': 'guess-see', disabled: g.picked === null,
-            onclick: () => { if (r.sceneSee().ok) this.after(); } }, W.see)
+            onclick: () => {
+              if (!r.sceneSee().ok) return;
+              // "See what happens" goes straight to the show when it is the next scene's (D1 → D2, F4 → F5; PB3).
+              const sg = info.scene.guess, now = r.sceneInfo();
+              if (sg && sg.showAt && sg.showAt !== info.scene.id && now.solved && !now.last) r.sceneNext();
+              this.after();
+            } }, W.see)
           : h('button', { class: 'btn primary lv-next', type: 'button', 'data-primary': '', 'data-action': closerWord ? 'rung-closer' : 'scene-next', disabled: blocked,
             onclick: onNext }, info.last ? G.continue : closerWord ? (U.closer || G.next) + ' \u203a' : G.next);
         if (rung) {
@@ -379,8 +435,9 @@
             onclick: () => { const id = info.scene.id; if (r.sceneBack().ok) { this.app.logEvent('rung', { id, action: 'back', via: 'button' }); this.after(); } } },
           '‹ ' + (U.back || 'Back'));
         } else {
-          const canSkip = !info.last && !blocked;
-          left = canSkip ? h('button', { class: 'btn lv-skip', type: 'button', onclick: () => { r.sceneSkip(); this.after(); } }, G.skipStory) : h('span');
+          // Skip to the next activity: only for a student who has finished this part before (PM6).
+          const canSkip = !info.last && !blocked && this.returning();
+          left = canSkip ? h('button', { class: 'btn lv-skip', type: 'button', 'data-action': 'skip', onclick: () => { r.sceneSkip(); this.after(); } }, G.skipScene) : h('span');
         }
         // Kept in reach whenever the sheet may be taller than the screen (a question, a guess, an activity, feedback, an open About).
         const sticky = tall || !!act || info.feedback.length > 0 || !!(this.aboutOpen && this.aboutOpen[info.scene.id]);
@@ -427,15 +484,17 @@
         if (act.stage === 'decode') {
           const codon = spec.codons[act.i];
           body.appendChild(h('p', { class: 'pl-codon', text: F.fill(U.thisCodon, { codon }) }));
+          // A wrong row's feedback above the rows, where it is seen (PM7).
+          if (lastFb && act.last.i === act.i) body.appendChild(h('p', { class: 'lv-fb-line pl-actfb', 'aria-live': 'polite', text: lastFb }));
           const rows = h('div', { class: 'pl-rows', role: 'group' });
           spec.rows.forEach((row, j) => {
             const tried = act.last && !act.last.match && act.last.i === act.i && act.last.value === row.codon;
-            const word = row.start ? row.three + ' (' + U.startWord + ')' : row.stop ? U.stopWord : row.three;
+            // The amino acid by its name, then its short form (pm15: "alanine (Ala)").
+            const word = row.stop ? U.stopWord : F.fill(row.start ? U.rowStart || U.rowAa : U.rowAa, { name: row.name, three: row.three, start: U.startWord });
             rows.appendChild(h('button', { class: 'btn pl-row' + (tried ? ' is-tried' : '') + (act.hint === j ? ' is-hint' : ''), type: 'button', 'data-row': String(j),
               onclick: () => { r.sceneAct({ row: j }); this.after(); } }, [h('span', { class: 'pl-row-codon', text: row.codon }), h('span', { class: 'pl-row-aa', text: word })]));
           });
           body.appendChild(rows);
-          if (lastFb && act.last.i === act.i) body.appendChild(h('p', { class: 'lv-fb-line pl-actfb', 'aria-live': 'polite', text: lastFb }));
           body.appendChild(h('button', { class: 'btn row-btn', type: 'button', 'data-action': 'full-table', onclick: () => this.codeTable(U) }, U.fullTable));
         } else {
           if (!act.started) body.appendChild(h('p', { class: 'sheet-note', text: U.readDone }));
@@ -831,12 +890,14 @@
         if (parPending) body.appendChild(h('p', { class: 'sheet-note lv-working', 'aria-live': 'polite', text: r.text((this.def.text.result || {}).working || '') }));
         if (this.def.resultHint) for (const t of this.def.resultHint(r.variant, prev, r.monitorResult || {}, r.goal)) body.appendChild(h('p', { class: 'lv-hint', text: t }));
         if (r.goal && typeof prev.E === 'number') {
-          const E = Math.max(0, Math.min(1, prev.E)), within = E >= 0.8;
+          const E = Math.max(0, Math.min(1, prev.E)), within = E >= 0.8, RW = this.resultWords();
+          // In plain words (never golf's "par"): "just enough" or "more than needed"; a level may name the bar (1.2: "Copies made").
+          const word = within ? RW.within : RW.over, value = RW.hideValue ? word : pct(E) + ' · ' + word;
           body.appendChild(h('div', { class: 'lv-eff' }, [
-            h('div', { class: 'lv-eff-head' }, [h('span', { text: R.efficiency }), h('span', { class: 'num', text: pct(E) + ' · ' + (within ? R.withinPar : R.overPar) })]),
-            h('div', { class: 'lv-eff-bar', role: 'img', 'aria-label': R.efficiency + ' ' + pct(E) + ', ' + (within ? R.withinPar : R.overPar) }, [
+            h('div', { class: 'lv-eff-head' }, [h('span', { text: RW.efficiency + (RW.hideValue ? ':' : '') }), h('span', { class: 'num', text: value })]),
+            h('div', { class: 'lv-eff-bar', role: 'img', 'aria-label': RW.efficiency + ' ' + value }, [
               h('span', { class: 'lv-eff-fill' + (within ? ' is-within' : ''), style: { width: (100 * E).toFixed(1) + '%' } }),
-              h('span', { class: 'lv-eff-par', style: { left: '80%' } }, h('span', { class: 'lv-eff-par-label', text: R.parMark })),
+              h('span', { class: 'lv-eff-par', style: { left: '80%' } }, h('span', { class: 'lv-eff-par-label', text: RW.mark })),
             ]),
           ]));
           if (this.def.resultLines) for (const t of this.def.resultLines(r.variant, prev)) body.appendChild(h('p', { class: 'sheet-note', text: t }));
@@ -868,15 +929,21 @@
       });
     }
 
-    /** One bar against par (the efficiency bar's look): label, value 0–1 with the par mark at 80%, and a line. */
+    /** The words of the efficiency bars: the app's plain ones, or the level's own (TEXT.resultWords). */
+    resultWords() {
+      const R = G.result, own = (this.def.text && this.def.text.resultWords) || {};
+      return { efficiency: own.efficiency || R.efficiency, within: own.within || R.withinPar, over: own.over || R.overPar, mark: own.mark || R.parMark,
+        hideValue: !!own.hideValue };
+    }
+    /** One bar against the reference (the efficiency bar's look): label, value 0–1 with the mark at 80%, and a line. */
     bar(label, value, line, key) {
-      const h = LY.h, R = G.result;
-      const E = Math.max(0, Math.min(1, value)), within = E >= 0.8;
+      const h = LY.h, RW = this.resultWords();
+      const E = Math.max(0, Math.min(1, value)), within = E >= 0.8, word = within ? RW.within : RW.over;
       return h('div', { class: 'lv-eff lv-sub', 'data-bar': key || null }, [
-        h('div', { class: 'lv-eff-head' }, [h('span', { text: label }), h('span', { class: 'num', text: pct(E) + ' · ' + (within ? R.withinPar : R.overPar) })]),
-        h('div', { class: 'lv-eff-bar', role: 'img', 'aria-label': label + ' ' + pct(E) + ', ' + (within ? R.withinPar : R.overPar) }, [
+        h('div', { class: 'lv-eff-head' }, [h('span', { text: label }), h('span', { class: 'num', text: pct(E) + ' · ' + word })]),
+        h('div', { class: 'lv-eff-bar', role: 'img', 'aria-label': label + ' ' + pct(E) + ', ' + word }, [
           h('span', { class: 'lv-eff-fill' + (within ? ' is-within' : ''), style: { width: (100 * E).toFixed(1) + '%' } }),
-          h('span', { class: 'lv-eff-par', style: { left: '80%' } }, h('span', { class: 'lv-eff-par-label', text: R.parMark })),
+          h('span', { class: 'lv-eff-par', style: { left: '80%' } }, h('span', { class: 'lv-eff-par-label', text: RW.mark })),
         ]),
         line ? h('p', { class: 'sheet-note', text: line }) : null,
       ]);
@@ -987,6 +1054,7 @@
           body.appendChild(h('div', { class: 'card-tiles' }, this.def.echo.cards.map((c) => Home.cardTile({ id: c.id, title: textAt(this.def, c.title), stamp: c.stamp }))));
           // A card may carry one plain line on why it is stamped as it is (1.2: mRNA copies are temporary, in your cells too).
           for (const c of this.def.echo.cards) if (c.note) body.appendChild(h('p', { class: 'sheet-note lv-card-note', text: textAt(this.def, c.note) }));
+          body.appendChild(h('p', { class: 'sheet-note', text: stampNote(this.def.echo.cards) }));
         }
         body.appendChild(h('div', { class: 'lv-sticky lv-actions' }, h('button', {
           class: 'btn primary lv-wide', type: 'button', 'data-primary': '',
@@ -1006,12 +1074,14 @@
         if (r.cards.length && !r.has('echo')) {
           const names = this.def.echo.cards.map((c) => textAt(this.def, c.title) + ' (' + (c.stamp === 'universal' ? G.echo.universal : G.echo.bacteria) + ')');
           body.appendChild(h('p', { class: 'sheet-note', text: F.fill(K.cardsCollected, { list: names.join(', ') }) }));
+          body.appendChild(h('p', { class: 'sheet-note', text: stampNote(this.def.echo.cards) }));
         }
         const perLine = Math.max(16, Math.floor((Math.min(560, window.innerWidth) - 72) / 10.9));
         const codeEl = h('div', { class: 'code-box num', 'aria-label': K.codeLabel + ' ' + r.code }, codeLines(r.code, perLine).map((l) => h('span', { class: 'code-line-part', text: l })));
         body.appendChild(h('p', { class: 'code-caption', text: K.codeLabel }));
         body.appendChild(codeEl);
-        body.appendChild(h('p', { class: 'lv-canvas', text: K.canvas }));
+        // An unscored part (the opening) says so; its code may still be asked for (pm16).
+        body.appendChild(h('p', { class: 'lv-canvas', text: this.def.scored === false ? K.canvasUnscored : K.canvas }));
         const status = h('p', { class: 'lv-copy-status', 'aria-live': 'polite' });
         const row = [h('button', { class: 'btn primary', type: 'button', 'data-primary': '', 'data-action': 'copy-code', onclick: () => {
           PWA.copyText(r.code, codeEl).then((how) => {

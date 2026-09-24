@@ -2272,16 +2272,61 @@ line). What changes the level framework or 1.2 as LEVELS describes it:
   and drawings; no variant, goal, scoring rule, option or flag changed (§3.2's rule), so codes and
   autosaves stay valid.
 - **1.2's phone HUD** (under 400 px): goal "Transporters {count} / {T}" (was "LacY {count} / {T}"),
-  watch goal "Watching the gene". So that the goal fits whole, `counter.tiny` (new, optional) lets a
-  level's counter chip give way under 400 px ('' hides it): 1.2's copies are in the focus bar just
-  below; past par the chip reads "over par" and the goal drops "/ {T}". The long forms (400 px and
-  up) are unchanged. L12-6 and LV-4 check it.
+  watch goal "Watching the gene". (The `counter.tiny` form added here for its copies chip went again
+  with §16.15, which drops the Try's copies counter.)
 - **Echo cards** may carry `note` (a TEXT key), one plain line shown under the cards on the last
   "Meanwhile, in you" screen. 1.2's card is now "mRNA copies are temporary · Universal" (id
   `mrna-temporary`); Part 1 already gave the mRNA card, which 1.2 used to repeat.
 - **Story tests** `tests/story.test.js`: ST-1 counts Commander and Ribosome lines per play path
   (1.2's three outros are three paths) and checks every outro's first line against scripted runs;
   ST-2 checks the shared vocabulary's order of play (docs/PROLOGUE.md §1.2, §10.1).
+
+### 16.15 The slice's phone play-through review (2026-09-24)
+
+Fixes from a play-through of the slice on phones (360 × 740 and 375 × 667, real taps, the real loop);
+docs/PROLOGUE.md is updated line by line (§2.1, §2.3, §2.4.3, §6.2, §10). What changes the level
+framework, or the levels as this file describes them:
+- **Content versions unchanged** (P 2, P2 1, 1.2 4, 1.1, 1.4, 1.7 as they were): the fixes reword,
+  re-gate watch steps and change what is shown; no variant, goal, scoring rule, option or flag changed.
+- **No "par" in anything a student reads** (the coordinator's decision). The shared result bar takes a
+  level's `TEXT.resultWords` `{efficiency?, within, over, mark, hideValue?}` over the app's plain
+  defaults ("just enough" / "more than needed", the marker "enough"): 1.2 reads "Copies made: just
+  enough" with no number; 1.7 "as good as the normal genes" / "behind the normal genes", its chart and
+  lines naming "the normal lac genes"; 1.1's and 1.4's counters "· more than needed (3)" and "3 or
+  fewer is enough.". Field names (`par`, `withinPar`, E ≥ 0.8) are unchanged inside.
+- **Watch steps** may carry `wait` (a TEXT string shown while the step waits for the cell, so no step
+  is a silent "Watching the cell…") and `speed` (a number, or `{to, test}`: the step moves the cell to
+  that speed once, at once or when the test turns true, and the callout says "Sped up: 1 s = 1 min.").
+  No guided step sits more than about 30 s of real time at the default speed with nothing new on
+  screen. `btc-watch.js` validates both; the runner's `watchInfo` passes them on.
+- **Run speed-ups:** a level's `speedUps: [{key, speed, note, when(monitorState, variant)}]` moves a
+  run to `speed` once per run and rule, only ever faster, with the note as a toast (1.2: once off with
+  enough on the way, and at the milk).
+- **A readout's introducing callout pauses a run** until its Next, then the run goes on (an
+  introduction at 1 s = 1 min used to let a minute pass per second under it).
+- **One voice at a time:** the narrator bar is hidden while a guide callout shows. The callout keeps
+  off what it points at (below or above its ring; a line read with Next, `cover`, may lie over the
+  controls below the cell view).
+- **Narrator in levels:** the lab's "The mRNA for … is gone; the protein remains and is shared out at
+  each division." is not said in a level (its phase is dropped; the cell's growth is read instead).
+- **Skip** ("Skip to the next activity", "Skip story") only for a student who has finished that level
+  or part before.
+- **1.2** (docs/PROLOGUE.md §6.2): W1b's gate waits for the watched copy and the first ten copies made
+  from it on to be broken down and gives their mean beside the one watched; W2b's for a tenth of the
+  copies left; the Try's HUD has the goal and the time only ("{n} of {T} lactose transporters"), the
+  transporter counter adds "+ about {x} on the way" (`focusBar.onTheWay {perCopy, text, short}`; "{n}
+  +{x} on the way" in a short screen's one row), the result speaks in transporters, not ATP.
+  Machine time (taps 0.8 s apart, no reading, default speeds, 360 × 740): 265 s, from 536 s (watch
+  54 s from 184 s; run 207 s from 330 s).
+- **Tiered screens' legend:** 'short' now means short only on a short viewport (under 600 px high);
+  with room the whole legend shows on up to two lines, as in the lab (P2's H2 points at it).
+- **The lab in Simple mode** focuses the glucose transporter (was the flagellum protein, switched off
+  and doing no work) and, on its first open, shows one guide line: "Try a gene: switch one on or off,
+  run the cell, and watch its copies and its protein." It goes with its button or the student's first
+  action. The "stands for" badge reads "stands for about {n} genes".
+- **Checks:** LV-4 (PB1 gate, PM2 narrator, PB2 counter not cut, the auto speed-up, no "par" in the
+  result), LV-6 (no "par"), BO-1 (PB3, PM6), BO-4 (PM4, no toast on the switch); ST-2 scans wait and
+  done lines, the run's notes and result words.
 
 
 ---

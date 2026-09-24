@@ -385,7 +385,11 @@
     }
     pictureSvg(sc, T) {
       const words = Object.assign({}, T.labels, { scaleRibosome: T.scale && T.scale.ribosome, scaleLetters: T.scale && T.scale.letters });
-      if (sc.picture === 'economy' && this.def && this.def.economy) words.priceAtp = String(this.def.economy.transporterAtp).replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+      if (sc.picture === 'economy' && this.def && this.def.economy) {
+        const cm = (n) => String(n).replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+        words.priceAtp = cm(this.def.economy.transporterAtp);
+        words.priceAaN = cm(this.def.economy.transporterAa);
+      }
       return SS.svg(sc.picture, this.stateFor(sc), words);
     }
     /** Redraws a picture whose state changed (the activity moved on). */
@@ -413,11 +417,11 @@
         box.appendChild(MV.MachineCard.create(CU.MACHINES.enzyme, 'g-gly', { job: W2.enzyme.job, name: W2.enzyme.name, where: W2.enzyme.where }));
         box.appendChild(this.insulinCard(W2.insulin));
       } else {
-        // Q7: the part's own words (what each does, with no ATP before S3 names it), the gene symbol in muted italics.
-        const W2 = T.cardsQ7 || {}, G = this.app.BTC.content.genes;
+        // Q7: the part's own words (what each does, with no ATP before S3 names it); no gene symbols yet ("gapA et al.", PM9).
+        const W2 = T.cardsQ7 || {};
         for (const id of ['ptsG', 'gly', 'lacY', 'lacZ']) {
           const wd = W2[id];
-          box.appendChild(wd ? MV.MachineCard.create(CU.machineOf(id), 'g-' + id, { job: wd.job, name: wd.name, symbol: G[id].symbol, where: wd.where })
+          box.appendChild(wd ? MV.MachineCard.create(CU.machineOf(id), 'g-' + id, { job: wd.job, name: wd.name, where: wd.where })
             : MV.MachineCard.forGene(id, { location: id === 'ptsG' || id === 'lacY' ? 'membrane' : 'cytoplasm' }));
         }
         box.classList.add('is-pairs');
@@ -452,12 +456,13 @@
       const s = Math.max(14, Math.min(38, Math.min(w / 9, hh / 11)));
       if (this.key === 'fold') {
         c.fillStyle = P.inside; c.fillRect(0, 0, w, hh);
-        const t = reduced ? 1 : Math.min(1, this.tau / 1.4);
+        // The collapse plays slowly enough to be seen (PM8): a short pause, then about 2.4 s.
+        const t = reduced ? 1 : Math.max(0, Math.min(1, (this.tau - 0.5) / 2.4));
         // The chain's first 24 amino acids (INS.parts.signal) are cut off as it is made, so the rest folds: one bead per
         // amino acid of the computed chain after them (86); oily stretches (none in insulin: the maximum is under the
         // threshold) drawn thicker. Insulin's own colour (the prologue's gene colour), not a lab gene's.
         const SEQ = this.app.BTC.seq, model = SS.model(), protein = model.protein, oily = SEQ.oilyStretches(protein), sig = model.parts.signal[1];
-        const col = P.insulin || P.muted, br = Math.max(2.4, Math.min(4, w / 110));
+        const col = P.insulin || P.muted, br = Math.max(2.6, Math.min(4.2, w / 100));
         art.drawChainFold(c, P, col, protein.length - sig, t, w / 2, hh / 2 - 10, Math.min(w - 40, 420), br,
           (i) => oily.some((x) => i + sig + 1 >= x.from && i + sig + 1 <= x.to));
         // The piece cut off, faded beside the fold, with how long it is.
@@ -474,9 +479,16 @@
         const y = top + (hh - top - bottom) / 2;
         c.fillStyle = P.outside; c.fillRect(0, 0, w, y); c.fillStyle = P.inside; c.fillRect(0, y, w, hh - y);
         art.drawMembrane(c, P, 0, w, y, s);
-        for (let k = 0; k < 5; k++) art.drawMol(c, P, 'glucose', w * (0.14 + 0.18 * k), y - s * (2.6 + (k % 2) * 1.4), s, 0, 1);
+        // Glucose bumps into the membrane's heads and bounces back: nothing lets it through (a fixed path, no fit).
+        // The two middle ones start higher (the corner labels sit above the outer ones).
+        const HI = [0, 0.3, 1.2, 0.8, 0];
+        for (let k = 0; k < 5; k++) {
+          const ph = reduced ? 0 : ((this.tau / 1.8 + k * 0.23) % 1), bump = Math.sin(Math.PI * Math.min(1, ph * 1.6)) * (ph < 0.625 ? 1 : 0);
+          art.drawMol(c, P, 'glucose', w * (0.14 + 0.18 * k), y - s * (2.9 + HI[k]) + bump * s * (0.4 + HI[k]), s, 0, 1);
+        }
         this.canvasLabel(c, P, L.outside, 10, 18);
-        this.canvasLabel(c, P, L.membrane + ' · ' + L.oily, 10, y - s * 1.6 - 12);
+        // Below the membrane, clear of its heads (pm14).
+        this.canvasLabel(c, P, L.membrane + ' · ' + L.oily, 10, y + s * 2 + 14);
         this.canvasLabel(c, P, L.inside, 10, hh - 14);
         this.canvasLabel(c, P, L.glucose, w - 10, 18, 'right');
         return;
@@ -523,7 +535,7 @@
           if (info.activity.done || (res && res.finished)) this.app.views.levelUI.after();
           more = true;
         }
-        if (this.canvas && (this.key !== 'fold' || this.tau < 1.5)) { this.drawCanvas(dt); more = true; }
+        if (this.canvas && (this.key !== 'fold' || this.tau < 3.2)) { this.drawCanvas(dt); more = true; }
         if (this.tap) { if (now > this.tapUntil) { this.tap = null; this.refresh(); } else more = true; }
         if (more) this.raf = requestAnimationFrame(frame);
       };
