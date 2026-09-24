@@ -1,16 +1,29 @@
-// @deps btc-cell btc-replay btc-level-kit btc-levels btc-score btc-code
+// @deps btc-cell btc-replay btc-level-kit btc-watch btc-levels btc-score btc-code
 /*
  * Be the Cell: the level runner (LEVELS §4) and the headless player.
  *
  * One pure phase machine drives every level through the same phases:
- * scenes (Prologue) · intro · task · predict · demo · design · run · result ·
+ * scenes (Prologue) · intro · watch · task · predict · demo · design · run · result ·
  * predict2 · epilogue · debrief · echo · complete. Nothing advances because
  * time passed: next() refuses until the gate of §4.1 holds, and says why.
+ *
+ * The level pattern of the teaching-first redesign (docs/PROLOGUE.md §1.4): Watch (the watch
+ * phase: steps on a watch cell, gated on taps, acts, guesses or model states; guesses are logged,
+ * never marked wrong, and feed flags only), Guess then see (a step's guess), Try (the run: G and
+ * E) and Explain (the debrief: D). Only Try and Explain are scored (BTC.score, code format BTC2).
+ *
+ *   r.watchInfo()                     the current step: its line, stage, guess, cause and feedback
+ *   r.watchNext()                     Next (the next line, or past an opened gate)
+ *   r.watchPick(gid, option), r.watchSee()   a guess, then "See what happens"
+ *   r.watchCommand(cmd, result)       the app reports each command the student sent on the watch cell
+ *   r.watchZoom(level)                the app reports a zoom change (an act of kind 'zoom')
+ *   r.watchCell, r.watch              the watch cell (role 'watch'; discarded after the phase) and its state
  *
  *   const r = new BTC.LevelRunner({def, variantSeed, attempt, override, deviceSeed, telemetry})
  *   r.start()                         level_start, then the first phase
  *   r.phase, r.gate(), r.next()       the phase and its gate; next() → {ok, phase} or {ok: false, reason}
  *   r.storyLine() / storyNext() / storySkip()        the active story beat (intro; outro in result or echo)
+ *   r.watchInfo() / watchNext() / watchPick() / watchSee() / watchCommand()   the watch phase (above)
  *   r.sceneInfo() / sceneNext() / sceneSkip()        Prologue scenes
  *   r.items() / select(id, v) / lock(id, v) / skip(id) / optionOrder(id)   predictions
  *   r.ensureRun() → cell; r.halted(); r.retry(); r.continueWithoutGoal()  the run
@@ -36,14 +49,14 @@
   if (typeof module === 'object' && module.exports) {
     const cellApi = require('../engine/btc-cell.js');
     module.exports = factory({ Cell: cellApi.Cell, ENGINE_VERSION: cellApi.ENGINE_VERSION, replay: require('../engine/btc-replay.js') },
-      require('./btc-level-kit.js'), require('./btc-levels.js'), require('./btc-score.js'), require('./btc-code.js'));
+      require('./btc-level-kit.js'), require('./btc-levels.js'), require('./btc-score.js'), require('./btc-code.js'), require('./btc-watch.js'));
   } else {
     var B = root.BTC || (root.BTC = {});
-    var api = factory({ Cell: B.Cell, ENGINE_VERSION: B.ENGINE_VERSION, replay: B.replay }, B.levelKit, B.levels, B.score, B.code);
+    var api = factory({ Cell: B.Cell, ENGINE_VERSION: B.ENGINE_VERSION, replay: B.replay }, B.levelKit, B.levels, B.score, B.code, B.watch);
     B.LevelRunner = api.LevelRunner;
     B.game = api.game;
   }
-})(typeof self !== 'undefined' ? self : this, function (ENG, K, LV, S, CODE) {
+})(typeof self !== 'undefined' ? self : this, function (ENG, K, LV, S, CODE, W) {
   'use strict';
 
   const Cell = ENG.Cell;
@@ -227,6 +240,17 @@
   const clampRuns = (n) => Math.min(99, Math.max(1, n || 0));
 
   /**
+   * The watch phase's state (plain JSON, in the autosave): the step, the line within it, the stage
+   * ('until' waiting to show the step · 'lines' · 'guess' · 'act' · 'wait' for a state gate · 'tap' once
+   * the gate is open · 'done'), the picks and the locked guesses, the acts, gate ticks, the scratch
+   * memory of the condition being tested, the watched mRNA and whether a paused gate holds the cell.
+   */
+  function freshWatch() {
+    return { index: 0, line: 0, stage: 'lines', open: false, hold: false, done: false, picks: {}, guesses: {}, acted: {},
+      gateTick: {}, mem: {}, watchedId: null, commands: [] };
+  }
+
+  /**
    * G, E, P, D, X, flags, total and the code of an attempt (§6, §10), from the level's score
    * components. o: {goal, comp, debrief (state), variantSeed, attempt, runs, override, record}.
    */
@@ -234,16 +258,24 @@
     const comp = o.comp || {};
     let first = 0;
     for (const q of def.debrief) if (o.debrief[q.id] && o.debrief[q.id].firstCorrect) first++;
-    const D = [first, def.debrief.length];
+    // An unscored level may report something else in D (the opening: guesses first picked on the cause).
+    const D = Array.isArray(comp.D) && comp.D.length === 2 ? [comp.D[0] | 0, comp.D[1] | 0] : [first, def.debrief.length];
     const scored = def.scored;
     const G = scored ? (o.goal ? 1 : 0) : 1;
     // Efficiency against par counts only when the goal was met (§6.1), so a missed goal reports E 0.
     const E = scored ? (G && typeof comp.E === 'number' ? S.clamp01(comp.E) : 0) : null;
     const P = scored && typeof comp.P === 'number' ? S.clamp01(comp.P) : null;
     const X = comp.X || 0;
-    const flagIds = LV.flagList(def).map((f) => f.id);
-    const evidence = (comp.flags || []).map((f) => (typeof f === 'string' ? { id: f } : copy(f)))
-      .filter((f, i, a) => flagIds.indexOf(f.id) >= 0 && a.findIndex((g) => g.id === f.id) === i);
+    const flagList = LV.flagList(def), flagIds = flagList.map((f) => f.id);
+    const raised = (comp.flags || []).map((f) => (typeof f === 'string' ? { id: f } : copy(f)));
+    // Flags from guesses (PROLOGUE §2.7, §6.2.5): a guess picked on an option with the flag's misconception.
+    for (const f of flagList) {
+      for (const gid of f.guess) {
+        const g = o.guesses && o.guesses[gid];
+        if (g && g.mc === f.mc) { raised.push({ id: f.id, data: { guess: gid, option: g.option } }); break; }
+      }
+    }
+    const evidence = raised.filter((f, i, a) => flagIds.indexOf(f.id) >= 0 && a.findIndex((g) => g.id === f.id) === i);
     const total = scored ? S.total({ G, E, P, D }) : null;
     const digest = scored && o.record ? o.record.finalHash.slice(0, 6).toUpperCase() : '000000';
     const engine = (o.record && o.record.engineVersion) || ENG.ENGINE_VERSION;
@@ -301,6 +333,10 @@
       this.par = def.par ? parRunner(def, this.variant, o.makeCell) : null;
       this.onRunShown = false;
       this.epilogue = { startTick: null, done: false, started: false };
+      // The watch phase (PROLOGUE §1.4): its cell is built on entering the phase and dropped after it.
+      this.watch = freshWatch();
+      this.watchCell = null;
+      this.watchMon = null;
       this.result = null;
       this.code = null;
       this.flagEvidence = [];
@@ -334,6 +370,7 @@
       this.log('phase', { name: p });
       if (p === 'intro') this.beat = { name: 'intro', index: 0 };
       else if (p === 'scenes') this.scene = { index: 0, line: 0 };
+      else if (p === 'watch') this.startWatch();
       else if (p === 'run') {
         // A designer level's cell is built from the design the student ran (it applies at tick 0).
         if (this.has('design') && this.run && this.run.cell.tick === 0 && !this.run.endReason) this.replaceRunCell();
@@ -369,6 +406,7 @@
           return open.length ? { ok: false, reason: 'predict', item: open[0].id } : { ok: true };
         }
         case 'demo': return this.demo.done ? { ok: true } : { ok: false, reason: 'demo' };
+        case 'watch': return this.watch.done ? { ok: true } : { ok: false, reason: 'watch', item: (this.watchStep() || {}).id };
         case 'run': return this.run && this.run.endReason ? { ok: true } : { ok: false, reason: 'run' };
         // A designer level's result waits for its par run (worked out in idle frames), so the score never
         // has to finish it in one long frame (LEVELS §16).
@@ -403,6 +441,7 @@
       if (p === 'scenes' && !this.has('echo')) this.collectCards();
       if (p === 'echo') this.collectCards();
       if (p === 'design' && this.design) this.log('design_submit', { design: this.design });
+      if (p === 'watch') this.dropWatch();
       this.enter(this.phaseIndex + 1);
       return { ok: true, phase: this.phase };
     }
@@ -445,26 +484,67 @@
 
     // --- Prologue scenes -----------------------------------------------------------------
     sceneSolved(i) {
-      const q = this.def.scenes[i].question;
+      const sc = this.def.scenes[i], q = sc.question;
+      // A scene's guess ("Guess, then see") must be seen through before the scene moves on; it is never marked.
+      if (sc.guess && !this.watch.guesses[sc.guess.id]) return false;
       return !q || !!(this.debriefState[q] && this.debriefState[q].solved);
     }
     sceneInfo() {
       if (this.phase !== 'scenes') return null;
       const s = this.scene, sc = this.def.scenes[s.index], l = sc.lines[s.line];
       const lastLine = s.line >= sc.lines.length - 1;
+      const g = lastLine && sc.guess ? sc.guess : null, got = g ? this.watch.guesses[g.id] : null;
       return {
         index: s.index, count: this.def.scenes.length, scene: sc, line: s.line, lines: sc.lines.length,
         who: l.who, text: this.text(l.text), denies: !!l.denies, lastLine,
         last: lastLine && s.index >= this.def.scenes.length - 1,
         question: lastLine && sc.question ? this.question(sc.question) : null,
+        // The scene's guess on its last line: options in this attempt's order, the pick, and whether it was seen.
+        guess: g ? { id: g.id, prompt: this.text(g.prompt), picked: this.watch.picks[g.id] === undefined ? null : this.watch.picks[g.id], seen: !!got,
+          options: this.optionOrder(g.id).map((i) => ({ index: i, t: this.text(g.options[i].t) })) } : null,
+        // "What happened" for the guesses due on this scene (showAt, else their own scene), once seen.
+        feedback: lastLine ? this.sceneFeedback(sc.id) : [],
         solved: this.sceneSolved(s.index),
       };
+    }
+    sceneFeedback(id) {
+      const out = [];
+      for (const sc of this.def.scenes) {
+        const g = sc.guess, got = g && this.watch.guesses[g.id];
+        if (!got || (g.showAt || sc.id) !== id) continue;
+        const o = g.options[got.option];
+        out.push({ id: g.id, prompt: this.text(g.prompt), picked: this.text(o.t), fb: this.text(o.fb), cause: got.cause });
+      }
+      return out;
+    }
+    /** A scene's guess: pick (changeable), then "See what happens" (logged, never marked). */
+    scenePick(gid, option) {
+      if (this.phase !== 'scenes') return false;
+      const sc = this.def.scenes[this.scene.index];
+      if (!sc.guess || sc.guess.id !== gid || this.watch.guesses[gid] || this.scene.line < sc.lines.length - 1) return false;
+      const opt = this.resolveOption(sc.guess, option);
+      if (!sc.guess.options[opt]) return false;
+      this.watch.picks[gid] = opt;
+      return true;
+    }
+    sceneSee() {
+      if (this.phase !== 'scenes') return { ok: false, reason: 'phase' };
+      const sc = this.def.scenes[this.scene.index], g = sc.guess;
+      if (!g || this.watch.guesses[g.id]) return { ok: false, reason: 'no guess' };
+      const opt = this.watch.picks[g.id];
+      if (opt === undefined) return { ok: false, reason: 'no guess' };
+      const o = g.options[opt];
+      this.watch.guesses[g.id] = { option: opt, mc: o.mc || null, cause: o.cause === true, step: sc.id };
+      delete this.watch.picks[g.id];
+      this.log('guess', { id: g.id, option: opt, cause: o.cause === true, step: sc.id });
+      return { ok: true };
     }
     /** Next inside the scenes: the next line, then the next scene once the question is right. */
     sceneNext() {
       if (this.phase !== 'scenes') return { ok: false, reason: 'phase' };
       const s = this.scene, sc = this.def.scenes[s.index];
       if (s.line < sc.lines.length - 1) { s.line++; }
+      else if (sc.guess && !this.watch.guesses[sc.guess.id]) return { ok: false, reason: 'guess' };
       else if (!this.sceneSolved(s.index)) return { ok: false, reason: 'question' };
       else if (s.index < this.def.scenes.length - 1) { s.index++; s.line = 0; }
       else return { ok: false, reason: 'end' };
@@ -496,7 +576,10 @@
       return null;
     }
     item(id) { return this.def.predictions.find((x) => x.id === id) || null; }
-    question(id) { return this.def.predictions.find((x) => x.id === id) || this.def.debrief.find((x) => x.id === id) || null; }
+    question(id) {
+      const w = this.def.watch ? W.guesses(this.def)[id] : null;
+      return this.def.predictions.find((x) => x.id === id) || this.def.debrief.find((x) => x.id === id) || (w ? w.guess : null);
+    }
 
     /** Display order of a question's options for this attempt (canonical indices). */
     optionOrder(id) {
@@ -510,6 +593,7 @@
 
     resolveOption(q, v) {
       if (v === 'ok') return q.options.findIndex((o) => o.ok === true);
+      if (v === 'cause') return q.options.findIndex((o) => o.cause === true);
       return v;
     }
 
@@ -640,6 +724,7 @@
 
     /** True when the app must not step the cell any further (the run has ended, or the epilogue is done). */
     halted() {
+      if (this.phase === 'watch') return this.watchHalted();
       if (this.phase === 'demo') return !this.demo.cell || this.demo.done || this.demo.cell.tick >= this.def.demo.durationTicks;
       if (!this.run) return true;
       if (this.phase === 'epilogue') return !this.epilogue.started || this.epilogue.done;
@@ -647,7 +732,7 @@
       return true;
     }
     /** True when time may run for the cell on screen. */
-    canRun() { return this.phase === 'demo' ? !this.halted() : !!this.run && !this.halted(); }
+    canRun() { return this.phase === 'demo' || this.phase === 'watch' ? !this.halted() : !!this.run && !this.halted(); }
 
     /**
      * The epilogue (1.4) starts when the student acts (taps "Switch LacY off"): its watching time
@@ -722,6 +807,275 @@
       return true;
     }
 
+    // --- watch (PROLOGUE §1.4, §2.4.3) ------------------------------------------------------
+    watchSteps() { return (this.def.watch && this.def.watch.steps) || []; }
+    watchStep() { return this.phase === 'watch' || this.watchCell ? this.watchSteps()[this.watch.index] || null : null; }
+
+    /** The watch cell (role 'watch'), built from the level's config, with the step monitor attached. */
+    startWatch() {
+      if (this.watchCell) return this.watchCell;
+      const cell = this.makeCell(this.def.config(this.variant, 'watch', this.extra()));
+      this.attachWatch(cell, null);
+      const guesses = this.watch.guesses;           // a restarted watch keeps nothing but what is already locked
+      this.watch = freshWatch();
+      this.watch.guesses = guesses;
+      this.enterStep(0);
+      return cell;
+    }
+
+    attachWatch(cell, saved) {
+      const def = this.def;
+      const mon = def.watch && def.watch.monitor ? def.watch.monitor(this.variant, { dt: cell.dt, K, variant: this.variant }) : null;
+      if (mon) {
+        if (saved && saved.monitor !== undefined && saved.monitor !== null && mon.restore) mon.restore(copy(saved.monitor));
+        else if (!saved && mon.start) mon.start(cell);
+      }
+      this.watchCell = cell;
+      this.watchMon = mon;
+      const runner = this;
+      this.watchRec = { onTick(c) { if (runner.watchCell === c && runner.phase === 'watch') runner.watchTick(c); } };
+      cell.attachRecorder(this.watchRec);
+    }
+
+    /** Leaving the watch phase: the watch cell is dropped (its guesses stay, for flags and the run file). */
+    dropWatch() {
+      if (this.watchCell && this.watchRec) this.watchCell.detachRecorder(this.watchRec);
+      this.watchCell = null; this.watchMon = null; this.watchRec = null;
+      this.watch.hold = false;
+    }
+
+    /** The default gene of the watch's conditions (def.watch.gene), unless a condition names its own. */
+    condParams(c) { return Object.assign({ gene: this.def.watch && this.def.watch.gene }, c); }
+    testCond(c, view, mem, extra) {
+      const fn = W.testFor(this.def, c.test);
+      return !!fn(view, this.condParams(c), mem, Object.assign({ watchedId: this.watch.watchedId, variant: this.variant }, extra || {}));
+    }
+    /** A gene's level as the student has set it: a switch still waiting to apply counts (for notes, not gates). */
+    levelOf(id) {
+      let level = null;
+      for (const e of (this.watchCell && this.watchCell.pending) || []) {
+        if (e.source === 'user' && e.type === 'setPromoter' && e.args && e.args.gene === id) level = e.args.level;
+      }
+      if (level !== null) return level;
+      const g = this.watchCell ? this.watchCell.observe().geneById[id] : null;
+      return g ? g.level : null;
+    }
+
+    /** After every tick of the watch cell: the level's watch monitor, then the condition being waited on. */
+    watchTick(c) {
+      const w = this.watch, s = this.watchStep();
+      if (this.watchMon) this.watchMon.onTick(c, { watchedId: w.watchedId, step: s ? s.id : null, stage: w.stage });
+      if (!s || (w.stage !== 'until' && w.stage !== 'wait')) return;
+      const cond = w.stage === 'until' ? s.until : s.gate;
+      if (this.testCond(cond, c.observe(), w.mem)) this.condMet(cond, c.tick);
+    }
+
+    /** A condition holds: the step is shown (until) or its gate opens (state); a pausing one holds the cell here. */
+    condMet(cond, tick) {
+      const w = this.watch, s = this.watchStep();
+      if (cond.watch && this.watchCell) {
+        const g = this.watchCell.observe().geneById[this.condParams(cond).gene];
+        w.watchedId = g && g.mRNA > 0 ? g.mRNAIds[0] : null;
+      }
+      const until = w.stage === 'until';
+      w.gateTick[s.id + (until ? ':until' : '')] = tick;
+      if (cond.pause !== false) w.hold = true;
+      this.log('step', { id: s.id, action: 'gate', gate: cond.test, tick }, tick);
+      w.mem = {};
+      if (until) this.showLines();
+      else this.openGate();
+    }
+
+    enterStep(i) {
+      const w = this.watch, steps = this.watchSteps();
+      w.hold = false; w.open = false; w.line = 0; w.mem = {};
+      if (i >= steps.length) { w.done = true; w.stage = 'done'; w.index = steps.length; return; }
+      w.index = i;
+      // Commands from here on may do this step's act (a student who switches the gene on while reading).
+      w.stepSeq = w.commands.length ? w.commands[w.commands.length - 1].seq + 1 : 0;
+      const s = steps[i];
+      if (s.until) {
+        w.stage = 'until';
+        // A condition that already holds opens at once (tested on a scratch memory, so held-for-n tests start afresh).
+        if (this.watchCell && this.testCond(s.until, this.watchCell.observe(), {})) this.condMet(s.until, this.watchCell.tick);
+      } else this.showLines();
+    }
+    showLines() {
+      const w = this.watch, s = this.watchStep();
+      w.stage = 'lines'; w.line = 0;
+      this.log('step', { id: s.id, action: 'shown' });
+      this.onLine();
+    }
+    /**
+     * On the step's last line the step goes on by itself unless a guess comes first (Next opens it): an act waits
+     * for the student's switch, a state gate for the model, and a tap gate is open at once, its cause and any
+     * guess feedback shown with that line, so its Next completes the step (one tap, not two).
+     */
+    onLine() {
+      const w = this.watch, s = this.watchStep();
+      if (w.line < s.lines.length - 1) return;
+      if (s.guess && !w.guesses[s.guess.id]) return;
+      this.afterGuess();
+    }
+    afterLines() {
+      const w = this.watch, s = this.watchStep();
+      if (s.guess && !w.guesses[s.guess.id]) { w.stage = 'guess'; return; }
+      this.afterGuess();
+    }
+    afterGuess() {
+      const w = this.watch, s = this.watchStep();
+      if (s.gate.kind === 'guess') return this.openGate();
+      if (s.act && !w.acted[s.id]) {
+        w.stage = 'act';
+        w.hold = false;                 // an act may need the cell to run afterwards: a paused 'until' holds only its lines
+        if (this.actAlreadyDone(s)) this.acted(s);
+        return;
+      }
+      this.gateStage();
+    }
+    gateStage() {
+      const w = this.watch, s = this.watchStep(), g = s.gate;
+      if (g.kind === 'state') {
+        w.stage = 'wait'; w.mem = {};
+        w.hold = false;                 // waiting on the model: the cell must be able to run
+        if (this.watchCell && this.testCond(g, this.watchCell.observe(), {})) this.condMet(g, this.watchCell.tick);
+        return;
+      }
+      this.openGate();
+    }
+    /** The gate is open: the cause and any guess feedback due here are shown, and Next moves on (a bare act or guess gate moves on at once). */
+    openGate() {
+      const w = this.watch, s = this.watchStep();
+      w.open = true;
+      if (s.gate.kind === 'tap' || s.gate.kind === 'state' || s.cause || this.feedbackAt(s.id).length) { w.stage = 'tap'; return; }
+      this.completeStep();
+    }
+    completeStep() {
+      const s = this.watchStep();
+      this.log('step', { id: s.id, action: 'done' });
+      this.enterStep(this.watch.index + 1);
+    }
+
+    /** The act of a step is done by what the student already did: a matching command since the step began, or the gene already set. */
+    actAlreadyDone(s) {
+      const a = s.act;
+      if (!a || a.kind !== 'command' || !this.watchCell) return false;
+      const since = this.watch.stepSeq || 0;
+      if (this.watch.commands.some((c) => c.seq >= since && W.matches(a.expect, c.cmd))) return true;
+      if (a.expect.type !== 'setPromoter') return false;
+      let level = null;
+      for (const e of this.watchCell.pending || []) if (e.source === 'user' && e.type === 'setPromoter' && e.args && e.args.gene === a.expect.gene) level = e.args.level;
+      if (level === null) { const g = this.watchCell.observe().geneById[a.expect.gene]; level = g ? g.level : null; }
+      return W.satisfiedBy(a.expect, level);
+    }
+    acted(s) {
+      this.watch.acted[s.id] = true;
+      this.log('step', { id: s.id, action: 'gate', gate: 'act' });
+      if (s.gate.kind === 'act') this.openGate();
+      else this.gateStage();
+    }
+
+    /** Next: the step's next line, past its lines, or on past an opened gate. */
+    watchNext() {
+      if (this.phase !== 'watch' || this.watch.done) return { ok: false, reason: 'phase' };
+      const w = this.watch, s = this.watchStep();
+      if (w.stage === 'lines') {
+        if (w.line < s.lines.length - 1) { w.line++; this.onLine(); return { ok: true }; }
+        this.afterLines();
+        return { ok: true };
+      }
+      if (w.stage === 'tap') { this.completeStep(); return { ok: true }; }
+      return { ok: false, reason: w.stage };
+    }
+    /** A guess may be changed until "See what happens" (option: a canonical index or 'cause'). */
+    watchPick(gid, option) {
+      const w = this.watch, s = this.watchStep();
+      if (this.phase !== 'watch' || w.stage !== 'guess' || !s.guess || s.guess.id !== gid) return false;
+      const opt = this.resolveOption(s.guess, option);
+      if (!s.guess.options[opt]) return false;
+      w.picks[gid] = opt;
+      return true;
+    }
+    /** "See what happens": the guess is kept (logged, never marked), and the step goes on to its show. */
+    watchSee() {
+      const w = this.watch, s = this.watchStep();
+      if (this.phase !== 'watch' || w.stage !== 'guess') return { ok: false, reason: 'phase' };
+      const gid = s.guess.id, opt = w.picks[gid];
+      if (opt === undefined) return { ok: false, reason: 'no guess' };
+      const o = s.guess.options[opt];
+      w.guesses[gid] = { option: opt, mc: o.mc || null, cause: o.cause === true, step: s.id };
+      delete w.picks[gid];
+      this.log('guess', { id: gid, option: opt, cause: o.cause === true, step: s.id });
+      this.afterGuess();
+      return { ok: true };
+    }
+    /** The app reports every command the student sent on the watch cell (and its result); a matching one does the act. */
+    watchCommand(cmd, result) {
+      if (this.phase !== 'watch' || !result || !result.ok) return false;
+      const w = this.watch;
+      w.commands.push({ seq: result.seq, cmd: copy(cmd) });
+      if (w.commands.length > 64) w.commands.shift();
+      const s = this.watchStep();
+      if (w.stage === 'act' && s.act && s.act.kind === 'command' && W.matches(s.act.expect, cmd)) { this.acted(s); return true; }
+      return false;
+    }
+    /** The app reports a zoom change; a step whose act is that zoom is done. */
+    watchZoom(level) {
+      const w = this.watch, s = this.watchStep();
+      if (this.phase !== 'watch' || w.stage !== 'act' || !s.act || s.act.kind !== 'zoom' || s.act.to !== level) return false;
+      this.acted(s);
+      return true;
+    }
+    watchHalted() {
+      const w = this.watch;
+      if (!this.watchCell || w.done) return true;
+      return w.stage === 'guess' || !!w.hold;
+    }
+    /** Template values for watch text: the variant's, then the watch monitor's ({n}, {t}, {k}, {a} …). */
+    watchVars() {
+      return Object.assign({}, this.vars, this.watchMon && this.watchMon.vars ? this.watchMon.vars() : {});
+    }
+    /** "What happened" for the guesses whose feedback is due at this step (showAt, else their own step). */
+    feedbackAt(stepId) {
+      const out = [], vars = this.watchVars(), fill = (t) => K.fill(t, vars);
+      for (const st of this.watchSteps()) {
+        const g = st.guess;
+        if (!g || (g.showAt || st.id) !== stepId) continue;
+        const got = this.watch.guesses[g.id];
+        if (!got) continue;
+        const o = g.options[got.option];
+        out.push({ id: g.id, prompt: fill(g.prompt), picked: fill(o.t), fb: fill(o.fb), cause: got.cause });
+      }
+      return out;
+    }
+    /** What the screen shows for the watch step now (null outside the phase). */
+    watchInfo() {
+      if (this.phase !== 'watch') return null;
+      const w = this.watch, steps = this.watchSteps();
+      if (w.done) return { done: true, index: steps.length, count: steps.length, stage: 'done', last: true };
+      const s = steps[w.index], vars = this.watchVars(), fill = (t) => K.fill(t, vars);
+      const l = s.lines[Math.min(w.line, s.lines.length - 1)];
+      const info = {
+        done: false, id: s.id, index: w.index, count: steps.length, last: w.index >= steps.length - 1, stage: w.stage,
+        line: w.line, lines: s.lines.length, lastLine: w.line >= s.lines.length - 1, who: l.who, text: fill(l.text),
+        point: s.point || null, hold: !!w.hold, waiting: w.stage === 'until' || w.stage === 'wait',
+        guess: null, act: w.stage === 'act' ? copy(s.act) : null,
+        cause: w.open && s.cause ? fill(s.cause) : null, feedback: w.open ? this.feedbackAt(s.id) : [],
+        note: null, offer: s.offer ? copy(s.offer) : null, offerSpeed: s.offerSpeed || null, gate: s.gate.kind,
+      };
+      if (w.stage === 'guess') {
+        const g = s.guess;
+        info.guess = { id: g.id, prompt: fill(g.prompt), picked: w.picks[g.id] === undefined ? null : w.picks[g.id],
+          options: this.optionOrder(g.id).map((i) => ({ index: i, t: fill(g.options[i].t) })) };
+      }
+      // Honest help while the step waits: the first of its notes whose condition holds now.
+      if ((info.waiting || w.stage === 'act') && s.notes && this.watchCell) {
+        const view = this.watchCell.observe();
+        for (const n of s.notes) if (this.testCond(n, view, {}, { levelOf: (id) => this.levelOf(id) })) { info.note = fill(n.text); break; }
+      }
+      return info;
+    }
+
     // --- echo ---------------------------------------------------------------------------
     echoScreen() {
       if (this.phase !== 'echo' || this.beat) return null;
@@ -745,18 +1099,25 @@
     labConfig(extraState) {
       const mon = this.run && this.run.monitor.save ? this.run.monitor.save() : null;
       const revealed = mon && mon.revealed ? copy(mon.revealed) : {};
+      // In the watch phase the step's id comes along: a readout may appear from a given step on (PROLOGUE §5.3: energy at H4).
+      const step = this.phase === 'watch' ? (this.watchStep() || {}).id || null : null;
       return this.def.labConfig(this.variant, Object.assign({ phase: this.phase, revealed, scene: this.phase === 'scenes' ? this.scene.index : null,
-        design: this.design }, extraState || {}));
+        design: this.design, step }, extraState || {}));
     }
     /** A key that changes whenever the labConfig would (the revealed genes), so the app knows to rebuild its panels. */
     labConfigKey() {
       const mon = this.run && this.run.monitor.save ? this.run.monitor.save() : null;
-      return this.phase + '|' + (mon && mon.revealed ? Object.keys(mon.revealed).sort().join(',') : '');
+      const step = this.phase === 'watch' ? (this.watchStep() || {}).id || '' : '';
+      return this.phase + '|' + step + '|' + (mon && mon.revealed ? Object.keys(mon.revealed).sort().join(',') : '');
     }
     hud() {
       if (!this.def.hud) return null;
       let state = this.run && this.run.monitor.save ? this.run.monitor.save() : null;
       if (this.phase === 'demo') state = this.demo.monitor && this.demo.monitor.save ? Object.assign({ demo: true }, this.demo.monitor.save()) : { demo: true };
+      else if (this.phase === 'watch') {
+        state = Object.assign({ watch: true, step: (this.watchStep() || {}).id || null, tick: this.watchCell ? this.watchCell.tick : 0 },
+          this.watchMon && this.watchMon.save ? this.watchMon.save() : {});
+      }
       else if (this.phase === 'epilogue' && state) state = Object.assign({}, state, { epilogue: copy(this.epilogue) });
       return this.def.hud(this.variant, state);
     }
@@ -776,9 +1137,11 @@
       });
     }
     levelView() {
-      const demo = this.phase === 'demo';
-      const mon = demo ? this.demo.monitor : this.run && this.run.monitor;
-      return { variant: this.variant, design: this.design, monitor: mon && mon.save ? mon.save() : null, phase: this.phase };
+      const demo = this.phase === 'demo', watch = this.phase === 'watch';
+      const mon = demo ? this.demo.monitor : watch ? this.watchMon : this.run && this.run.monitor;
+      const out = { variant: this.variant, design: this.design, monitor: mon && mon.save ? mon.save() : null, phase: this.phase };
+      if (watch) out.watch = { step: (this.watchStep() || {}).id || null, stage: this.watch.stage, watchedId: this.watch.watchedId };
+      return out;
     }
 
     // --- scoring and the code (§6, §10) -------------------------------------------------
@@ -786,7 +1149,8 @@
       const predictions = {}, debrief = {};
       for (const id of Object.keys(this.answers)) predictions[id] = copy(this.answers[id]);
       for (const id of Object.keys(this.debriefState)) debrief[id] = copy(this.debriefState[id]);
-      return { predictions, debrief };
+      // Guesses are not scored; a level may still read them (flags, the opening's guess count).
+      return { predictions, debrief, guesses: copy(this.watch.guesses) };
     }
 
     /** The level's score components as things stand (the result sheet shows E before the level is complete). */
@@ -804,7 +1168,7 @@
       const comp = def.score ? (def.score(this.variant, this.monitorResult || {}, this.answersForScore(),
         { demo: this.demo.result, design: this.design, withoutGoal: this.withoutGoal, par: this.parResult() }) || {}) : {};
       const r = summarise(def, {
-        goal: this.goal, comp, debrief: this.debriefState, variantSeed: this.variantSeed, attempt: this.attempt,
+        goal: this.goal, comp, debrief: this.debriefState, guesses: this.watch.guesses, variantSeed: this.variantSeed, attempt: this.attempt,
         runs: this.runs, override: this.override, record: this.record,
       });
       this.flagEvidence = r.evidence;
@@ -829,6 +1193,7 @@
         id: this.def.id, content: this.def.version, variantSeed: this.variantSeed, variant: copy(this.variant),
         attempt: this.override ? 0 : this.attempt, runs: clampRuns(this.runs), override: this.override,
         answers, debrief: copy(this.taps),
+        guesses: Object.keys(this.watch.guesses).reduce((o, k) => { o[k] = this.watch.guesses[k].option; return o; }, {}),
         result: r ? { G: r.G, E: r.E, P: r.P, D: r.D, X: r.X, flags: copy(this.flagEvidence), total: r.total } : null,
         code: this.code,
       };
@@ -857,6 +1222,11 @@
         echoIndex: this.echoIndex, cards: this.cards.slice(), withoutGoal: this.withoutGoal, design: copy(this.design),
         demo: { done: this.demo.done, record: copy(this.demo.record), result: copy(this.demo.result) },
         epilogue: copy(this.epilogue),
+        // The watch: its state for the whole attempt (the guesses feed flags), its cell only during the phase.
+        watch: copy(this.watch),
+        watchCell: this.phase === 'watch' && this.watchCell ? {
+          snapshot: this.watchCell.snapshot(), monitor: this.watchMon && this.watchMon.save ? copy(this.watchMon.save()) : null,
+        } : null,
         // A par run in progress is not saved: it starts again (LEVELS §4.4). A finished one is small.
         par: this.par && this.par.done ? this.par.snapshot() : null, onRunShown: this.onRunShown,
         run: this.run ? {
@@ -904,6 +1274,12 @@
       r.demo.monitor = def.demo.monitor ? rep.monitor : null;
     }
     r.epilogue = copy(s.epilogue) || { startTick: null, done: false, started: false };
+    r.watch = Object.assign(freshWatch(), copy(s.watch) || {});
+    if (r.phase === 'watch') {
+      // The watch cell comes back from its snapshot, paused, at the same step; without one the watch starts again.
+      if (s.watchCell && s.watchCell.snapshot) r.attachWatch(r.restoreCell(s.watchCell.snapshot), s.watchCell);
+      else { r.watch = Object.assign(freshWatch(), { guesses: r.watch.guesses }); r.startWatch(); }
+    }
     if (r.par && s.par) r.par.set(s.par);
     r.onRunShown = !!s.onRunShown;
     r.record = copy(s.record) || null;
@@ -927,6 +1303,57 @@
   // ---------------------------------------------------------------------------
   // The headless player (tests and tools): plays a solution through every phase.
   // ---------------------------------------------------------------------------
+  /**
+   * Plays the watch phase of runner r as a student would: Next on every line and opened gate,
+   * each guess (solution.watch.guesses[id], else the cause), each act (the step's expected command,
+   * On at def.watch.onLevel or ×1), and the watch cell stepped while a step waits on the model.
+   * sol.watch: {guesses?: {id: option | 'cause'}, every?, policy?(view, tick, api, stepId)} (the policy may
+   * send other commands while a step waits, e.g. a switch-off detour). Returns the gate ticks.
+   */
+  function playWatch(r, sol, maxTicks) {
+    const ws = (sol && sol.watch) || {}, def = r.def;
+    const api = {
+      command(cmd) {
+        const c = Object.assign({}, cmd, { source: 'user' });
+        const res = r.watchCell.command(c);
+        r.watchCommand(c, res);
+        return res;
+      },
+    };
+    let guard = 0;
+    while (!r.watch.done) {
+      if (guard++ > 20000) throw new Error('level ' + def.id + ': the watch is stuck at step ' + (r.watchStep() || {}).id);
+      const info = r.watchInfo();
+      if (info.stage === 'lines' || info.stage === 'tap') { r.watchNext(); continue; }
+      if (info.stage === 'guess') {
+        const want = ws.guesses && ws.guesses[info.guess.id] !== undefined ? ws.guesses[info.guess.id] : 'cause';
+        if (!r.watchPick(info.guess.id, want) || !r.watchSee().ok) throw new Error('level ' + def.id + ': guess ' + info.guess.id + ' refused');
+        continue;
+      }
+      if (info.stage === 'act') {
+        const a = info.act;
+        if (a.kind === 'zoom') r.watchZoom(a.to);
+        else {
+          const e = a.expect;
+          const level = e.level !== undefined ? e.level : e.on === false ? 'off' : (def.watch.onLevel || 1);
+          api.command(Object.assign({ type: e.type }, e.gene !== undefined ? { gene: e.gene } : {}, e.type === 'setPromoter' ? { level } : {}));
+        }
+        if (r.watchInfo().stage === 'act') throw new Error('level ' + def.id + ': the act of step ' + info.id + ' was not done');
+        continue;
+      }
+      // until / wait: the watch cell runs until the model reaches the step's state.
+      const cell = r.watchCell, stage = info.stage, id = info.id;
+      let n = 0;
+      while (r.watch.stage === stage && (r.watchStep() || {}).id === id && !r.watch.done) {
+        if (n++ > maxTicks) throw new Error('level ' + def.id + ': step ' + id + ' did not open within ' + maxTicks + ' ticks');
+        if (ws.policy && cell.tick % (ws.every || 5) === 0) ws.policy(cell.observe(), cell.tick, api, id);
+        cell.step();
+        cell.takeEvents();
+      }
+    }
+    return copy(r.watch.gateTick);
+  }
+
   /**
    * opts: {variantSeed, solution ('reference'), attempt, override, deviceSeed, telemetry, makeCell,
    *        maxTicks (per run, default 200,000), interruptAt (tick: save → JSON → restore mid-run),
@@ -975,10 +1402,15 @@
       const p = r.phase;
       if (p === 'scenes') {
         const info = r.sceneInfo();
+        if (info.guess && !info.guess.seen) {
+          const want = sol.watch && sol.watch.guesses && sol.watch.guesses[info.guess.id] !== undefined ? sol.watch.guesses[info.guess.id] : 'cause';
+          r.scenePick(info.guess.id, want); r.sceneSee();
+        }
         if (info.question && !info.solved) answer(info.scene.question);
         if (!r.sceneNext().ok) r.next();
         continue;
       }
+      if (p === 'watch') playWatch(r, sol, maxTicks);
       if (p === 'predict' || p === 'predict2') {
         for (const it of r.items()) {
           let v = sol.predictions ? sol.predictions[it.id] : undefined;
@@ -1098,9 +1530,15 @@
         else if (it.expert) predictions[it.id] = { locked: false, skipped: true, value: null };
       }
       const debrief = debriefFromTaps(def, L.debrief);
-      const comp = def.score ? (def.score(variant, monitorResult, { predictions, debrief }, { demo, design, withoutGoal: false, par }) || {}) : {};
+      // Guesses (not scored) come back from their options, for the flags they raise.
+      const guesses = {}, known = def.watch ? W.guesses(def) : {};
+      for (const gid of Object.keys(L.guesses || {})) {
+        const k = known[gid], o = k && k.guess.options[L.guesses[gid]];
+        if (o) guesses[gid] = { option: L.guesses[gid], mc: o.mc || null, cause: o.cause === true, step: k.step };
+      }
+      const comp = def.score ? (def.score(variant, monitorResult, { predictions, debrief, guesses }, { demo, design, withoutGoal: false, par }) || {}) : {};
       const r = summarise(def, {
-        goal: !!monitorResult.goal, comp, debrief, variantSeed, attempt: L.attempt, runs: L.runs, override: L.override, record,
+        goal: !!monitorResult.goal, comp, debrief, guesses, variantSeed, attempt: L.attempt, runs: L.runs, override: L.override, record,
       });
       const res = L.result || {};
       out.recomputed = { G: r.G, E: r.E, P: r.P, D: r.D, X: r.X, flags: r.evidence.map((f) => f.id), total: r.total, code: r.code };
@@ -1141,6 +1579,6 @@
     return out;
   }
 
-  const game = { makeCell, playHeadless, LevelRunner, answerRecord, markTable, debriefFromTaps, summarise, monitorFeed, verifyRunFile, checkExpect, parRunner };
+  const game = { makeCell, playHeadless, playWatch, LevelRunner, answerRecord, markTable, debriefFromTaps, summarise, monitorFeed, verifyRunFile, checkExpect, parRunner };
   return { LevelRunner, game };
 });

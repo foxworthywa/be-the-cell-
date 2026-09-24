@@ -1843,54 +1843,75 @@ review).
 
 ## 14. Open questions for Alex
 
+Each question below carries the coordinator's decision for the vertical slice (2026-09-24), marked "Decided (default)"; Alex may change any of them after playing the slice (§12, S9).
+
 1. **The machine example in the opening.** Default: a glucose transporter (GLUT4 in a muscle cell),
    which follows from insulin's job and sets up level 1.1. Alternatives: the bacterium's own PtsG
    (closer to 1.1, but the opening is still in the human body at that point), or insulin itself
    (its job is signalling, which is harder to picture as a machine).
+   **Decided (default):** a glucose transporter in a muscle cell. Student text never names GLUT4 (the code calls this machine `glut`: `BTC.closeup.MACHINES.glut`, the PtsG pocket without the phosphate tag).
 2. **Motion rule.** May the close-ups show *process markers* (a chain finishing, a copy broken
    down, a protein cut up) as short animations in place, and a machine's cycle at a slowed,
    labelled rate? Nothing moves toward a target. PEDAGOGY.md would gain one sentence.
+   **Decided (default):** yes to short process markers in place in the close-ups, and to a machine's cycle shown at a slowed rate with the factor printed on screen ("Shown 100 times slower"). PEDAGOGY.md gains the sentence when the slice is reviewed.
 3. **1.1 and pocket shapes.** Once a hidden gene's protein exists, its Protein zoom shows the real
    pocket shape (for example lactose-shaped), which lets a student infer its job before the name
    is revealed. Default: allowed, since it is reasoning from shape and needs a test first.
+   **Decided (default):** allowed: in 1.1 the Protein view shows a hidden protein's real pocket shape before its name is revealed (labelled only "protein C").
 4. **Scoring.** Drop P (predictions) from the Core score in favour of `0.45·G + 0.25·G·E + 0.30·D`,
    since guesses now teach? Or keep a small P from one planning item in (3)?
+   **Decided (default):** P leaves the Core score: `S = round(100 · (0.45·G + 0.25·G·E + 0.30·D))`.
 5. **Two opening parts or one?** Default: two (7 and 6 minutes), each with its own code. One
    longer opening is possible but runs past 10 minutes.
+   **Decided (default):** two parts (7 and 6 minutes), each with its own code.
 6. **The "spools" rung** (DNA wound on nucleosomes): keep it (true, one line) or skip it (one fewer
    idea)?
+   **Decided (default):** skip the spools rung (one fewer idea).
 7. **The chromosome as a tangle, not an X.** Default: yes, with the line saying why.
+   **Decided (default, the spec's recommendation):** yes, a loose tangle, with the line saying why.
 8. **The insulin-from-bacteria About row** in part 2 (a nice universality hook, one more idea).
+   **Decided (default, as drafted in §2.4.1):** keep the About row (tap to open), so it costs nothing to a student who does not open it.
 9. **Order.** Should Prologue 2 be required (or at least suggested on the task card) before 1.1?
    Default: suggested, not required, as levels open in any order.
+   **Decided (default, the spec's recommendation):** suggested on 1.1's task card, not required.
 10. **Guess feedback.** Default: no right or wrong marks at all on guesses ("What happened: …").
     Should a matching guess get a quiet "Yes"?
+   **Decided (default, the spec's recommendation):** no marks at all on guesses ("What happened: …").
 11. **1.2's target.** The current 400 (and "about 400" in the draft wording) is about 5% of what
     feeds a cell on milk sugar in this model. Default: take T from the economy (about 5,500–6,000,
     by minute 30, with the splitter already made). Alternative: keep a small number but change the
     stakes to "a head start" (weaker, and harder to make true).
+   **Decided (default):** T comes from the economy (about 6,000 transporters by minute 30, the splitter already made), from the `l12` v2 calibration.
 12. **1.4's "too many" side.** In the model, extra transporters cost only a few percent of growth,
     which cannot be seen within 15 minutes. Default: show the cost as energy spent (true and
     immediate). Alternatives: a much longer run (hours) where the growth difference shows, or a
     larger cost per transporter (a disclosed game rule).
+   **Decided (default):** the "too many" side is shown as energy spent (true and immediate).
 13. **1.1's lumped amino-acid importers** for the chain clue: show one representative importer's
     chain (to be chosen and verified, e.g. the aromatic amino-acid permease AroP) with a "stands
     for about 10 importers" badge, or leave that card without a chain?
+   **Decided (default, as §2.2 `L11` assumes):** show one representative importer's chain (to be chosen and verified in phase 2) with a "stands for about 10 importers" badge.
 14. **Scale words.** Should each rung also show the zoom factor ("100 times closer") beside its
     scale bar?
+   **Decided (default, as drawn in §2.3.1):** no zoom factor; each rung keeps its scale bar and field of view only.
 15. **Speed of the sequence scenes.** "About real speed" (30 letters and 5 codons a second) makes
     the full insulin copy take about 15 s and the chain about 22 s. Faster, with the factor stated?
+   **Decided (default, as drafted in §2.3.3 and §2.3.5):** about real speed (30 letters and 5 codons a second), labelled so.
 16. **1.1's efficiency.** Replace "at most 3 tests" (which luck decides: a perfect reasoner makes
     par only about three times in four) with "no wasted tests" (§6.1), which every reasoner can
     reach? Default: yes.
+   **Decided (default):** "no wasted tests" (§6.1).
 17. **The Ribosome as a speaker.** Keep it (0–1 line per level, for indifference and "same machine
     in every cell")? Default: yes. The glucose, protease and LacI speakers are retired.
+   **Decided (default):** keep the Ribosome as a speaker (0–1 line per level); the glucose, protease and LacI speakers are retired.
 18. **The Commander's payoff in Prologue 1** ("I watched the whole thing. Nobody gave an order."):
     it comes only after the student has watched every step, so it states what they saw rather than
     announcing a theme. Keep it, or leave the thought unspoken until 1.7?
+   **Decided (default):** keep it, after the student has watched every step.
 19. **Where the Commander's goal begins.** Default: Prologue 2 ("Your job: keep this cell fed and
     growing, until it divides in two."). In Prologue 1 the student watches their own body, where
     nobody is given a job.
+   **Decided (default, the spec's recommendation):** Prologue 2.
 
 ---
 

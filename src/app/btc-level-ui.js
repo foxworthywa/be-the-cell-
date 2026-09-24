@@ -19,6 +19,13 @@
  * (BTC.DesignerView, §5.10) and a result with three bars against par and the run's
  * doublings against par over the sugar phases; 1.1 names every gene at the end.
  *
+ * The Watch step of the redesign (docs/PROLOGUE.md §1.4, §2.4.3) is not a sheet: its lines sit in the
+ * guide's callout over the live cell (BTC.Guide), with a ring on what they are about, so the student can
+ * use the real switch; only a guess opens a sheet ("See what happens"). Guesses are never marked right or
+ * wrong: their feedback reads "What happened: …". The same callout introduces each readout of a tiered
+ * screen once (its sentence, then Next). Explain (the debrief) no longer marks a wrong tap with a cross:
+ * it shows "Here is what actually happens: …" and "Pick another."; the right tap shows "Yes. …".
+ *
  * Pure helpers (test L-13): LevelUI.codeLines(code, perLine), LevelUI.scoreLines(result).
  */
 (function (root, factory) {
@@ -58,7 +65,9 @@
     const K = G.complete;
     if (res.total === null || res.total === undefined) return [K.notScored];
     const lines = [];
-    lines.push([res.G ? K.goalMet : K.goalNotMet, F.fill(K.efficiency, { v: pct(res.E) }), F.fill(K.prediction, { v: pct(res.P) })].join(' · '));
+    // Predictions no longer count (PROLOGUE §1.4); an older level still reports them, marked "not scored".
+    const pred = typeof res.P === 'number' ? F.fill(K.predictionNotScored, { v: pct(res.P) }) : null;
+    lines.push([res.G ? K.goalMet : K.goalNotMet, F.fill(K.efficiency, { v: pct(res.E) }), pred].filter(Boolean).join(' · '));
     let met = 0;
     for (let x = res.X | 0; x; x >>= 1) met += x & 1;
     const expert = nExpert > 0 ? F.fill(K.expertOf, { a: met, b: nExpert }) : nExpert === 0 ? null : F.fill(K.expert, { v: res.X });
@@ -83,7 +92,7 @@
       this.lastPhase = runner.phase;
       this.completed = false;
     }
-    unbind() { this.dropSketch(); this.close(); this.runner = null; this.def = null; }
+    unbind() { this.dropSketch(); this.close(); if (this.app.views && this.app.views.guide) this.app.views.guide.hide(); this.runner = null; this.def = null; }
     dropSketch() { if (this.sketch) { this.sketch.destroy(); this.sketch = null; } }
     title() { return this.def ? Home.nameOf(this.def) : ''; }
 
@@ -109,10 +118,15 @@
       const r = this.runner;
       if (!r) return;
       this.app.showLevelScreen(r);
+      if (this.app.views.guide && !(r.phase === 'watch' && !r.beat)) {
+        if (r.phase === 'run' && !r.beat && !(r.run && r.run.endReason)) { if (!this.showIntro()) this.guide().hide(); }
+        else this.guide().hide();
+      }
       if (r.phase === 'scenes') return this.scene();
       if (r.beat) return this.story();
       switch (r.phase) {
         case 'intro': return this.story();
+        case 'watch': return this.watch();
         case 'task': return this.task(false);
         case 'predict': case 'predict2': return this.predict();
         case 'run': return this.close();
@@ -175,15 +189,152 @@
       });
     }
 
+    // --- the Watch step (PROLOGUE §1.4, §2.4.3): the guide's callout over the live cell -------------
+    /** The guide shows the readout introductions due on this screen first, then the watch step (or nothing). */
+    watch() {
+      const r = this.runner, info = r.watchInfo();
+      if (!info) return;
+      if (info.done) { this.guide().hide(); r.next(); return this.after(); }
+      if (info.stage === 'guess') { this.guide().hide(); return this.guessSheet(info); }
+      this.close();                 // the watch has no sheet: its lines are in the guide, over the live cell
+      if (this.showIntro()) return;
+      this.stepCallout(info);
+    }
+
+    guide() { return this.app.views.guide; }
+
+    stepCallout(info) {
+      const r = this.runner, app = this.app, W = G.watch;
+      const buttons = [], extra = [];
+      let text = info.text, who = info.who, point = info.point;
+      if (info.stage === 'until') {
+        // The step appears once the model gets there: until then, what to do to see it.
+        text = ''; who = 'narrator'; point = null;
+        extra.push({ text: app.isRunning() ? W.waiting : W.paused, kind: 'wait' });
+      } else if (info.stage === 'act') {
+        extra.push({ text: info.act && info.act.kind === 'zoom' ? W.actZoom : W.act, kind: 'hint' });
+      } else if (info.stage === 'wait' && !app.isRunning()) extra.push({ text: W.paused, kind: 'wait' });
+      if (info.cause) extra.push({ text: info.cause, kind: 'cause' });
+      for (const f of info.feedback) {
+        extra.push({ text: F.fill(W.youGuessed, { option: f.picked }), kind: 'guessed' });
+        extra.push({ text: F.fill(W.happened, { fb: f.fb }), kind: 'happened' });
+      }
+      if (info.note) extra.push({ text: info.note, kind: 'note' });
+      if (info.stage === 'lines' || info.stage === 'tap') {
+        const finishing = info.last && (info.stage === 'tap' || (info.lastLine && r.watch.open));
+        buttons.push({ label: finishing ? G.continue : G.next, action: 'watch-next', primary: true, onClick: () => { r.watchNext(); this.afterWatch(); } });
+      }
+      if (info.waiting && !app.isRunning() && app.canRun()) buttons.push({ label: W.run, action: 'watch-run', primary: true, onClick: () => { app.resume(); this.syncGuide(); } });
+      if (info.offerSpeed && app.speed() < info.offerSpeed) buttons.push({ label: W.speedUp, action: 'watch-speed', onClick: () => { app.setSpeed(info.offerSpeed); this.syncGuide(); } });
+      if (info.offer && typeof app.setZoom === 'function') {
+        for (const o of info.offer) buttons.push({ label: r.text(o.label || W.lookCloser), action: 'watch-zoom-' + o.zoom, onClick: () => app.setZoom(o.zoom, 'guide') });
+      }
+      this.guide().show({ key: 'step:' + info.id + ':' + info.stage + ':' + info.line, who, text, extra, point,
+        count: F.fill(W.stepOf, { i: info.index + 1, n: info.count }), buttons });
+    }
+
+    /** After a watch action: saved, shown, and the cell runs on by itself when the next step waits on it and the student had it running. */
+    afterWatch() {
+      const r = this.runner, info = r.watchInfo();
+      this.app.levelChanged();
+      if (info && info.waiting && this.app.level && this.app.level.autoRun && this.app.canRun() && !this.app.isRunning()) this.app.resume();
+      this.after();
+    }
+
+    /** A guess, before the step's show: pick an option (it can change), then "See what happens". Never marked. */
+    guessSheet(info) {
+      const r = this.runner, h = LY.h, W = G.watch, g = info.guess;
+      this.sheet('guess', { title: W.guessTitle, className: 'lv-sheet lv-guess', backdropClass: 'lv-dim' }, (body) => {
+        body.appendChild(h('p', { class: 'lv-line lv-line-small', text: info.text }));
+        body.appendChild(h('p', { class: 'lv-prompt', text: g.prompt }));
+        const see = h('button', { class: 'btn primary lv-wide', type: 'button', 'data-primary': '', 'data-action': 'guess-see', disabled: g.picked === null,
+          onclick: () => { if (r.watchSee().ok) this.afterWatch(); } }, W.see);
+        const list = h('div', { class: 'lv-options', role: 'radiogroup', 'aria-label': g.prompt });
+        const buttons = [];
+        const paint = () => {
+          const sel = r.watch.picks[g.id];
+          for (const b of buttons) {
+            const on = Number(b.getAttribute('data-option')) === sel;
+            b.classList.toggle('is-selected', on);
+            b.setAttribute('aria-checked', on ? 'true' : 'false');
+          }
+          see.disabled = sel === undefined;
+        };
+        for (const o of g.options) {
+          const b = h('button', { class: 'btn lv-option', type: 'button', role: 'radio', 'aria-checked': 'false', 'data-option': String(o.index),
+            onclick: () => { r.watchPick(g.id, o.index); paint(); } }, h('span', { class: 'lv-opt-text', text: o.t }));
+          buttons.push(b);
+          list.appendChild(b);
+        }
+        body.appendChild(list);
+        body.appendChild(h('p', { class: 'sheet-note', text: W.guessNote }));
+        body.appendChild(h('div', { class: 'lv-sticky lv-actions' }, see));
+        paint();
+      });
+    }
+
+    /**
+     * The readouts this screen introduces (labConfig.ui.introduce) that this student has not met yet and that are on
+     * screen now: the guide points at the first with its sentence; Next marks it met (PROLOGUE §5.2). True while one shows.
+     */
+    showIntro() {
+      const app = this.app, r = this.runner, u = app.tierUI;
+      if (!u || !u.introduce.length || !app.progress) return false;
+      const TI = app.BTC.tiers, vis = TI.visibleReadouts(u);
+      for (const id of u.introduce) {
+        if (app.progress.introduced(id) || vis.indexOf(id) < 0) continue;
+        const sel = TI.TARGETS[id];
+        const el = sel ? Array.from(document.querySelectorAll(sel)).find((x) => x.offsetParent !== null && !x.closest('[hidden]')) : null;
+        if (!el) continue;                    // not on screen yet (another tab): introduced when it is
+        this.guide().show({ key: 'intro:' + id, who: 'narrator', text: TI.sentence(id, app.geneModel, app.focusGene), point: id,
+          buttons: [{ label: G.next, action: 'intro-next', primary: true, onClick: () => {
+            app.progress.markIntroduced(id);
+            app.logEvent('introduce', { readout: id });
+            this.syncGuide();
+          } }] });
+        void r;
+        return true;
+      }
+      return false;
+    }
+
+    /** The guide for the current phase: watch steps, or the introductions of a run screen; nothing on other screens. */
+    syncGuide() {
+      const r = this.runner;
+      if (!r || !this.app.views.guide) return;
+      if (r.phase === 'watch' && !r.beat) return this.watch();
+      if (r.phase === 'run' && !r.beat && !(r.run && r.run.endReason) && this.showIntro()) return;
+      this.guide().hide();
+    }
+
     // --- Prologue scenes (§7.P) --------------------------------------------------------
     scene() {
-      const r = this.runner, h = LY.h, info = r.sceneInfo();
-      const tall = !!info.question;
+      const r = this.runner, h = LY.h, info = r.sceneInfo(), W = G.watch;
+      const tall = !!info.question || !!info.guess;
       this.sheet('scene', { className: 'lv-sheet lv-story' + (tall ? ' lv-tall' : ''), backdropClass: 'lv-dim lv-clear', label: G.speakers[info.who] }, (body) => {
         body.appendChild(this.speaker(info.who, info.lines > 1 ? F.fill(G.lineOf, { i: info.line + 1, n: info.lines }) : ''));
         body.appendChild(h('p', { class: 'lv-line', 'aria-live': 'polite', text: info.text }));
+        // A guess before the scene's show (PROLOGUE §2.3.4): pick, then "See what happens"; never marked right or wrong.
+        const g = info.guess;
+        if (g && !g.seen) {
+          body.appendChild(h('p', { class: 'lv-prompt', text: g.prompt }));
+          const list = h('div', { class: 'lv-options', role: 'radiogroup', 'aria-label': g.prompt });
+          for (const o of g.options) {
+            const on = g.picked === o.index;
+            list.appendChild(h('button', { class: 'btn lv-option' + (on ? ' is-selected' : ''), type: 'button', role: 'radio', 'aria-checked': on ? 'true' : 'false',
+              'data-option': String(o.index), onclick: () => { r.scenePick(g.id, o.index); this.sync(); } }, h('span', { class: 'lv-opt-text', text: o.t })));
+          }
+          body.appendChild(list);
+          body.appendChild(h('p', { class: 'sheet-note', text: W.guessNote }));
+          body.appendChild(h('button', { class: 'btn primary lv-wide', type: 'button', 'data-action': 'guess-see', disabled: g.picked === null,
+            onclick: () => { if (r.sceneSee().ok) this.after(); } }, W.see));
+        }
+        for (const f of info.feedback || []) {
+          body.appendChild(h('p', { class: 'lv-fb-line is-guessed', text: F.fill(W.youGuessed, { option: f.picked }) }));
+          body.appendChild(h('p', { class: 'lv-fb-line', text: F.fill(W.happened, { fb: f.fb }) }));
+        }
         if (info.question) body.appendChild(this.questionBlock(info.scene.question));
-        const blocked = info.question && !info.solved;
+        const blocked = (info.question || (g && !g.seen)) && !info.solved;
         const next = h('button', { class: 'btn primary lv-next', type: 'button', 'data-primary': '', disabled: blocked, onclick: () => {
           if (info.last) r.next(); else r.sceneNext();
           this.after();
@@ -208,12 +359,15 @@
         const right = tried && o.ok === true;
         const wrong = tried && o.ok !== true;
         const kids = [];
-        if (wrong) kids.push(h('span', { class: 'lv-mark' }, [h('span', { 'aria-hidden': 'true', text: '✗ ' }), G.debrief.notQuite]));
-        if (right) kids.push(h('span', { class: 'lv-mark' }, [h('span', { 'aria-hidden': 'true', text: '✓ ' }), G.debrief.right]));
         kids.push(h('span', { class: 'lv-opt-text', text: r.text(o.t) }));
-        if (tried) kids.push(h('span', { class: 'lv-fb', text: r.text(o.fb) }));
+        // Feedback teaches (PROLOGUE §1.4): no cross and no "Not quite"; a tried option says what actually happens.
+        if (right) kids.push(h('span', { class: 'lv-fb' }, F.fill(G.debrief.yes, { fb: r.text(o.fb) })));
+        if (wrong) {
+          kids.push(h('span', { class: 'lv-fb' }, F.fill(G.debrief.actually, { fb: r.text(o.fb) })));
+          if (!st.solved && st.tries[st.tries.length - 1] === idx) kids.push(h('span', { class: 'lv-fb lv-pick' }, G.debrief.pickAnother));
+        }
         list.appendChild(h('button', {
-          class: 'btn lv-option' + (wrong ? ' is-wrong' : '') + (right ? ' is-right' : ''), type: 'button', 'data-option': String(idx),
+          class: 'btn lv-option' + (wrong ? ' is-tried' : '') + (right ? ' is-right' : ''), type: 'button', 'data-option': String(idx),
           disabled: tried || st.solved, 'aria-disabled': tried || st.solved ? 'true' : null,
           onclick: () => {
             r.tap(qid, idx);
@@ -239,6 +393,8 @@
     task(fromHud) {
       const r = this.runner, h = LY.h, def = this.def, T = def.text.task;
       const build = (body, close) => {
+        // A level not yet in the new pattern (no watch phase) says so (PROLOGUE §5.1: it keeps the full lab screen).
+        if (LevelUI.isOlder(def)) body.appendChild(h('p', { class: 'lv-older', text: C.tiers.older }));
         // A level may set the scene in plain words before the goal (TEXT.task.context: one or more paragraphs).
         for (const t of [].concat(T.context || [])) body.appendChild(h('p', { class: 'lv-context', text: r.text(t) }));
         body.appendChild(h('h3', { text: G.task.goal }));
@@ -791,5 +947,7 @@
 
   LevelUI.codeLines = codeLines;
   LevelUI.scoreLines = scoreLines;
+  /** A scored level not yet redone in the new pattern (no watch phase): it keeps the full lab screen and says so. */
+  LevelUI.isOlder = (def) => !!def && def.scored && def.phases.indexOf('watch') < 0;
   return LevelUI;
 });

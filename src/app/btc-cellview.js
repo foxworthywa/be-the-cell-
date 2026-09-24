@@ -1469,6 +1469,16 @@
       });
     }
 
+    /**
+     * Where a guide's canvas target is drawn (PROLOGUE §2.4.3 `point`: 'mrna:first', 'ribosome:focus',
+     * 'glyph:membrane:ptsG', 'marker:glucose', …), as {x, y} in canvas CSS px, or null. The zoom control
+     * answers (BTC.ZoomControl.locate), for the Cell zoom from this view's glyph buffer.
+     */
+    locate(point) {
+      const z = this.app.views && this.app.views.zoom;
+      return z && typeof z.locate === 'function' ? z.locate(point) : null;
+    }
+
     // --- test support: glyphs drawn per species and gene (LAB_UI §10.4) ----------------
     stats() {
       // Computed now from the cell's state, so it is current even while the view is hidden.

@@ -23,12 +23,13 @@
   const DEFAULTS = Object.freeze({
     tab: 'cell', speed: 60, focusGene: 'fliC', graphGenes: ['fliC', 'ptsG'], window: 3600,
     logScales: { mRNA: false, protein: false }, theme: 'system', reducedMotion: 'auto', plot4: 'size',
-    screen: 'home',
+    screen: 'home', labMode: 'simple',
   });
 
   /**
    * URL parameters (pure): ?seed ?speed ?tab ?theme ?reset=1 ?test=1, and for levels (LEVELS §5.11)
-   * ?lab=1, ?level=<id> and ?v=<variant seed, 6 base32 characters>. ?instructor is ignored.
+   * ?lab=1, ?level=<id> and ?v=<variant seed, 6 base32 characters>; ?all=1 opens the lab with All controls
+   * (docs/PROLOGUE.md §5.4). ?instructor is ignored.
    */
   function parseParams(search) {
     const out = {};
@@ -49,6 +50,7 @@
     r.reset = out.reset === '1';
     r.test = out.test === '1';
     r.lab = out.lab === '1';
+    r.all = out.all === '1';
     if (out.level && /^[\w.]{1,8}$/.test(out.level)) r.level = out.level;
     if (out.v && /^[0-9A-Za-z]{6}$/.test(out.v)) r.v = out.v;
     return r;

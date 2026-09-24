@@ -16,7 +16,7 @@
   'use strict';
   return {
     'm1-lab-glucose': {
-      strain: 'm1-lab', seed: 0, ticks: 120000, engineVersion: '1.1.0',
+      strain: 'm1-lab', seed: 0, ticks: 120000, engineVersion: '1.1.1',
       hash: '3aa3d7ccffd0673e',
       state: [
       'AgAAAAAAAAAATP1ACMd87NoA8D8AAAAAAAA0QAAAAAAAAPA/ayx4260+Hj8AAAAAAOy2QAAAAADgxfxAGv6qG2ng7D/kqFFn',
@@ -92,7 +92,7 @@
       ].join(''),
     },
     'm1-lab-glucose-birth': {
-      strain: 'm1-lab', seed: 0, ticks: 120000, engineVersion: '1.1.0',
+      strain: 'm1-lab', seed: 0, ticks: 120000, engineVersion: '1.1.1',
       hash: '03f1d074202c4546',
       state: [
       'AgAAAAAAAADwM/5AX/nhbK4B8D8AAAAAAAA1QAAAAAAAAPA/mjtTJ041Hz8AAAAAAOG2QAAAAADwM/5AlIBL8zWi7D/9iFMs',
@@ -167,7 +167,7 @@
       ].join(''),
     },
     'm2-lac-glucose': {
-      strain: 'm2-lac', seed: 0, ticks: 120000, engineVersion: '1.1.0',
+      strain: 'm2-lac', seed: 0, ticks: 120000, engineVersion: '1.1.1',
       hash: 'dcc917fdbe367f9f',
       state: [
       'AgAAAAAAAABYGhFB2nHHDND97z8AAAAAAIBHQAAAAAAAAABA7Ej/dAPmHz8AAAAAAOu2QAAAAACY2RBBfHCZVywr7D+itoJ5',
@@ -263,7 +263,7 @@
       ].join(''),
     },
     'm2-lac-glucose-birth': {
-      strain: 'm2-lac', seed: 0, ticks: 120000, engineVersion: '1.1.0',
+      strain: 'm2-lac', seed: 0, ticks: 120000, engineVersion: '1.1.1',
       hash: '60b7f82e8bdfa474',
       state: [
       'AgAAAAAAAACMNRFB/veSR+7+7z8AAAAAAABIQAAAAAAAAPA/vycoaTkfHz8AAAAAAP22QAAAAACMNRFBdelyYmJV7D8GwFjk',
@@ -352,7 +352,7 @@
       ].join(''),
     },
     'm2-l11-glucose': {
-      strain: 'm2-l11', seed: 0, ticks: 120000, engineVersion: '1.1.0',
+      strain: 'm2-l11', seed: 0, ticks: 120000, engineVersion: '1.1.1',
       hash: 'f36609247f761652',
       state: [
       'AgAAAAAAAAAATP1ACMd87NoA8D8AAAAAAAA0QAAAAAAAAPA/ayx4260+Hj8AAAAAAOy2QAAAAADgxfxAGv6qG2ng7D/kqFFn',
@@ -430,7 +430,7 @@
       ].join(''),
     },
     'm2-l11-glucose-birth': {
-      strain: 'm2-l11', seed: 0, ticks: 120000, engineVersion: '1.1.0',
+      strain: 'm2-l11', seed: 0, ticks: 120000, engineVersion: '1.1.1',
       hash: '2ab9465c6b1f7c32',
       state: [
       'AgAAAAAAAADwM/5AX/nhbK4B8D8AAAAAAAA1QAAAAAAAAPA/mjtTJ041Hz8AAAAAAOG2QAAAAADwM/5AlIBL8zWi7D/9iFMs',

@@ -23,7 +23,11 @@ test('L-13: HUD texts: the counter\'s short form under 400 px; words, not colour
   const wide = Hud.texts(model, 1280, null), narrow = Hud.texts(model, 360, null);
   assert.equal(wide.counter, 'mRNAs 18 / 40');
   assert.equal(narrow.counter, '18 / 40');
-  assert.equal(Hud.texts(model, 400, null).counter, 'mRNAs 18 / 40', '400 px is not narrow');
+  assert.equal(Hud.texts(model, 600, null).counter, 'mRNAs 18 / 40', '600 px is wide enough for the long counter');
+  // 400–599 px: the goal keeps its words; the timer and counter take their short forms, so the goal chip is not squeezed.
+  const mid = Hud.texts(Object.assign({}, model, { goal: { text: '312 / 500 lactose transporters', short: 'LacY 312/500', progress: 0.6 },
+    timer: { text: 'due in 9 min 30 s', short: 'due in 10 min' } }), 480, null);
+  assert.deepEqual([mid.goal, mid.timer, mid.counter], ['312 / 500 lactose transporters', 'due in 10 min', '18 / 40']);
   assert.equal(wide.goal, 'LacY 312 / 500');
   assert.equal(wide.progress, 0.624);
   assert.equal(wide.timer, '4 min 30 s left');
@@ -100,14 +104,20 @@ test('L-13: the code box breaks only after hyphens, into lines that fit', () => 
   assert.equal(LevelUI.codeLines(code, 80).length, 1);
 });
 
-test('L-13: completion score lines use the words of §6.1', () => {
+test('L-13: completion score lines use the words of §6.1; predictions are reported but not scored (PROLOGUE §1.4)', () => {
   assert.deepEqual(LevelUI.scoreLines({ G: 1, E: 1, P: 0.75, D: [1, 2], X: 1, total: 85 }), [
-    'Goal met · Efficiency 100 · Prediction 75', 'Debrief 1 of 2 right first time · Expert 1', 'Total 85']);
-  assert.deepEqual(LevelUI.scoreLines({ G: 0, E: 0, P: 0.5, D: [0, 2], X: 0, total: 10 })[0], 'Goal not met · Efficiency 0 · Prediction 50');
+    'Goal met · Efficiency 100 · Prediction 75 (not scored)', 'Explain 1 of 2 right first time · Expert 1', 'Total 85']);
+  assert.deepEqual(LevelUI.scoreLines({ G: 0, E: 0, P: 0.5, D: [0, 2], X: 0, total: 0 })[0], 'Goal not met · Efficiency 0 · Prediction 50 (not scored)');
+  // A level in the new pattern has no prediction score at all.
+  assert.deepEqual(LevelUI.scoreLines({ G: 1, E: 0.8, P: null, D: [2, 2], X: 0, total: 95 }, 1), ['Goal met · Efficiency 80', 'Explain 2 of 2 right first time · Expert 0 of 1', 'Total 95']);
   assert.deepEqual(LevelUI.scoreLines({ G: 1, E: null, P: null, D: [1, 1], X: 0, total: null }), ['Not scored']);
   // With the level's number of Expert objectives, the objectives met are counted (X = 3 is both of 2).
-  assert.equal(LevelUI.scoreLines({ G: 1, E: 1, P: 1, D: [1, 2], X: 3, total: 90 }, 2)[1], 'Debrief 1 of 2 right first time · Expert 2 of 2');
-  assert.equal(LevelUI.scoreLines({ G: 1, E: 1, P: 1, D: [1, 2], X: 0, total: 80 }, 0)[1], 'Debrief 1 of 2 right first time');
+  assert.equal(LevelUI.scoreLines({ G: 1, E: 1, P: 1, D: [1, 2], X: 3, total: 90 }, 2)[1], 'Explain 1 of 2 right first time · Expert 2 of 2');
+  assert.equal(LevelUI.scoreLines({ G: 1, E: 1, P: 1, D: [1, 2], X: 0, total: 80 }, 0)[1], 'Explain 1 of 2 right first time');
+  // A scored level without a watch phase is an older version (it keeps the full lab and says so).
+  assert.equal(LevelUI.isOlder(LV.validate(require('../src/levels/btc-level-1-4.js'))), true);
+  assert.equal(LevelUI.isOlder(P), false, 'the opening is not scored');
+  assert.equal(LevelUI.isOlder(LV.validate(require('./fixtures/level-watch-stub.js'))), false);
 });
 
 test('the Prologue drawings: ≤ 4 KB each, labelled from TEXT, with a scale bar, drawn in palette tokens', () => {

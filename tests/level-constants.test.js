@@ -18,9 +18,10 @@ const MC = require('../src/game/btc-misconceptions.js');
 const LEVEL_DIR = path.join(ROOT, 'src', 'levels');
 const levelFiles = fs.readdirSync(LEVEL_DIR).filter((f) => /^btc-level-[\w-]+\.js$/.test(f) && f !== 'btc-level-constants.js').sort();
 
-test('L-11: the constants were calibrated on this engine version', () => {
-  assert.equal(LC.engineVersion, ENGINE_VERSION, 'run tools/level-calibrate.js after an engine change');
+test('L-11: the constants were calibrated on this engine version (major.minor: a patch changes no physics)', () => {
   const mm = ENGINE_VERSION.split('.').slice(0, 2).join('.');
+  // A patch release (1.1.1: observe-only fields, golden hash unchanged) keeps the calibration (PROLOGUE.md §7).
+  assert.equal(LC.engineVersion.split('.').slice(0, 2).join('.'), mm, 'run tools/level-calibrate.js after an engine change');
   for (const f of levelFiles) assert.equal(require(path.join(LEVEL_DIR, f)).engine, mm, f + ' was written for engine ' + mm);
 });
 

@@ -6,6 +6,10 @@
  * Each row is a segmented control that sends one command (setMedium or
  * setDrug) and shows pending until the engine applies it. The solid choice
  * is read back from the cell's own medium and drug doses.
+ *
+ * In the free-play lab the panel's header carries the "All controls" switch (docs/PROLOGUE.md §5.4;
+ * on a laptop it is in the status strip). In the Simple mode the drug rows stay (every lever is kept)
+ * but fold behind one "Show the drugs" row.
  */
 (function (root, factory) {
   if (typeof module === 'object' && module.exports) {
@@ -31,6 +35,14 @@
       this.rows = {};
       // A level may lock a row (shown, not changeable) or hide it; the lab has every row free (LEVELS §5.5.1).
       const fields = ['glucose', 'lactose', 'aminoAcids'].filter((f) => controls.medium !== false && rows[f] !== 'hidden');
+      // The lab's mode switch (Simple / All controls), at the top of this panel on a phone.
+      if (app.mode === 'lab' && app.setLabMode) {
+        const on = app.ui.labMode === 'all';
+        this.labSwitch = h('button', { class: 'btn lab-switch pane-lab-switch' + (on ? ' is-on' : ''), type: 'button', role: 'switch',
+          'aria-checked': on ? 'true' : 'false', 'aria-label': C.tiers.allControlsLabel, onclick: () => app.setLabMode(on ? 'simple' : 'all') },
+        [h('span', { class: 'lab-switch-track', 'aria-hidden': 'true' }, h('span', { class: 'lab-switch-knob' })), h('span', { text: C.tiers.allControls })]);
+        root.appendChild(h('div', { class: 'lab-mode-row' }, this.labSwitch));
+      }
       if (fields.length) {
         root.appendChild(h('div', { class: 'pane-head' }, [h('h2', { text: C.medium.title }), h('span', { class: 'pane-note', text: C.medium.titleNote })]));
         const med = h('div', { class: 'ctl-list' });
@@ -55,7 +67,8 @@
       }
       if (app.mode === 'level') { this.levelMode = true; return; }     // no drugs in any M2 level (§5.5.3); the level menu is on the task card
 
-      root.appendChild(h('div', { class: 'pane-head' }, [h('h2', { text: C.drugs.title }), h('span', { class: 'pane-note', text: C.drugs.titleNote })]));
+      const drugsHead = h('div', { class: 'pane-head' }, [h('h2', { text: C.drugs.title }), h('span', { class: 'pane-note', text: C.drugs.titleNote })]);
+      root.appendChild(drugsHead);
       const drugs = h('div', { class: 'ctl-list' });
       for (const drug of ['rifampicin', 'chloramphenicol']) {
         const row = C.drugs.rows[drug];
@@ -72,6 +85,19 @@
       }
       drugs.appendChild(h('p', { class: 'pane-foot', text: C.drugs.footer }));
       root.appendChild(drugs);
+      // Simple mode: the drugs are one tap away, folded (the same commands as All controls, fewer rows on screen).
+      if (app.tierUI && app.tierUI.mediumPanel === 'simple') {
+        drugsHead.hidden = true; drugs.hidden = true;
+        const T = C.tiers;
+        const fold = h('button', { class: 'btn row-btn drugs-fold', type: 'button', 'aria-expanded': 'false', 'data-action': 'drugs-fold' }, T.drugsShow);
+        fold.addEventListener('click', () => {
+          const open = drugs.hidden;
+          drugs.hidden = !open; drugsHead.hidden = !open;
+          fold.setAttribute('aria-expanded', open ? 'true' : 'false');
+          fold.textContent = open ? T.drugsHide : T.drugsShow;
+        });
+        root.insertBefore(fold, drugsHead);
+      }
 
       this.buildLine = h('p', { class: 'build-line num' });
       root.appendChild(h('div', { class: 'actions' }, [

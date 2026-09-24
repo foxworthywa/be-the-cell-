@@ -129,7 +129,9 @@
     let Relong = 0, Nnasc = 0;
     for (let i = 0; i < genes.length; i++) {
       const g = genes[i];
-      if (nBind > 0) g.cohorts.push(D, nBind * g.rbs * g.tlCopies / W);
+      const starts = nBind > 0 ? nBind * g.rbs * g.tlCopies / W : 0;
+      if (nBind > 0) g.cohorts.push(D, starts);
+      g.tlStarts = starts;                         // observe-only (engine 1.1.1): view.genes[i].tlStarts_perS
       Relong += g.cohorts.nSum;
       if (g.isLeader) Nnasc += g.nascent.len;      // each transcript in progress is counted once
     }

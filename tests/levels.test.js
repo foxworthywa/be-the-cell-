@@ -123,7 +123,7 @@ test('build-files.json: game files after the shared files and before the app, in
   const idx = (name) => FILES.findIndex((f) => path.basename(f, '.js') === name);
   const lastShared = Math.max(...FILES.map((f, i) => (f.startsWith('src/shared/') ? i : -1)));
   const firstApp = FILES.findIndex((f) => f.startsWith('src/app/'));
-  const order = ['btc-level-kit', 'btc-misconceptions', 'btc-level-constants'];
+  const order = ['btc-level-kit', 'btc-misconceptions', 'btc-watch', 'btc-level-constants'];
   for (const f of levelFiles) order.push(path.basename(f, '.js'));
   order.push('btc-levels', 'btc-score', 'btc-code', 'btc-telemetry', 'btc-progress', 'btc-level-runner');
   const at = order.map(idx);

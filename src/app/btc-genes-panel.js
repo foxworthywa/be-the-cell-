@@ -7,6 +7,9 @@
  * mRNA, "+n" still being made, protein), a sparkline of the last simulated
  * hour, and its cost: the share of working ribosomes busy translating it now.
  * Text updates at most 4 times a second and is written only when it changes.
+ *
+ * On a tiered screen with genesPanel 'simple' (docs/PROLOGUE.md §5.3, the lab's Simple mode) a card
+ * keeps every lever (its dial) and its counts, but not the sparkline or the ribosome-share bar.
  */
 (function (root, factory) {
   if (typeof module === 'object' && module.exports) {
@@ -43,6 +46,8 @@
       const view = app.cell.observe();
       const lc = app.labConfig;
       const model = app.geneModel || C.geneModel(view.genes.map((g) => g.id), lc);
+      const simple = !!app.tierUI && app.tierUI.genesPanel === 'simple';
+      this.simple = simple;
       // Genes outside labConfig.genesVisible keep running as background: no card (LEVELS §5.5.1).
       for (const id of model.visible) {
         const gv = view.geneById[id];
@@ -89,9 +94,9 @@
           ctrl ? h('div', { class: 'card-ctrl' }, [h('span', { class: 'visually-hidden', text: C.card.promoter }), ctrl.el, ctrl.note])
             : h('p', { class: 'card-locked', text: lc.readOnlyGenes ? C.card.readOnly : C.card.locked }),
           h('div', { class: 'card-counts' }, [
-            h('span', { class: 'count-m' }, e.mrna), h('span', { class: 'count-p' }, e.protein), e.spark,
+            h('span', { class: 'count-m' }, e.mrna), h('span', { class: 'count-p' }, e.protein), simple ? null : e.spark,
           ]),
-          h('div', { class: 'card-cost' }, [
+          simple ? h('div', { class: 'card-cost is-simple' }, [aboutBtn]) : h('div', { class: 'card-cost' }, [
             h('span', { class: 'share-label', text: C.card.share }),
             h('span', { class: 'share-bar', role: 'img', 'aria-label': C.card.shareLabel }, e.shareFill), e.sharePct, aboutBtn,
           ]),
@@ -117,7 +122,7 @@
       if (!this.visible) return;
       this.sinceText += dtReal; this.sinceSpark += dtReal;
       if (force || this.sinceText >= 0.25) { this.sinceText = 0; this.updateText(); }
-      if (force || this.sinceSpark >= 0.5) { this.sinceSpark = 0; this.drawSparks(); }
+      if (!this.simple && (force || this.sinceSpark >= 0.5)) { this.sinceSpark = 0; this.drawSparks(); }
     }
 
     updateText() {
@@ -130,6 +135,7 @@
         LY.setText(e.state, C.geneState[st]);
         LY.setText(e.mrna, F.fill(C.card.counts, { m: F.count(gv.mRNA), n: F.count(gv.nascent) }));
         LY.setText(e.protein, F.fill(C.card.protein, { p: F.count(gv.proteinRounded) }));
+        if (this.simple) continue;
         const share = elong > 0 ? gv.ribosomes / elong : 0;
         const w = Math.min(100, (share / SHARE_FULL) * 100).toFixed(1) + '%';
         if (e.shareFill.style.width !== w) e.shareFill.style.width = w;

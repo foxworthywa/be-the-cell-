@@ -1356,3 +1356,13 @@ Four reviews (code, phone UX, biology, text) of the M2 build; LEVELS.md §16.11 
 | 10 | Manifest and page description: "A game about genes and proteins, in which you are in charge of a cell. In principle." | §9.1 |
 | 11 | Telemetry merges the other tabs' stored events before it writes; `clear()` writes an empty log | §10.5 |
 
+## 19. Tiered screens and the lab's Simple mode (docs/PROLOGUE.md §5; slice part B)
+
+| # | Change | Sections |
+|---|---|---|
+| 1 | `labConfig.ui` (PROLOGUE §5.1) chooses a tier (`src/app/btc-tiers.js`): which status readouts show (pause, clock and speed always; then the energy bar with its word, growth as a word, "sugar in: plenty / some / a trickle / none"; generation and doubling time only with All controls), the focus bar (big counters "mRNA copies", "copies made", "{Proteins}", "made … a minute · cut up … a minute", with an Off/On switch or the dial), the tabs (`graph` is the single simple graph), simple gene cards (no sparkline or ribosome-share bar), the medium panel, the legend (one line in tiers 1–3). A labConfig without `ui` is the full M1 screen | §1, §2.8, §3, §6 |
+| 2 | The single simple graph (`src/app/btc-simplegraph.js`): one or two lines from the start of the run, a dashed target, a shaded zone, a level's marks, command marks; no gene chips, lin/log, window row or spending bar | §5 |
+| 3 | The free-play lab opens in **Simple** mode (tier 4: every lever kept, the drugs folded behind one row); the "All controls" switch (Medium panel header on a phone, status strip on a laptop) restores this spec's lab; kept as `labMode` in `btc.ui.v1`, logged as `ui_mode`; `?lab=1&all=1` opens All controls | §4, §10.5 |
+| 4 | The guide (`src/app/btc-guide.js`): a callout over the cell (or the open panel) with a ring on what it is about, for watch steps and for each readout's one-sentence introduction, shown once per student (`progress.introduced`) | §2 |
+| 5 | HUD: from 400 to 599 px the goal keeps its long form and the timer and counter take their short ones (the goal chip was squeezed to about 100 px) | §12 |
+| 6 | Browser checks: the M1 checks of `tools/ui-check.js` open `?lab=1&all=1`; `tools/ui-check-tiers.js` checks Simple and All controls, the tiers and the watch flow | §11.2 |

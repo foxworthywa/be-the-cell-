@@ -598,7 +598,7 @@ async function run(browser, port, OUT, check) {
     }));
     await shot('complete');
     check('LV-2 360x740 the Prologue plays by taps to its completion screen: code, Copy, the Canvas line, Next level; the result is stored',
-      st.phase === 'complete' && /^BTC1-P0-/.test(st.code || '') && st.codeBox && st.copy && st.next && /Canvas quiz for this level/.test(st.canvas) && st.stored === 1,
+      st.phase === 'complete' && /^BTC2-P0-/.test(st.code || '') && st.codeBox && st.copy && st.next && /Canvas quiz for this level/.test(st.canvas) && st.stored === 1,
       JSON.stringify(Object.assign({ taps: tapped }, st)));
     finish(s, 'LV-2', probs);
     await s.context.close();

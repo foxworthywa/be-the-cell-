@@ -1423,3 +1423,28 @@ The leak from a bound copy is not scaled by CRP (CRP also tightens the loop; Kuh
 | RT-1 truth table (LacZ, % of induced; 4 seeds) | – | wt 0.01–0.5 / 53–70; ΔlacI and Oc 11–18 / 54–70; Is 0.01–0.5 / 0.1–1.0 |
 | RT-4 re-repression; RT-5 glucose first; RT-6 burden | – | < 5% after 25 s; 0.13 (no site 1.09); 6.0% slower |
 | R-E7 backup starving state; ptsG on | – | λ 0.35–0.37 λref, E 0.61; function_seen 6.7–10.3 min, 0.8 λref at 58–80 min |
+
+## 23. Engine 1.1.1: observe-only fields for the close-ups (PROLOGUE.md §7)
+
+A patch release: **no physics change**. The golden hash (`2a00ef8a0cbafc18`), every preset hash and
+every calibrated number are 1.1.0's; `tests/observe-detail.test.js` pins `physicsDigest()` and `hash()`
+of three scenarios to their 1.1.0 values, observed every tick or not (OB-3). L-11 compares the level
+constants' engine version by major.minor, so a patch keeps the calibration.
+
+| Addition | Definition |
+|---|---|
+| `view.genes[i].location` | the catalog's `'membrane'` or `'cytoplasm'` |
+| `view.genes[i].length_aa`, `mRNA_nt` | L, and 3L + 60 (this gene's own message) |
+| `view.genes[i].unit_nt`, `cistronOffset_nt` | the transcription unit's mRNA length, and where this gene starts on it |
+| `view.genes[i].oligomer` | chains per working machine (LacZ 4, LacI 4, LacA 3) |
+| `view.genes[i].tlCopies` | copies ribosomes could load in the last tick (mature + transcripts past this gene's start; §7.5) |
+| `view.genes[i].tlStarts_perS` | ribosomes that started on this gene in the last tick, per s (`nBind·rbs·tlCopies/W / dt`, a per-tick scratch value set in `initiateTranslation`, kept in snapshots) |
+| `view.genes[i].work_perS` | the protein's job flux: glucose through PtsG only (glucose-import), `hexoseToGlycolysis`, `aaMade`, `aaImported`, `lactoseIn`, `lactoseSplit`; 0 for `lac-repressor` and `none` |
+| `view.genes[i].workPerCopy_perS` | `work_perS / (P·activity) × oligomer`, 0 below one copy |
+| `view.flux.glucoseInPtsG`, `glucoseInSide` | `glucoseIn` split by the shares of the last tick's import capacity U (PtsG·k_pts vs uBasal·V) |
+| `view.ribosomes.odometer_aa` | the ribosome odometer D |
+| `view.lac.inducerShare` | 1 − activeLacI / lacITetramers (0 without LacI) |
+| `cell.detail(geneId, out)` | fills `out.ribosomeProgress` (Float64Array, 16 bins) with the gene's ribosomes by chain progress (D − D0)/L from its cohort queue; allocation-free with `out`; pure read |
+
+Snapshot scratch gains two numbers per gene (`tlCopies`, `tlStarts`), so a restored cell's view shows
+the same last-tick values (test d-3).

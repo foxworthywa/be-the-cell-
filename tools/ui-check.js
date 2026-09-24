@@ -5,8 +5,8 @@
 //
 // Uses the globally installed Playwright (never "playwright install") and
 // Chromium. Serves dist/ with serve.js, except P11, which opens dist/index.html
-// by file://. Every interactive check uses ?test=1&seed=1&lab=1 (the app opens on the level list otherwise,
-// LEVELS §5.11) and drives time with
+// by file://. Every interactive check of the M1 lab uses ?test=1&seed=1&lab=1&all=1 (the app opens on the level
+// list otherwise, LEVELS §5.11; the lab opens in its Simple mode otherwise, docs/PROLOGUE.md §5.4) and drives time with
 // app.test.runTicks(n), so results do not depend on machine speed.
 // Screenshots (for human review, no pixel diff) go to test-artifacts/screens/; the level checks
 // (tools/ui-check-levels.js, LEVELS.md §12.2) put theirs in test-artifacts/levels/ (or --levels-out <dir>).
@@ -26,6 +26,8 @@ const outArg = process.argv.indexOf('--out');
 const OUT = outArg >= 0 ? path.resolve(process.argv[outArg + 1]) : path.join(ROOT, 'test-artifacts', 'screens');
 const lvArg = process.argv.indexOf('--levels-out');
 const LV_OUT = lvArg >= 0 ? path.resolve(process.argv[lvArg + 1]) : path.join(ROOT, 'test-artifacts', 'levels');
+const tiArg = process.argv.indexOf('--tiers-out');
+const TI_OUT = tiArg >= 0 ? path.resolve(process.argv[tiArg + 1]) : path.join(ROOT, 'test-artifacts', 'tiers');
 
 const results = [];
 function check(id, ok, detail) {
@@ -54,7 +56,7 @@ async function openPage(browser, port, vp, opts) {
     }
     return route.continue();
   });
-  await page.goto((o.url || 'http://localhost:' + port + '/') + (o.query || '?test=1&seed=1&lab=1'));
+  await page.goto((o.url || 'http://localhost:' + port + '/') + (o.query || '?test=1&seed=1&lab=1&all=1'));
   await page.waitForFunction(() => window.__btc && window.__btc.app && window.__btc.app.test);
   await paint(page);
   return { page, context, errors, offsite };
@@ -309,7 +311,7 @@ async function main() {
       const pg = await ctx3.newPage();
       const errs3 = [];
       pg.on('pageerror', (e) => errs3.push(e.message));
-      await pg.goto('http://localhost:' + port + '/?seed=1&reset=1&lab=1');
+      await pg.goto('http://localhost:' + port + '/?seed=1&reset=1&lab=1&all=1');
       await pg.waitForFunction(() => window.__btc && window.__btc.app);
       await pg.goto('http://localhost:' + port + '/?seed=1&lab=1');
       await pg.waitForFunction(() => window.__btc && window.__btc.app);
@@ -338,7 +340,7 @@ async function main() {
     const errs = [];
     page.on('console', (m) => { if (m.type() === 'error') errs.push(m.text()); });
     page.on('pageerror', (e) => errs.push(e.message));
-    await page.goto('file://' + path.join(DIST, 'index.html') + '?test=1&seed=1&lab=1');
+    await page.goto('file://' + path.join(DIST, 'index.html') + '?test=1&seed=1&lab=1&all=1');
     await page.waitForFunction(() => window.__btc && window.__btc.app && window.__btc.app.test);
     const p11 = await page.evaluate(async () => {
       __btc.app.test.runTicks(100);
@@ -353,6 +355,13 @@ async function main() {
     // LV-1, LV-4, LV-5, LV-7, LV-8, LV-9 and the published code decoder (LEVELS.md §12.2).
     const shots = await require('./ui-check-levels.js').run(browser, port, LV_OUT, check);
     console.log('  level screenshots: ' + shots.length + ' in ' + LV_OUT);
+    // BZ-6 and TI (docs/PROLOGUE.md §10.2): the tiered screens, the lab's Simple and All controls modes, the watch flow.
+    const tierShots = await require('./ui-check-tiers.js').run(browser, port, TI_OUT, check);
+    console.log('  tier screenshots: ' + tierShots.length + ' in ' + TI_OUT);
+    // BZ-1 … BZ-5 (docs/PROLOGUE.md §10.2): the Gene and Protein close-ups and the zoom control.
+    const zoomOut = path.join(ROOT, 'test-artifacts', 'zoom');
+    const zoomShots = await require('./ui-check-zoom.js').run(browser, port, zoomOut, check);
+    console.log('  zoom screenshots: ' + zoomShots.length + ' in ' + zoomOut);
   } finally {
     await browser.close();
     server.close();

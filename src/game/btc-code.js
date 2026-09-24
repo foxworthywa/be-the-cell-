@@ -2,8 +2,13 @@
 /*
  * Be the Cell: completion codes (LEVELS §10).
  *
- *   BTC1-12-7K2Q9C-G1E100P75D12X1-F02-A1N2-R110C1-3F9A0B-4NQ8ZR1
- *   BTC1 - level - variant - scores - F flags - A attempt N runs - R engine C content - digest - check
+ *   BTC2-12-7K2Q9C-G1E100PNAD12X1-F02-A1N2-R110C1-3F9A0B-4NQ8ZR1
+ *   BTC2 - level - variant - scores - F flags - A attempt N runs - R engine C content - digest - check
+ *
+ * The first four characters name the code format. BTC2 (the teaching-first redesign, docs/PROLOGUE.md
+ * §1.4) has the fields of BTC1, but its total no longer counts P: S = 0.45·G + 0.25·G·E + 0.30·D.
+ * P is NA for levels in the new pattern; an older level still reports its locked predictions there,
+ * unscored. BTC1 codes still decode, totalled with the old weights, and carry a warning.
  *
  * The check is the top 35 bits of hash64(utf8(prefix + '|' + SALT)) in
  * Crockford base32, where prefix is the code up to and including the digest.
@@ -26,6 +31,9 @@
 
   const B32 = '0123456789ABCDEFGHJKMNPQRSTVWXYZ';
   const SALT = 'btc-phase-a-2026';
+  // The code format this build writes, and the ones it reads (LEVELS §10.1; PROLOGUE §1.4).
+  const FORMAT = 'BTC2';
+  const FORMATS = Object.freeze({ BTC1: 1, BTC2: 2 });
   const HEX = '0123456789ABCDEF';
 
   /** A non-negative integer (< 32^len) as len base32 characters, big-endian. */
@@ -73,13 +81,15 @@
    * payload: {level: 'P0'|'11'|…, variantSeed, G: 0|1, E: 0–100|null, P: 0–100|null, D: [first, total],
    * X: 0–15, flags: 0–255, attempt: 0–999, runs: 1–99, engine: '1.1.0', content: 1–99, digest: 6 hex}
    */
-  function encode(p) {
+  function encode(p, opts) {
+    const format = (opts && opts.format) || FORMAT;
+    if (!FORMATS[format]) throw new Error('unknown code format ' + format);
     const eng = String(p.engine).split('.').map(Number);
     if (eng.length !== 3 || eng.some((x) => !(x >= 0 && x < 32))) throw new Error('engine version must be major.minor.patch, each < 32');
     if (!/^[0-9A-Z]{2}$/.test(p.level)) throw new Error('level code must be two characters');
     const D = p.D || [0, 0];
     const prefix = [
-      'BTC1', p.level, encodeSeed(p.variantSeed),
+      format, p.level, encodeSeed(p.variantSeed),
       'G' + (p.G ? 1 : 0) + 'E' + pctField(p.E) + 'P' + pctField(p.P) + 'D' + D[0] + D[1] + 'X' + HEX[p.X & 15],
       'F' + HEX[(p.flags >> 4) & 15] + HEX[p.flags & 15],
       'A' + p.attempt + 'N' + p.runs,
@@ -90,7 +100,7 @@
   }
 
   const B32C = '[0-9A-HJKMNP-TV-Z]';
-  const RE = new RegExp('^BTC1-([0-9A-Z]{2})-(' + B32C + '{6})-G([01])E(\\d{1,3}|NA)P(\\d{1,3}|NA)D(\\d)(\\d)X([0-9A-F])' +
+  const RE = new RegExp('^(BTC[12])-([0-9A-Z]{2})-(' + B32C + '{6})-G([01])E(\\d{1,3}|NA)P(\\d{1,3}|NA)D(\\d)(\\d)X([0-9A-F])' +
     '-F([0-9A-F]{2})-A(\\d{1,3})N(\\d{1,2})-R(' + B32C + '{3})C(\\d{1,2})-([0-9A-F]{6})-(' + B32C + '{7})$');
 
   /** Decodes a code: {ok: true, …fields, total} or {ok: false, error, message}. */
@@ -99,20 +109,23 @@
     const m = RE.exec(code);
     if (!m) return { ok: false, error: 'format', message: 'not a Be the Cell code', code };
     const prefix = code.slice(0, code.lastIndexOf('-'));
-    if (checksum(prefix) !== m[15]) return { ok: false, error: 'checksum', message: 'bad checksum (a typo, or an edited code)', code };
+    if (checksum(prefix) !== m[16]) return { ok: false, error: 'checksum', message: 'bad checksum (a typo, or an edited code)', code };
     const num = (s) => (s === 'NA' ? null : Number(s));
     const out = {
-      ok: true, code, level: m[1], variantSeed: unb32(m[2]), variant: m[2],
-      G: Number(m[3]), E: num(m[4]), P: num(m[5]), D: [Number(m[6]), Number(m[7])], X: parseInt(m[8], 16),
-      flags: parseInt(m[9], 16), attempt: Number(m[10]), runs: Number(m[11]),
-      engine: m[12].split('').map((c) => B32.indexOf(c)).join('.'), content: Number(m[13]), digest: m[14], check: m[15],
+      ok: true, code, format: FORMATS[m[1]], level: m[2], variantSeed: unb32(m[3]), variant: m[3],
+      G: Number(m[4]), E: num(m[5]), P: num(m[6]), D: [Number(m[7]), Number(m[8])], X: parseInt(m[9], 16),
+      flags: parseInt(m[10], 16), attempt: Number(m[11]), runs: Number(m[12]),
+      engine: m[13].split('').map((c) => B32.indexOf(c)).join('.'), content: Number(m[14]), digest: m[15], check: m[16],
     };
     out.override = out.attempt === 0;
     if ((out.E !== null && out.E > 100) || (out.P !== null && out.P > 100) || out.D[0] > out.D[1] || out.runs < 1 || out.content < 1) {
       return { ok: false, error: 'range', message: 'a value is out of range', code };
     }
-    out.total = out.E === null && out.P === null ? null
-      : S.total({ G: out.G, E: out.E === null ? null : out.E / 100, P: out.P === null ? null : out.P / 100, D: out.D });
+    const c = { G: out.G, E: out.E === null ? null : out.E / 100, P: out.P === null ? null : out.P / 100, D: out.D };
+    // A scored level always reports E (0 when the goal was missed); the opening reports none, and has no total.
+    if (out.format === 1) out.total = out.E === null && out.P === null ? null : S.totalV1(c);
+    else out.total = out.E === null ? null : S.total(c);
+    out.old = out.format < FORMATS[FORMAT];
     return out;
   }
 
@@ -140,7 +153,7 @@
     return rows;
   }
 
-  const FIND = /BTC1-[0-9A-Z]{2}-[0-9A-Z]{6}-G[0-9A-Z]+-F[0-9A-Z]{2}-A[0-9]+N[0-9]+-R[0-9A-Z]{3}C[0-9]+-[0-9A-Z]{6}-[0-9A-Z]{7}/;
+  const FIND = /BTC[12]-[0-9A-Z]{2}-[0-9A-Z]{6}-G[0-9A-Z]+-F[0-9A-Z]{2}-A[0-9]+N[0-9]+-R[0-9A-Z]{3}C[0-9]+-[0-9A-Z]{6}-[0-9A-Z]{7}/;
 
   /** The first thing in free text that looks like a code (normalised), or null. */
   function findCode(text) {
@@ -193,6 +206,7 @@
         const k = r.level + ':' + r.variantSeed;
         (bySeed[k] || (bySeed[k] = [])).push(r);
       }
+      if (r.old) r.warnings.push('older code format (BTC1): its total counts predictions, with the old weights');
       if (r.override) r.warnings.push('override attempt (think-aloud)');
       if (o.engine && r.engine !== o.engine) r.warnings.push('engine ' + r.engine + ' differs from this build (' + o.engine + ')');
     }
@@ -223,7 +237,7 @@
     return rows.map((r) => {
       const d = r.ok ? byCode[r.level] : null;
       const out = {
-        student: r.student || '', code: r.code || r.input || '', valid: !!r.ok, reason: r.ok ? '' : (r.message || r.error || ''),
+        student: r.student || '', code: r.code || r.input || '', format: r.ok ? 'BTC' + r.format : '', valid: !!r.ok, reason: r.ok ? '' : (r.message || r.error || ''),
         level: d ? d.id : r.level || '', variant: r.variant || '', variantValues: '', G: '', E: '', P: '', D: '', X: '', expert: '', expertText: '',
         flags: '', attempt: '', runs: '', engine: r.engine || '', content: '', total: '', warnings: (r.warnings || []).join('; '),
       };
@@ -236,8 +250,11 @@
         try { out.variantValues = d.variantLabel(d.variant(r.variantSeed)); } catch (e) { out.variantValues = ''; }
       }
       const pct = (x) => (x === null ? 'NA' : String(x));
+      // From BTC2 on, predictions are reported but not scored; the opening's D counts guesses, also not scored.
+      const unscored = d && !d.scored;
       Object.assign(out, {
-        G: String(r.G), E: pct(r.E), P: pct(r.P), D: r.D[0] + ' of ' + r.D[1], X: String(r.X),
+        G: String(r.G), E: pct(r.E), P: pct(r.P) + (r.format >= 2 && r.P !== null ? ' (not scored)' : ''),
+        D: r.D[0] + ' of ' + r.D[1] + (unscored && r.format >= 2 ? ' guesses (not scored)' : ''), X: String(r.X),
         attempt: r.override ? '0 (override)' : String(r.attempt), runs: String(r.runs), content: String(r.content),
         total: r.total === null ? 'not scored' : String(r.total),
       });
@@ -253,7 +270,7 @@
   }
 
   const TABLE_COLUMNS = ['student', 'level', 'variant', 'variantValues', 'G', 'E', 'P', 'D', 'X', 'expert', 'expertText', 'flags', 'attempt', 'runs',
-    'engine', 'content', 'total', 'valid', 'reason', 'warnings', 'code'];
+    'engine', 'content', 'total', 'valid', 'reason', 'warnings', 'format', 'code'];
 
   /** The table as CSV (RFC 4180 quoting), with a header row. */
   function toCSV(rows, columns) {
@@ -262,5 +279,5 @@
     return [cols.join(',')].concat(rows.map((r) => cols.map((c) => q(c === 'valid' ? (r.valid ? 'yes' : 'no') : r[c])).join(','))).join('\r\n') + '\r\n';
   }
 
-  return { B32, SALT, b32, unb32, normalise, encodeSeed, decodeSeed, checksum, encode, decode, parseCSV, findCode, readCodes, analyse, table, toCSV, TABLE_COLUMNS };
+  return { B32, SALT, FORMAT, FORMATS, b32, unb32, normalise, encodeSeed, decodeSeed, checksum, encode, decode, parseCSV, findCode, readCodes, analyse, table, toCSV, TABLE_COLUMNS };
 });

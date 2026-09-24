@@ -34,7 +34,7 @@
 })(typeof self !== 'undefined' ? self : this, function (M, R, P, C, PRESETS, GENOME, Q, REG, X, MB, GR, CMD, EV, OBS) {
   'use strict';
 
-  const ENGINE_VERSION = '1.1.0';
+  const ENGINE_VERSION = '1.1.1';        // 1.1.1: observe-only view fields and detail() (PROLOGUE.md §7); physics as 1.1.0
   const STATE_SCHEMA = 2;               // v1.1: IPTG in the medium, transcription units, lac regulation
   const SNAPSHOT_SCHEMA = 1;
   const MRNA_CAPACITY = 512;
@@ -81,6 +81,7 @@
       this.activity = d.activity;
       this.promoterScale = 1;             // design strength of a promoter (config.design: lac ×0.5–4, lacI ×1 or ×10), else 1
       this.tlCopies = 0;                  // mRNA copies ribosomes can load this tick (per tick, not hashed)
+      this.tlStarts = 0;                  // ribosomes that started on this gene this tick (observe-only scratch, 1.1.1)
       // Molecules (hashed)
       this.mature = new Q.MoleculeList(MRNA_CAPACITY);
       this.nascent = new Q.NascentQueue(NASCENT_CAPACITY);
@@ -811,6 +812,37 @@
       return this._view;
     }
 
+    /**
+     * Observe-only detail for one gene (engine 1.1.1, PROLOGUE.md §7), for the Gene close-up:
+     * out.ribosomeProgress (a Float64Array, 16 bins by default) is filled with the gene's
+     * ribosomes by chain progress (D − D0)/L, from its cohort queue (≤ 2L + 1 entries). Pure
+     * read, allocation-free when out is passed; nothing in the physics or the hash reads it.
+     * Returns out: {gene, tick, ribosomes, ribosomeProgress}.
+     */
+    detail(geneId, out) {
+      const o = out || { gene: '', tick: -1, ribosomes: 0, ribosomeProgress: new Float64Array(16) };
+      const bins = o.ribosomeProgress, nb = bins.length;
+      for (let b = 0; b < nb; b++) bins[b] = 0;
+      o.gene = geneId;
+      o.tick = this.tick;
+      o.ribosomes = 0;
+      const g = Object.prototype.hasOwnProperty.call(this.geneById, geneId) ? this.geneById[geneId] : null;
+      if (!g) return o;
+      const q = g.cohorts, D = this.D, L = g.L;
+      let sum = 0;
+      for (let k = 0; k < q.len; k++) {
+        let i = q.head + k;
+        if (i >= q.cap) i -= q.cap;
+        const x = (D - q.D0[i]) / L;
+        let b = Math.floor(x * nb);
+        if (!(b >= 0)) b = 0; else if (b >= nb) b = nb - 1;
+        bins[b] += q.n[i];
+        sum += q.n[i];
+      }
+      o.ribosomes = sum;
+      return o;
+    }
+
     // --- state bytes, hashes ------------------------------------------------
     /**
      * Canonical state bytes (spec §6): every field that affects the future, in
@@ -936,7 +968,10 @@
       for (let i = 0; i < FLUX_SCRATCH.length; i++) w.f64(f[FLUX_SCRATCH[i]]);
       for (let i = 0; i < 6; i++) { w.f64(led.tick[i]); w.f64(led.perS[i]); w.f64(led.fractions[i]); }
       for (let i = 0; i < LEDGER_SCRATCH.length; i++) w.f64(led[LEDGER_SCRATCH[i]]);
-      for (const g of this.genes) { w.f64(g.txStarted); w.f64(g.mCompleted); w.f64(g.mDecayed); w.f64(g.pCompleted); w.f64(g.newestInitTick); w.f64(g.degraded); }
+      for (const g of this.genes) {
+        w.f64(g.txStarted); w.f64(g.mCompleted); w.f64(g.mDecayed); w.f64(g.pCompleted); w.f64(g.newestInitTick); w.f64(g.degraded);
+        w.f64(g.tlCopies); w.f64(g.tlStarts);
+      }
       for (const s of this.sectors) { w.f64(s.sigma0); w.f64(s.sigInt); w.f64(s.made); }
       if (this.lac) for (let i = 0; i < REG.SCRATCH.length; i++) w.f64(this.lac[REG.SCRATCH[i]]);
     }
@@ -947,7 +982,10 @@
       for (let i = 0; i < FLUX_SCRATCH.length; i++) f[FLUX_SCRATCH[i]] = r.f64();
       for (let i = 0; i < 6; i++) { led.tick[i] = r.f64(); led.perS[i] = r.f64(); led.fractions[i] = r.f64(); }
       for (let i = 0; i < LEDGER_SCRATCH.length; i++) led[LEDGER_SCRATCH[i]] = r.f64();
-      for (const g of this.genes) { g.txStarted = r.f64(); g.mCompleted = r.f64(); g.mDecayed = r.f64(); g.pCompleted = r.f64(); g.newestInitTick = r.f64(); g.degraded = r.f64(); }
+      for (const g of this.genes) {
+        g.txStarted = r.f64(); g.mCompleted = r.f64(); g.mDecayed = r.f64(); g.pCompleted = r.f64(); g.newestInitTick = r.f64(); g.degraded = r.f64();
+        g.tlCopies = r.f64(); g.tlStarts = r.f64();
+      }
       for (const s of this.sectors) { s.sigma0 = r.f64(); s.sigInt = r.f64(); s.made = r.f64(); }
       if (this.lac) for (let i = 0; i < REG.SCRATCH.length; i++) this.lac[REG.SCRATCH[i]] = r.f64();
     }

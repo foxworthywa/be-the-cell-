@@ -58,6 +58,16 @@
     code: { req: ['code', 'action'], values: { action: ['shown', 'copied', 'shared', 'copy-failed'] } },
     download: { req: ['kind'], values: { kind: ['run', 'export'] } },
     error: { req: ['msg'] },
+    // The teaching-first redesign (docs/PROLOGUE.md §9).
+    guess: { req: ['id', 'option', 'cause', 'step'] },
+    activity: { req: ['id', 'i', 'value', 'expected', 'match'] },
+    step: { req: ['id', 'action'], opt: ['gate', 'tick'], values: { action: ['shown', 'gate', 'done'] } },
+    zoom: { req: ['from', 'to', 'via'], values: { via: ['segment', 'pinch', 'chip', 'key', 'guide', 'level'] } },
+    rung: { req: ['id', 'action', 'via'], values: { action: ['closer', 'back', 'jump', 'ring'], via: ['button', 'pinch', 'tap', 'key'] } },
+    watch_mrna: { req: ['id', 'made', 'lifetime_s'] },
+    introduce: { req: ['readout'] },
+    ui_mode: { req: ['mode'], values: { mode: ['simple', 'all'] } },
+    about: { req: ['row'] },
   });
   // Keys that could carry a person's identity are never allowed, at any depth.
   const FORBIDDEN_KEY = /^(e-?mail|user|user-?name|username|student|student-?name|full-?name|first-?name|last-?name|phone)$/i;

@@ -2215,6 +2215,55 @@ versions:** 1.1 → 3, 1.2 → 3, 1.4 → 4, 1.7 → 3 (question, option and fee
 Prologue stays 1 (one feedback line reworded, as in §16.11). The tone lines kept in §16.11 are
 unchanged.
 
+### 16.13 The level pattern and scoring of the teaching-first redesign (docs/PROLOGUE.md §1.4; slice part B)
+
+Built for the vertical slice (PROLOGUE §12, steps S5 and S6). The opening and level 1.2 are rebuilt on it
+separately; 1.1, 1.4 and 1.7 keep their M2 flows until phase 2.
+
+**Phases.** `watch` joins the phase list after `intro`: `scenes, intro, watch, task, predict, demo, design, run,
+result, predict2, epilogue, debrief, echo, complete`. `predict` stays for Expert planning items and the older levels.
+
+**The watch phase** (`def.watch = {gene, onLevel?, steps, tests?, monitor?}`; schema and state tests in
+`src/game/btc-watch.js`). It runs on its own cell, `def.config(variant, 'watch', extra)`, built on entering the
+phase, saved in the level autosave while the phase lasts, and dropped after it. A step is
+`{id, until?, lines, point?, guess?, act?, gate, cause?, notes?, offer?, offerSpeed?}`:
+- `until` (a state condition): the step appears only once the model reaches it; `pause` (default true) stops the
+  run at that tick; `watch: true` marks the gene's first mature mRNA as the watched copy (`watchedGone`).
+- `lines` show one at a time. On the last line a tap gate is open at once (its cause and any guess feedback shown
+  with it; Next completes the step), an act waits for the student's command, a state gate for the model; a guess
+  comes after the lines (Next opens it).
+- `gate`: `tap`, `act` (the student sends the expected command through the real control; a matching command sent
+  earlier in the step, or a gene already set, counts), `guess` (the step ends once the guess is seen), or `state`
+  (a built-in test, `firstTx firstMRNA firstRibosome firstProtein inPlace workOver energyNormal watchedGone
+  allMRNAGone operatorFree operatorBound geneOn geneOff proteinAtLeast`, or the level's own).
+- Nothing opens because time passed: conditions are tested after every tick of the watch cell, so the same run
+  opens every gate at the same tick at any speed (test W-3); render time alone opens nothing.
+- The runner holds the cell while a guess is open and while a pausing gate waits for its tap; otherwise the student
+  may run and pause the watch cell freely. `notes` say what is wrong while a step waits ("The gene is off, …").
+
+**Guesses** (`{id, prompt, options: [{t, fb, mc?, cause?: true}], showAt?}`, in a watch step or an opening scene):
+exactly one option is the explained cause; no option is right or wrong. The pick may change until "See what
+happens"; then it is kept (telemetry `guess`), and its feedback reads "What happened: {fb}" at the step (or scene)
+`showAt` names, after that step's gate. A flag `{id, mc, guess: 'g1' | ['d1', 'h5']}` is raised when one of those
+guesses was picked on an option with that misconception. Guesses never change a score.
+
+**Explain** (the debrief): a first wrong tap shows "Here is what actually happens: {fb}" and "Pick another."; the
+right tap "Yes. {fb}". The cross and "Not quite" are gone (all levels).
+
+**Scoring and codes.** `S = round(100 · (0.45·G + 0.25·G·E + 0.30·D_first/D_total))` for every level (coordinator
+decision on PROLOGUE open question 4): predictions are reported, not scored. The code format becomes **BTC2**
+(same fields; P is NA for levels in the new pattern). BTC1 codes still decode, totalled with the old weights and
+marked "older code format". An unscored level may report its own D (`score()` returning `D: [a, b]`: the opening's
+guesses first picked on the cause), labelled "guesses (not scored)" in the instructor's table. The run file keeps
+the guesses (`level.guesses`), and verify-run recomputes the flags they raise.
+
+**Older levels.** A scored level without a watch phase shows "An older version of this level …" on its task card
+and "older version" on the home list, and keeps the full lab screen (no `labConfig.ui`, PROLOGUE §5.1).
+
+**Tests.** `tests/level-watch.test.js` (W-1 to W-11, on the stub level `tests/fixtures/level-watch-stub.js`),
+`tests/ui-tiers.test.js` (TI-1, TI-2), `tests/codes.test.js` (BTC2 and BTC1); browser checks in
+`tools/ui-check-tiers.js` (the stub injected into the page).
+
 
 ---
 

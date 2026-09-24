@@ -200,6 +200,15 @@
         degraded_perS: 0,                        // protein removed by degradation in the last tick, per s (R-E10)
         tu: d.tu,                                // transcription unit (lacZ, lacY and lacA share 'tu_lac' in m2-lac)
         episode: { onTick: null, firstMRNATick: null, firstProteinTick: null, offTick: null },
+        // Observe-only additions of engine 1.1.1 (PROLOGUE.md §7), for the close-up views.
+        location: d.location,                    // 'membrane' | 'cytoplasm' (the catalog's)
+        length_aa: d.length, mRNA_nt: 3 * d.length + cell.p.utrNt,   // this gene's own message: 3L + 60
+        unit_nt: d.mRNALength, cistronOffset_nt: d.cistronOffset,   // the whole transcription unit, and where this gene starts on it
+        oligomer: d.oligomer,                    // chains per working machine (LacZ 4)
+        tlCopies: 0,                             // copies ribosomes could load in the last tick (mature + transcripts past this gene's start)
+        tlStarts_perS: 0,                        // ribosomes that started on this gene in the last tick, per s
+        work_perS: 0,                            // the protein's job flux (see refresh)
+        workPerCopy_perS: 0,                     // work per working machine (per four-chain LacZ), 0 below one copy
       };
       genes.push(v);
       geneById[d.id] = v;
@@ -223,7 +232,8 @@
       energy: { E: 0, ATP: 0, ADP: 0, ATP_mM: 0, turnover_s: 0, state: 'normal' },
       aminoAcids: { count: 0, mM: 0, state: 'ok' },
       lactose: { inside: 0, inside_mM: 0 },
-      ribosomes: { total: 0, elongating: 0, running: 0, stalled: 0, free: 0, activeFraction: 0, vRun_aaPerS: 0, vTx_ntPerS: 0, byUnit: new Float64Array(nU), kInitPerMRNA: 0 },
+      ribosomes: { total: 0, elongating: 0, running: 0, stalled: 0, free: 0, activeFraction: 0, vRun_aaPerS: 0, vTx_ntPerS: 0, byUnit: new Float64Array(nU), kInitPerMRNA: 0,
+        odometer_aa: 0 /* the ribosome odometer D (1.1.1) */ },
       genes, geneById, tus,
       sectors,
       // The regulated lac operon (m2-lac; null in other strains; LEVELS.md R-E16).
@@ -233,6 +243,7 @@
         inducer_uM: 0 /* allolactose + IPTG */, iptg_uM: 0, activeLacI: 0 /* tetramers not holding inducer */,
         promoterActivity: 0 /* per-copy promoter use: crpFactor × (free + leak × bound) */, exclusion: 0,
         inducerHalf_uM: cell.lac.inducerHalf_uM, design: cell.lac.design,
+        inducerShare: 0 /* 1 − activeLacI / lacITetramers: the share of repressors holding inducer (1.1.1) */,
       } : null,
       proteome: { byGene: new Float64Array(nG), R: 0, Q: 0, P: 0 },
       flux: {
@@ -240,6 +251,7 @@
         fermentationProductsOut: 0, aaMade: 0, aaImported: 0, aaRecycled: 0, aaPolymerised: 0, ntPolymerised: 0,
         transcriptsStarted: new Float64Array(nG), mRNAsCompleted: new Float64Array(nG), proteinsCompleted: new Float64Array(nG),
         ribosomesMade: 0, atpMade: 0, atpSpent: 0,
+        glucoseInPtsG: 0, glucoseInSide: 0,     // glucoseIn split between PtsG and the slow side route by capacity share (1.1.1)
       },
       ledger: {
         names: cell.ledger.names, perS: new Float64Array(6), fractions: new Float64Array(6), cumulative: new Float64Array(6),
@@ -311,6 +323,7 @@
     rb.vRun_aaPerS = cell.flux.vRun;
     rb.vTx_ntPerS = p.ntPerAA * (1 - p.cmTx * theta) * cell.flux.vRun;
     rb.kInitPerMRNA = k.kInit;
+    rb.odometer_aa = cell.D;
 
     let nNasc = 0;
     for (let i = 0; i < nG; i++) {
@@ -347,6 +360,9 @@
       v.episode.firstMRNATick = ep.firstMRNATick;
       v.episode.firstProteinTick = ep.firstProteinTick;
       v.episode.offTick = ep.offTick;
+      // 1.1.1 (observe-only): the last tick's translatable copies and ribosome starts.
+      v.tlCopies = g.tlCopies;
+      v.tlStarts_perS = g.tlStarts / dt;
       view.flux.transcriptsStarted[i] = g.txStarted / dt;
       view.flux.mRNAsCompleted[i] = g.mCompleted / dt;
       view.flux.proteinsCompleted[i] = g.pCompleted / dt;
@@ -378,6 +394,24 @@
     fl.ribosomesMade = cell.sectors[0].made / p.aaPerRibosome / dt;
     fl.atpMade = cell.ledger.supply_perS;
     fl.atpSpent = cell.ledger.spent_perS;
+    // 1.1.1: glucose through PtsG and through the side route, split by their shares of the last tick's
+    // import capacity U = (PtsG·k_pts + uBasal·V)·sat(G) (the fluxes are proportional to it, §7.7).
+    const Gout = cell.env.glucose_mM;
+    const sideCap = cell.uBasal * k.V * (Gout > 0 ? Gout / (Gout + p.K_G) : 0);
+    let sideShare = k.U > 0 ? sideCap / k.U : 0;
+    if (sideShare > 1) sideShare = 1;
+    fl.glucoseInSide = cf.glucoseIn * sideShare;
+    fl.glucoseInPtsG = cf.glucoseIn - fl.glucoseInSide;
+    // Each gene's job flux and the work of one machine (0 below one copy).
+    for (let i = 0; i < nG; i++) {
+      const g = cell.genes[i], v = view.genes[i], role = v.role;
+      const w = role === 'glucose-import' ? fl.glucoseInPtsG : role === 'glycolysis' ? cf.hexoseToGlycolysis
+        : role === 'aa-synthesis' ? cf.aaMade : role === 'aa-import' ? cf.aaImported
+          : role === 'lactose-import' ? cf.lactoseIn : role === 'lactose-split' ? cf.lactoseSplit : 0;
+      v.work_perS = w;
+      const working = g.P * g.activity;
+      v.workPerCopy_perS = g.P >= 1 && working > 0 ? (w / working) * v.oligomer : 0;
+    }
 
     const lg = view.ledger, cl = cell.ledger;
     for (let i = 0; i < 6; i++) { lg.perS[i] = cl.perS[i]; lg.fractions[i] = cl.fractions[i]; lg.cumulative[i] = cl.cumulative[i]; }
@@ -411,6 +445,8 @@
       o.activeLacI = L.active;
       o.promoterActivity = cell.k.lacTx;
       o.exclusion = L.exclusion;
+      const share = L.tetramers > 0 ? 1 - L.active / L.tetramers : 0;
+      o.inducerShare = share < 0 ? 0 : share > 1 ? 1 : share;
     }
     view.drugs.rifampicin = cell.rifDose;
     view.drugs.chloramphenicol = cell.cmDose;

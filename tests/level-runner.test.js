@@ -266,7 +266,7 @@ test('the Prologue: scenes gate on each line and on the question; cards; an unsc
   assert.equal(r.phase, 'complete');
   assert.deepEqual(r.cards, ['ribosome', 'genetic-code', 'no-nucleus']);
   const d = CODE.decode(r.code);
-  assert.match(r.code, /^BTC1-P0-000000-G1ENAPNAD01X0-F01-A1N1-R\w{3}C1-000000-/);
+  assert.match(r.code, /^BTC2-P0-000000-G1ENAPNAD01X0-F01-A1N1-R\w{3}C1-000000-/);
   assert.equal(d.total, null);
   assert.equal(r.result.total, null);
   assert.deepEqual(r.result.flags, ['PRED_DNA_DIRECT']);

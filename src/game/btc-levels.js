@@ -1,4 +1,4 @@
-// @deps btc-narrate btc-level-kit btc-misconceptions
+// @deps btc-narrate btc-level-kit btc-misconceptions btc-watch
 /*
  * Be the Cell: the level registry (LEVELS §3.1–3.3).
  *
@@ -17,17 +17,18 @@
  */
 (function (root, factory) {
   if (typeof module === 'object' && module.exports) {
-    module.exports = factory(require('../shared/btc-narrate.js'), require('./btc-level-kit.js'), require('./btc-misconceptions.js'));
+    module.exports = factory(require('../shared/btc-narrate.js'), require('./btc-level-kit.js'), require('./btc-misconceptions.js'),
+      require('./btc-watch.js'));
   } else {
     var B = root.BTC || (root.BTC = {});
-    B.levels = factory(B.narrate, B.levelKit, B.misconceptions);
+    B.levels = factory(B.narrate, B.levelKit, B.misconceptions, B.watch);
     B.levels.load(B.levelDefs || {});
   }
-})(typeof self !== 'undefined' ? self : this, function (N, K, MC) {
+})(typeof self !== 'undefined' ? self : this, function (N, K, MC, W) {
   'use strict';
 
-  /** Every phase, in the only order a level may use them (§4.1). */
-  const PHASES = Object.freeze(['scenes', 'intro', 'task', 'predict', 'demo', 'design', 'run', 'result', 'predict2',
+  /** Every phase, in the only order a level may use them (§4.1; watch: PROLOGUE §1.4, the teaching-first redesign). */
+  const PHASES = Object.freeze(['scenes', 'intro', 'watch', 'task', 'predict', 'demo', 'design', 'run', 'result', 'predict2',
     'epilogue', 'debrief', 'echo', 'complete']);
   const WHO = Object.freeze(['narrator', 'commander', 'ribosome', 'laci', 'protease', 'glucose']);
   const MODES = ['guided', 'operator', 'designer'];
@@ -106,9 +107,13 @@
     return typeof x === 'string' ? x : undefined;
   }
 
-  /** Flag entries are ids, or {id, mc} to name the misconception a behaviour flag stands for. */
+  /**
+   * Flag entries are ids, or {id, mc} to name the misconception a behaviour flag stands for, or
+   * {id, mc, guess: 'g1' | ['d1', 'h5']}: raised when one of those watch guesses was picked on an option with that mc.
+   */
   function flagList(def) {
-    return (def.flags || []).map((f) => (typeof f === 'string' ? { id: f, mc: null } : { id: f.id, mc: f.mc || null }));
+    return (def.flags || []).map((f) => (typeof f === 'string' ? { id: f, mc: null, guess: [] }
+      : { id: f.id, mc: f.mc || null, guess: f.guess === undefined ? [] : [].concat(f.guess) }));
   }
 
   /** Validates a level definition (§3.2); throws LevelError. Returns the definition. */
@@ -173,6 +178,17 @@
       seen('debrief[' + i + '].id', q.id);
     });
     if (has('demo') && !(isObj(def.demo) && isInt(def.demo.durationTicks))) fail('demo', '{durationTicks, speed}');
+    // The Watch step (PROLOGUE §1.4, §2.4.3): its steps, guesses and gates.
+    let guessIds = {};
+    if (has('watch')) guessIds = W.validate(def, fail, (m) => MC.has(m), (path, l) => validateLine(fail, path, l));
+    else if (def.watch !== undefined) fail('watch', 'the level has no watch phase');
+    // A scene of the opening may ask a guess too ("Guess, then see", PROLOGUE §2.3.4): the same rules.
+    for (const [i, sc] of (def.scenes || []).entries()) {
+      if (sc && sc.guess !== undefined) {
+        W.validateGuess(sc.guess, 'scenes[' + i + '].guess', fail, (m) => MC.has(m), guessIds);
+        if (sc.guess.showAt !== undefined && !def.scenes.some((x) => x.id === sc.guess.showAt)) fail('scenes[' + i + '].guess.showAt', 'no scene ' + sc.guess.showAt);
+      }
+    }
 
     // Flags: at most 8, unique, misconceptions registered.
     const flags = flagList(def);
@@ -183,6 +199,9 @@
       if (fseen[f.id]) fail('flags[' + i + ']', 'duplicate flag ' + f.id);
       fseen[f.id] = true;
       if (f.mc !== null && !MC.has(f.mc)) fail('flags[' + i + '].mc', 'unknown misconception ' + f.mc);
+      // A flag raised by a guess (the first pick on an option with its misconception) names the guess or guesses.
+      for (const g of f.guess) if (!guessIds[g]) fail('flags[' + i + '].guess', 'no watch guess ' + g);
+      if (f.guess.length && f.mc === null) fail('flags[' + i + '].mc', 'a guess flag names the misconception it stands for');
     });
 
     // The task card (§5.3): TEXT.task = {goal, core: [lines], expert: [lines]}.

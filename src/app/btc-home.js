@@ -45,6 +45,8 @@
       return {
         id: def.id, name: nameOf(def), challenge: textAt(def, def.challenge), status, state, expert,
         expertText: expert ? H.status.expert : '', minutes: F.fill(H.minutes, { n: def.estMinutes }),
+        // A scored level not yet redone in the teaching-first pattern (no watch phase) says so (docs/PROLOGUE.md §5.1).
+        older: def.scored && def.phases.indexOf('watch') < 0,
       };
     });
     const openId = progress.openLevel();
@@ -89,7 +91,7 @@
           h('span', { class: 'lr-top' }, [h('span', { class: 'lr-name', text: r.name }),
             h('span', { class: 'lr-chip st-' + r.state, text: r.status }), r.expert ? h('span', { class: 'lr-chip lr-expert', text: r.expertText }) : null]),
           h('span', { class: 'lr-challenge', text: r.challenge }),
-          h('span', { class: 'lr-min', text: r.minutes }),
+          h('span', { class: 'lr-min', text: r.older ? r.minutes + ' · ' + C.tiers.olderChip : r.minutes }),
         ])));
       }
       wrap.appendChild(list);

@@ -11,8 +11,14 @@
  * to the cell or the view (test c-2). Speed and pause are UI state, not
  * commands. A new cell starts paused.
  *
+ * Tiered screens (docs/PROLOGUE.md §5): a labConfig with a `ui` (BTC.tiers) shows fewer readouts: big
+ * counters and one control in the focus bar, the tier's status readouts, the single simple graph. The
+ * free-play lab opens in its Simple mode (tier 4, every lever kept); "All controls" (app.setLabMode,
+ * kept in btc.ui.v1 as labMode; ?lab=1&all=1) restores the full M1 lab. A level's Watch step runs on its
+ * own watch cell, with the guide's callout over it (BTC.Guide).
+ *
  * window.__btc = {cell (a getter: reset replaces the cell), BTC, app}.
- * With ?test=1: app.test = {runTicks, pause, resume, setSpeed, stats, cellViewStats, narratorKey, level}.
+ * With ?test=1: app.test = {runTicks, pause, resume, setSpeed, stats, cellViewStats, narratorKey, level, lab}.
  */
 (function (root, factory) {
   if (typeof module === 'object' && module.exports) {
@@ -43,6 +49,8 @@
     mediumRows: Object.freeze({ glucose: 'free', lactose: 'free', aminoAcids: 'free' }), allowedLevels: null,
     speedOptions: null, defaultSpeed: 60, startPaused: true, tabs: ['cell', 'genes', 'medium', 'graphs'],
     graphGenes: null, bands: null, yBand: null, hud: false, focusGene: null,
+    // The tiered screens (PROLOGUE §5.1): null is the full M1 lab ("All controls").
+    ui: null,
     // Level extensions (LEVELS.md, "Changes after engine 1.1"): which plots, in which order; the graph
     // window (s) a level opens with; the tab it opens on; a line under the medium rows.
     plots: null, graphWindow: null, initialTab: null, mediumNote: null,
@@ -58,7 +66,13 @@
     const out = Object.assign({}, LAB_CONFIG, lc || {});
     out.controls = Object.assign({}, LAB_CONFIG.controls, (lc && lc.controls) || {});
     out.mediumRows = Object.assign({}, LAB_CONFIG.mediumRows, (lc && lc.mediumRows) || {});
+    // A tiered screen that names no tabs gets its tier's (not the lab's four).
+    if (lc && lc.ui && lc.tabs === undefined) out.tabs = null;
     return out;
+  }
+  /** The free-play lab's labConfig for a mode: 'all' is the M1 lab, 'simple' its tier-4 screen (PROLOGUE §5.4). */
+  function labConfigFor(mode, TI) {
+    return mode === 'all' || !TI ? LAB_CONFIG : Object.freeze(Object.assign({}, LAB_CONFIG, { ui: TI.LAB_UI }));
   }
 
   function boot(BTC) {
@@ -77,13 +91,16 @@
     if (!ui.graphGenes.length) ui.graphGenes = PR.DEFAULTS.graphGenes.slice();
     if (!C.graphs.windows.some((x) => x.s === ui.window)) ui.window = PR.DEFAULTS.window;
     if (ui.plot4 !== 'size' && ui.plot4 !== 'growth') ui.plot4 = 'size';
+    // The lab opens in Simple mode the first time; ?all=1 (think-aloud and instructor use) opens All controls.
+    if (params.all) ui.labMode = 'all';
+    if (ui.labMode !== 'all' && ui.labMode !== 'simple') ui.labMode = 'simple';
     if (!ui.logScales || typeof ui.logScales !== 'object') ui.logScales = Object.assign({}, PR.DEFAULTS.logScales);
 
     const app = {
       BTC, params, ui, prefs: ui,          // ui: the current screen's settings; prefs: the lab's saved ones (and the theme)
       build: (typeof window !== 'undefined' && window.BTC_BUILD) || 'dev',
-      // The lab's labConfig (LAB_UI §12); a level brings its own (LEVELS §5.5.1).
-      labConfig: LAB_CONFIG,
+      // The lab's labConfig (LAB_UI §12); a level brings its own (LEVELS §5.5.1). tierUI: its normalised ui, or null.
+      labConfig: labConfigFor(ui.labMode, BTC.tiers), tierUI: null,
       mode: 'lab', screen: null, level: null,
       layout: 'compact', tab: 'cell', focusGene: ui.focusGene,
       cell: null, config: null, rec: null, recRecent: null, mem: null, gen0: 0,
@@ -200,9 +217,13 @@
     function logSpeed() {
       if (app.speedHistory.length < 500) app.speedHistory.push({ tick: app.cell.tick, speed: app.loop.speed, running: app.loop.running });
     }
-    app.pause = () => { app.loop.stop(); afterRunChange(); app.logEvent('pause', {}); };
+    app.pause = () => {
+      if (app.level) app.level.autoRun = false;        // a pause the student chose: the watch does not run on by itself
+      app.loop.stop(); afterRunChange(); app.logEvent('pause', {});
+    };
     app.resume = () => {
       if (!app.canRun() || app.ff) return;
+      if (app.level) app.level.autoRun = true;
       app.loop.start(); afterRunChange(); app.logEvent('resume', {});
     };
     /** Time may run: always in the lab; in a level only while its run (or demo, epilogue, or live Prologue scene) is on. */
@@ -211,12 +232,14 @@
       if (app.level.live) return true;
       const r = app.level.runner;
       if (r.phase === 'demo') return !!r.demo.cell && app.cell === r.demo.cell && !r.halted();
+      if (r.phase === 'watch') return !!r.watchCell && app.cell === r.watchCell && !r.halted();
       return !!r.run && app.cell === r.run.cell && (r.phase === 'run' || r.phase === 'epilogue') && !r.halted();
     };
     function afterRunChange() {
       logSpeed();
       views.status.update(app.cell.observe(), app.facts);     // the button answers the tap at once
       app.refreshControls();
+      if (app.mode === 'level' && views.levelUI) views.levelUI.syncGuide();   // the watch's "Run" button follows the loop
       app.requestPaint();
     }
     app.togglePause = () => (app.loop.running ? app.pause() : app.resume());
@@ -269,6 +292,12 @@
       if (r.ok) app.pending.set(key, r.seq, valueKey);
       else LY.toast(C.rejections[r.error] || C.rejections['bad-value']);
       if (app.mode === 'level') app.levelChanged();
+      // The Watch step: a command the student sends may be the step's act (PROLOGUE §2.4.3).
+      const L = app.level;
+      if (app.mode === 'level' && L && !L.live && L.runner.phase === 'watch' && app.cell === L.runner.watchCell) {
+        L.runner.watchCommand(Object.assign({ source: 'user' }, cmd), r);
+        views.levelUI.afterWatch();
+      }
       app.refreshControls();
       app.requestPaint();
       return r;
@@ -308,6 +337,26 @@
       return ctrl;
     };
 
+    /**
+     * The Off/On switch of a tiered focus bar (PROLOGUE §5.3): Off, or On at the screen's onLevel (×2, or ×4 in 1.2).
+     * The solid choice is read back from the cell (any level but off reads On); pending until the engine applies it.
+     */
+    app.makeOnOffControl = (getGene, onLevel) => {
+      const T = C.tiers.onoff;
+      const ctrl = BTC.controls.segmented({
+        label: T.label, options: [{ key: 'off', label: T.off }, { key: 'on', label: T.on }], className: 'promoter onoff',
+        onSelect: (key) => {
+          const id = getGene();
+          app.send({ type: 'setPromoter', gene: id, level: key === 'off' ? 'off' : onLevel }, id, key);
+        },
+      });
+      app.registry.push({
+        ctrl, key: getGene, where: 'focus', locked: () => app.geneControlMode(getGene()) === 'locked',
+        read: (view) => { const g = view.geneById[getGene()]; return g ? (g.level === 'off' ? 'off' : 'on') : null; },
+      });
+      return ctrl;
+    };
+
     /** A medium or drug control: key is the pending key, read(view) the current option, send(key) the command. */
     app.makeControl = (o) => {
       const ctrl = BTC.controls.segmented({ label: o.label, options: o.options, onSelect: (k) => app.send(o.send(k), o.key, k) });
@@ -321,7 +370,9 @@
         const key = r.key(), pend = app.pending.get(key);
         const locked = r.locked ? r.locked() : false;
         const note = locked ? C.card.locked : pend && !running && r.where !== 'focus' ? C.card.pending : '';
-        r.ctrl.update(r.read(view), pend ? pend.value : null, note);
+        // A pending value another kind of control set ('on' from the Off/On switch, a level from a dial) marks nothing here.
+        const pv = pend && r.ctrl.buttons.some((b) => b.getAttribute('data-key') === String(pend.value)) ? pend.value : null;
+        r.ctrl.update(r.read(view), pv, note);
         if (r.lastLocked !== locked) {
           r.lastLocked = locked;
           for (const b of r.ctrl.buttons) b.disabled = locked;
@@ -441,7 +492,8 @@
       if (tick !== app.narrTick) {
         app.narrTick = tick;
         BTC.observe.facts(app.cell, app.facts);
-        const out = BTC.narrate.narrate(app.facts, app.mem, tick, app.levelRules || undefined);
+        // While a close-up is shown its rules (z.*) follow the level's (PROLOGUE §3.6).
+        const out = BTC.narrate.narrate(app.facts, app.mem, tick, views.zoom ? views.zoom.rules(app.levelRules) : app.levelRules || undefined);
         app.narrKey = out.key;
         const rule = RULE[out.key] || (app.levelRules && app.levelRules.find((x) => x.key === out.key));
         if (hold.offer(out.key, out.gene, out.text, rule ? rule.preempt : false)) showNarr();
@@ -456,7 +508,8 @@
       const view = app.cell.observe();
       const dtSim = dtSimOverride !== undefined ? dtSimOverride : app.loop.lastDone * app.cell.dt;
       narrate();
-      views.cellView.render(dtReal, dtSim, force);
+      // A close-up (Gene or Protein zoom) draws instead of the cell view while it is shown.
+      if (!views.zoom || !views.zoom.render(dtReal, dtSim, force)) views.cellView.render(dtReal, dtSim, force);
       views.genes.render(dtReal, force);
       views.medium.render(dtReal, force);
       views.graphs.render(dtReal, stepped, force);
@@ -464,8 +517,12 @@
       if (force || app.sinceSlow >= 0.25) {
         app.sinceSlow = 0;
         views.status.update(view, app.facts);
-        if (views.cellView.visible || app.layout === 'compact') views.cellView.updateFocusBar(view);
+        if (views.cellView.visible || app.layout === 'compact') {
+          if (views.tierBar) views.tierBar.update(view);
+          else views.cellView.updateFocusBar(view);
+        }
         app.refreshControls();
+        if (views.guide && views.guide.visible) views.guide.place();
       }
       if (app.loop.running) {
         app.sinceSave += dtReal;
@@ -530,6 +587,8 @@
       app.savePrefs();
       app.logEvent('tab', { name: app.tab });
       applyTab();
+      // A readout on this tab may be one the screen introduces (the simple graph): the guide points at it now.
+      if (app.mode === 'level' && views.levelUI) requestAnimationFrame(() => views.levelUI.syncGuide());
     };
     app.showPlot = (key) => {
       if (app.layout !== 'wide') app.setTab('graphs');
@@ -546,6 +605,7 @@
         applyTab();
         views.graphs.applySwap();
       }
+      if (views.guide) requestAnimationFrame(() => views.guide.place());
       app.requestPaint();
     }
 
@@ -677,20 +737,79 @@
       app.narrTick = -1; app.lastTick = -1;
     }
 
+    /**
+     * The screen's labConfig, and with it its tier (PROLOGUE §5): a labConfig with a ui gets the tier's tabs; the
+     * status strip, legend and graph tab follow. app.tierUI is the normalised ui, or null for the full M1 lab.
+     */
+    function setLabConfig(lc) {
+      const TI = BTC.tiers;
+      const u = TI.normalise(lc.ui, Array.isArray(lc.tabs) ? lc.tabs : null);
+      app.tierUI = u;
+      app.labConfig = u ? Object.assign({}, lc, { tabs: TI.appTabs(u) }) : lc;
+      views.status.setTier(u);
+      views.status.setLabSwitch(app.mode === 'lab' ? app.ui.labMode : null);
+      document.body.setAttribute('data-legend', u ? u.legend : 'full');
+      document.body.toggleAttribute('data-tiered', !!u);
+      document.body.toggleAttribute('data-nographs', app.labConfig.tabs.indexOf('graphs') < 0);
+      document.body.toggleAttribute('data-nopanel', app.labConfig.tabs.indexOf('genes') < 0 && app.labConfig.tabs.indexOf('medium') < 0);
+      const word = u && u.graph ? C.tabs.graph : C.tabs.graphs;
+      document.querySelectorAll('[data-tab="graphs"] span[data-text], .ptab[data-tab="graphs"]').forEach((el) => LY.setText(el, word));
+    }
+    app.setLabConfig = setLabConfig;
+
     /** Rebuilds the panels for the screen's labConfig (cards, rows, chips and dials come from it). */
     function remountPanels() {
       app.registry.length = 0;
       for (const id of ['pane-genes', 'pane-medium', 'pane-graphs', 'focusbar']) $(id).textContent = '';
+      $('focusbar').classList.remove('is-tiered');
       views.genes = new BTC.GenesPanel(app); views.genes.mount($('pane-genes'));
       views.medium = new BTC.MediumPanel(app); views.medium.mount($('pane-medium'));
       views.graphs = new BTC.GraphsPanel(app); views.graphs.mount($('pane-graphs'));
-      views.cellView.mountFocusBar($('focusbar'));
+      // A tiered screen's focus bar: big counters and one control (BTC.tiers.TierBar); otherwise the M1 focus bar.
+      if (app.tierUI) {
+        views.cellView.fb = null;
+        views.tierBar = new BTC.tiers.TierBar(app, app.tierUI);
+        views.tierBar.mount($('focusbar'));
+      } else {
+        views.tierBar = null;
+        views.cellView.mountFocusBar($('focusbar'));
+      }
       views.cellView.reset();
       document.body.toggleAttribute('data-hud', !!app.labConfig.hud);
       relayout.done = false;
       relayout();
       app.refreshControls();
     }
+
+    /**
+     * The zoom control (part A's views.zoom) and the Watch step: a step whose act is a zoom is done when the student
+     * zooms there; the guide's "Look closer" sets it. The control calls app.zoomChanged, or it is subscribed through
+     * views.zoom.onChange when the level opens.
+     */
+    app.zoomChanged = (level) => {
+      const L = app.level;
+      if (app.mode === 'level' && L && !L.live && L.runner.phase === 'watch' && L.runner.watchZoom(level)) views.levelUI.afterWatch();
+    };
+    if (!app.setZoom) app.setZoom = (level, via) => { if (views.zoom && typeof views.zoom.set === 'function') views.zoom.set(level, via || 'guide'); };
+    function hookZoom() {
+      if (app.zoomHooked || !views.zoom || typeof views.zoom.onChange !== 'function') return;
+      app.zoomHooked = true;
+      views.zoom.onChange((level) => app.zoomChanged(level));
+    }
+
+    /** "All controls" (PROLOGUE §5.4): the lab's Simple mode or its full M1 screen; kept in btc.ui.v1 and logged. */
+    app.setLabMode = (mode) => {
+      if (mode !== 'all' && mode !== 'simple') return;
+      ui.labMode = mode;
+      app.savePrefs();
+      app.logEvent('ui_mode', { mode });
+      if (app.mode !== 'lab') return;
+      setLabConfig(labConfigFor(mode, BTC.tiers));
+      refreshGeneModel();
+      remountPanels();
+      views.status.update(app.cell.observe(), app.facts);
+      app.requestPaint();
+    };
     function resetNarrator() { hold.reset(); narrView.key = null; }
 
     app.enterLab = () => {
@@ -699,9 +818,9 @@
       if (app.level) { saveLevelNow(); closeLevel(); }
       if (labBundle) unstashLab();
       app.mode = 'lab';
-      app.labConfig = LAB_CONFIG;
       app.levelRules = null;
       app.ui = ui;
+      setLabConfig(labConfigFor(ui.labMode, BTC.tiers));
       app.focusGene = ui.focusGene;
       refreshGeneModel();
       app.loop.setSpeed(ui.speed);
@@ -769,6 +888,7 @@
     let ignoreLevelSave = !!params.reset;          // ?reset=1: the first level opened starts afresh
 
     function openLevel(def, runner) {
+      hookZoom();
       app.mode = 'level';
       app.level = { def, runner, live: false, lastEnd: null, sinceHud: 1, dirtyAt: null, lcKey: null };
       setScreen('level');
@@ -876,7 +996,7 @@
     function attachLevelCell(r, cell) {
       app.loop.stop();
       const lc = levelConfig(r.labConfig());
-      app.labConfig = lc;
+      setLabConfig(lc);
       if (app.level) app.level.lcKey = JSON.stringify(lc);
       app.levelRules = r.narratorRules();
       app.pending = new BTC.controls.Pending();
@@ -906,13 +1026,15 @@
      */
     function refreshLevelConfig(r) {
       const L = app.level;
-      if (!L || L.live || !r.run || app.cell !== r.run.cell) return;
+      // The run's cell, or the watch cell (whose screen may change from one step to the next).
+      const own = (r.run && app.cell === r.run.cell) || (r.phase === 'watch' && r.watchCell && app.cell === r.watchCell);
+      if (!L || L.live || !own) return;
       const lc = levelConfig(r.labConfig());
       const key = JSON.stringify(lc);
       if (key === L.lcKey) return;
       const before = app.labConfig.revealed || {};
       L.lcKey = key;
-      app.labConfig = lc;
+      setLabConfig(lc);
       refreshGeneModel();
       app.mem.phrases = C.narratorPhrases(app.geneModel);
       app.mem.showNames = lc.showNames !== false;
@@ -961,7 +1083,8 @@
         views.status.update(app.cell.observe(), app.facts);
         return;
       }
-      const cell = r.run ? r.run.cell : null;
+      // The watch phase shows its own cell (role 'watch'); every other phase the run's.
+      const cell = r.phase === 'watch' ? r.watchCell : r.run ? r.run.cell : null;
       if (!cell) { showSurface('none'); return; }
       if (app.cell !== cell) attachLevelCell(r, cell);
       else refreshLevelConfig(r);
@@ -1101,6 +1224,29 @@
         runEnded();
         views.levelUI.after();
       }
+      // The Watch step: a state the model reached (the loop may have just stopped there), or a note, changes the callout.
+      if (r.phase === 'watch' && r.watchCell) {
+        const w = r.watch, info = r.watchInfo();
+        const key = [w.index, w.stage, w.line, w.hold, app.loop.running, info && info.note, w.watchedId].join('|');
+        if (key !== L.watchKey) {
+          L.watchKey = key;
+          // The watched copy (a step's until {watch: true}) is outlined in the Gene close-up, when there is one.
+          if (w.watchedId !== L.watchedId) {
+            L.watchedId = w.watchedId;
+            if (w.watchedId !== null && views.zoom && typeof views.zoom.watchCopy === 'function') views.zoom.watchCopy(w.watchedId);
+          }
+          refreshLevelConfig(r);
+          // Stopped at a gate: every readout shows that tick now (the 4-per-second refresh may not come before the loop stops).
+          if (w.hold && !app.loop.running) {
+            const v = app.cell.observe();
+            views.status.update(v, app.facts);
+            if (views.tierBar) views.tierBar.update(v); else views.cellView.updateFocusBar(v);
+            app.refreshControls();
+            saveLevelNow();
+          }
+          views.levelUI.syncGuide();
+        }
+      }
       L.sinceHud += dtReal;
       if (force || L.sinceHud >= 0.25) { L.sinceHud = 0; updateHud(); }
       if (L.dirtyAt !== null && performance.now() - L.dirtyAt >= 2000) saveLevelNow();
@@ -1159,12 +1305,20 @@
       pausedBadge: $('paused-badge'), pausedText: $('paused-text'), rifBadge: $('badge-rif'), cmBadge: $('badge-cm'), chip: $('tap-chip'),
       lacInset: $('lac-inset'),
     });
+    // The zoom control and the close-ups on the same stage (PROLOGUE §3; BTC.ZoomControl).
+    if (BTC.ZoomControl) {
+      views.zoom = new BTC.ZoomControl(app);
+      views.zoom.mount({ stage: $('stage'), stageWrap: $('stage-wrap'), cellCanvas: $('cell-canvas'), legend: $('legend'),
+        legendFull: $('legend-full'), legendShort: $('legend-short'), chip: $('tap-chip'), pausedBadge: $('paused-badge') });
+    }
     views.genes.mount($('pane-genes'));
     views.medium.mount($('pane-medium'));
     views.graphs.mount($('pane-graphs'));
     views.home.mount($('home'));
     views.prologue.mount($('prologue'));
     views.hud.mount($('hud'));
+    views.guide = new BTC.Guide(app);
+    views.guide.mount($('stage'));
     narrView = new BTC.NarratorView($('narrator-text'));
 
     // Tabs: the bottom bar (compact) and the panel tabs (other layouts).
@@ -1233,7 +1387,7 @@
     // The first screen (LEVELS §5.11): ?level, ?lab, else the last screen; a fresh install opens home.
     const lastScreen = ui.screen;
     if (params.level) app.enterLevel(params.level, { v: params.v });
-    else if (params.lab || (lastScreen === 'lab' && !params.test)) { setScreen('lab'); views.status.setLevel(null, true); showSurface('app'); }
+    else if (params.lab || (lastScreen === 'lab' && !params.test)) app.enterLab();
     else if (lastScreen === 'level' && !params.reset) {
       const s = app.progress.loadLevel(BTC.ENGINE_VERSION);
       if (s.status === 'ok' && BTC.levels.byId[s.save.levelId]) app.enterLevel(s.save.levelId);
@@ -1242,7 +1396,7 @@
     // The one-shot parameters have done their job: a reload (tab discard, pull-to-refresh, the update's Reload) must not
     // open the linked level again over the student's autosave, or reset it (?test and ?seed stay for the checks).
     try {
-      const rest = PR.strippedSearch(location.search, ['level', 'v', 'lab', 'reset']);
+      const rest = PR.strippedSearch(location.search, ['level', 'v', 'lab', 'reset', 'all']);
       if (rest !== location.search) history.replaceState(history.state, '', location.pathname + rest + location.hash);
     } catch (e) { /* file:// or a sandbox: the parameters stay */ }
     // Only a cell that has been run or changed is worth announcing (an untouched one is saved on every visit).
@@ -1330,7 +1484,36 @@
           },
           code: () => (R() ? R().code : null),
           score: () => (R() ? R().result : null),
+          /** The Watch step (PROLOGUE §1.4): info, Next, a guess, and ticks until the step's state is reached. */
+          watch: {
+            info: () => (R() ? R().watchInfo() : null),
+            next() { const r = R(), out = r.watchNext(); views.levelUI.afterWatch(); return out; },
+            guess(option) {
+              const r = R(), info = r.watchInfo();
+              if (!info || info.stage !== 'guess') return { ok: false, reason: 'no guess now' };
+              r.watchPick(info.guess.id, option === undefined ? 'cause' : option);
+              const out = r.watchSee();
+              views.levelUI.afterWatch();
+              return out;
+            },
+            /** Steps the watch cell until its current step is shown or its gate opens (the loop would stop there too). */
+            untilGate(max) {
+              const r = R(), id = r.watchInfo().id, stage = r.watch.stage;
+              let n = 0;
+              while (r.watch.stage === stage && r.watchInfo().id === id && !r.watch.done && n++ < (max || 20000)) {
+                if (r.halted()) break;
+                app.cell.step();
+              }
+              app.onEvents(app.cell.takeEvents());
+              app.render(0, true, true, 0);
+              return { tick: app.cell.tick, info: r.watchInfo() };
+            },
+          },
+          /** Registers a level definition loaded into the page (a test fixture), so it can be opened. */
+          add(id) { return !!BTC.levels.add(BTC.levelDefs[id]); },
         },
+        // The free-play lab's modes (PROLOGUE §5.4).
+        lab: { mode: () => ui.labMode, setMode: (m) => app.setLabMode(m), tier: () => app.tierUI },
       };
     }
     return app;

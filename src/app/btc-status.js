@@ -1,8 +1,14 @@
-// @deps btc-content btc-format btc-layout
+// @deps btc-content btc-format btc-layout btc-tiers
 /*
  * Be the Cell: the status strip (LAB_UI §6): run/pause, the clock, the
  * generation count, the time compression (always visible), the ATP gauge
  * (a word as well as a colour) and the doubling time.
+ *
+ * Tiered screens (docs/PROLOGUE.md §5.3) show fewer of these: pause, clock and speed always; then
+ * the energy bar with its word, the growth as a word ("growing slowly") and how much sugar gets in;
+ * the generation and the doubling time only with All controls (or a later level). setTier(ui) picks
+ * them; without a ui the strip is the full M1 one. In the lab's wide layout the strip also carries
+ * the "All controls" switch (setLabSwitch).
  *
  * Growth shows the whole-cycle doubling time when growth is steady, because
  * the instantaneous rate ripples within each cycle. After a change of
@@ -11,12 +17,12 @@
  */
 (function (root, factory) {
   if (typeof module === 'object' && module.exports) {
-    module.exports = factory(require('./btc-content.js'), require('./btc-format.js'), require('./btc-layout.js'));
+    module.exports = factory(require('./btc-content.js'), require('./btc-format.js'), require('./btc-layout.js'), require('./btc-tiers.js'));
   } else {
     var B = root.BTC || (root.BTC = {});
-    B.StatusStrip = factory(B.content, B.format, B.layout);
+    B.StatusStrip = factory(B.content, B.format, B.layout, B.tiers);
   }
-})(typeof self !== 'undefined' ? self : this, function (C, F, LY) {
+})(typeof self !== 'undefined' ? self : this, function (C, F, LY, TI) {
   'use strict';
 
   const S = C.status;
@@ -56,6 +62,8 @@
         atpWord: h('span', { class: 'atp-word' }),
         growth: h('span', { class: 'st-growth-text num' }),
         limit: h('span', { class: 'st-limit', hidden: true }),
+        growthWord: h('span', { class: 'st-growth-word', hidden: true }),
+        sugar: h('span', { class: 'st-sugar', hidden: true }),
       };
       const e = this.el;
       e.play = h('button', { class: 'play', type: 'button', 'aria-pressed': 'false', onclick: () => app.togglePause() }, [e.playIcon, e.playWord]);
@@ -72,8 +80,41 @@
       root.appendChild(h('div', { class: 'st-time' }, [h('span', { class: 'st-t', text: S.tPrefix }), e.clock, h('span', { class: 'st-sep', text: ' · ' }), e.gen]));
       root.appendChild(e.title);
       root.appendChild(e.speed);
-      root.appendChild(h('div', { class: 'st-row2' }, [e.atp, e.growthBox, e.limit]));
+      // The lab's "All controls" switch (wide layout; on a phone it sits in the Medium panel's header).
+      e.labSwitch = h('button', { class: 'btn lab-switch st-lab-switch', type: 'button', role: 'switch', 'aria-checked': 'false', hidden: true,
+        'aria-label': C.tiers.allControlsLabel, onclick: () => app.setLabMode && app.setLabMode(app.ui.labMode === 'all' ? 'simple' : 'all') },
+      [h('span', { class: 'lab-switch-track', 'aria-hidden': 'true' }, h('span', { class: 'lab-switch-knob' })), h('span', { text: C.tiers.allControls })]);
+      root.appendChild(e.labSwitch);
+      e.row2 = h('div', { class: 'st-row2' }, [e.atp, e.growthWord, e.sugar, e.growthBox, e.limit]);
+      root.appendChild(e.row2);
       this.root = root;
+      this.setTier(null);
+    }
+
+    /** Which readouts the strip shows: ui is a normalised tier (BTC.tiers.normalise) or null (the full M1 strip). */
+    setTier(ui) {
+      const e = this.el, st = ui ? ui.status : null;
+      this.tier = ui;
+      const show = (el, on) => { if (el.hidden === !!on) el.hidden = !on; };
+      show(e.gen, !st || st.generation);
+      this.root.classList.toggle('no-gen', !!st && !st.generation);
+      show(e.atp, !st || st.energy);
+      show(e.growthBox, !st || st.doubling);
+      show(e.growthWord, !!st && st.growth);
+      show(e.sugar, !!st && st.sugarIn);
+      const row2 = !st || st.energy || st.growth || st.sugarIn || st.doubling;
+      this.root.classList.toggle('is-one-row', !row2);
+      this.root.classList.toggle('is-tiered', !!st);
+      this.lastRunning = null;
+    }
+
+    /** The lab's mode switch: 'simple' | 'all' shows it (checked for all); null hides it (levels). */
+    setLabSwitch(mode) {
+      const b = this.el.labSwitch;
+      b.hidden = mode === null || mode === undefined;
+      b.setAttribute('aria-checked', mode === 'all' ? 'true' : 'false');
+      b.classList.toggle('is-on', mode === 'all');
+      this.root.classList.toggle('has-lab-switch', !b.hidden);
     }
 
     /**
@@ -123,6 +164,18 @@
       LY.setText(e.atpWord, S.atpWords[state]);
 
       LY.setText(e.growth, growthText(view.clock, view.t_s, facts.growth === 'arrested', this.growthState));
+      if (!e.growthWord.hidden) {
+        const g = TI.growthWord(facts);
+        LY.setText(e.growthWord, g);
+        const gl = F.fill(S.growthWordLabel, { text: g });
+        if (e.growthWord.getAttribute('aria-label') !== gl) e.growthWord.setAttribute('aria-label', gl);
+      }
+      if (!e.sugar.hidden) {
+        if (!this.F_ref) this.F_ref = app.BTC.params.values().F_ref;
+        // Before the first step nothing has crossed the membrane yet: no word rather than a false "none".
+        const w = view.tick > 0 ? S.sugarWords[TI.sugarLevel(view, this.F_ref)] : '…';
+        LY.setText(e.sugar, F.fill(S.sugarIn, { w }));
+      }
 
       const st = app.loop.stats;
       e.limit.hidden = !(running && st.limited);

@@ -7,6 +7,10 @@
  * fourth choice drops the oldest. Dashed lines mark divisions, small ticks
  * mark commands, and drug intervals are shaded. A horizontal drag scrubs all
  * plots together; a tap enlarges one.
+ *
+ * On a tiered screen (docs/PROLOGUE.md §5) the pane holds the single simple graph instead
+ * (BTC.SimpleGraph): no chips, no lin/log, no window row and no spending bar, which come back
+ * with "All controls".
  */
 (function (root, factory) {
   if (typeof module === 'object' && module.exports) {
@@ -75,6 +79,11 @@
     mount(root) {
       const h = LY.h, app = this.app;
       this.root = root;
+      if (app.tierUI && app.tierUI.graph && app.BTC.SimpleGraph) {
+        this.simple = new app.BTC.SimpleGraph(app, app.tierUI);
+        this.simple.mount(root);
+        return;
+      }
       // Gene chips.
       this.chips = {};
       const chipRow = h('div', { class: 'chip-row', role: 'group', 'aria-label': G.genesLabel });
@@ -141,7 +150,9 @@
         return { name, seg, lab, small: h('span', { class: 'spend-item' }, [h('span', { class: 'swatch' + (name === 'translation' ? ' hatch' : ''), style: { background: 'var(--ledger-' + i + ')' } }), h('span', { class: 'spend-text' })]) };
       });
       this.segs.forEach((s) => this.barSmall.appendChild(s.small));
-      const spendFig = h('figure', { class: 'plot spend', 'data-plot': 'spending', hidden: Array.isArray(want) && want.indexOf('spending') < 0 }, [
+      // The spending bar: shown in the M1 lab and in a tier that asks for it (spendBar), never in an earlier tier.
+      const spendOff = (Array.isArray(want) && want.indexOf('spending') < 0) || (!!app.tierUI && !app.tierUI.spendBar);
+      const spendFig = h('figure', { class: 'plot spend', 'data-plot': 'spending', hidden: spendOff }, [
         h('div', { class: 'plot-head' }, [h('span', { class: 'plot-title', text: G.plots.spending })]),
         this.bar, this.barEmpty, this.barNone, this.barSmall,
       ]);
@@ -190,6 +201,7 @@
     }
 
     applySwap() {
+      if (this.simple) return;
       const wide = this.app.layout === 'wide';
       const which = this.app.ui.plot4 === 'growth' ? 'growth' : 'size';
       const both = this.plots.some((p) => p.spec.key === 'size') && this.plots.some((p) => p.spec.key === 'growth');
@@ -205,6 +217,7 @@
 
     /** A curve over one plot (1.2: the student's sketch over the Protein plot): points [[t_s, y]]; null clears. */
     setOverlay(key, points, style) {
+      if (this.simple) return;
       const p = this.plots.find((x) => x.spec.key === key);
       if (!p) return;
       p.plot.setOverlay(points, style);
@@ -213,6 +226,7 @@
     }
 
     syncControls() {
+      if (this.simple) { this.simple.redraw(); return; }
       const app = this.app;
       for (const id of Object.keys(this.chips)) {
         const on = app.ui.graphGenes.indexOf(id) >= 0;
@@ -223,11 +237,12 @@
       for (const p of this.plots) if (p.logCtrl) p.logCtrl.update(app.ui.logScales[p.spec.key] ? 'log' : 'lin');
     }
 
-    setVisible(v) { this.visible = v; if (v) this.redraw(); }
-    redraw() { this.dirty = true; this.app.requestPaint(); }
+    setVisible(v) { this.visible = v; if (this.simple) this.simple.setVisible(v); else if (v) this.redraw(); }
+    redraw() { if (this.simple) { this.simple.redraw(); return; } this.dirty = true; this.app.requestPaint(); }
 
     /** Every frame: redraws at most 15 fps while running, on change while paused, never while hidden. */
     render(dtReal, stepped, force) {
+      if (this.simple) { this.simple.render(dtReal, stepped, force); return; }
       if (!this.visible) return;
       this.since += dtReal;
       if (!force && !this.dirty && !(stepped && this.since >= FPS_S)) return;
@@ -382,6 +397,7 @@
 
     /** Scrolls a plot into view (status strip taps). */
     reveal(key) {
+      if (this.simple) { this.simple.redraw(); return; }
       const p = this.plots.find((x) => x.spec.key === key);
       if (!p) return;
       if (p.box.hidden && this.app.layout === 'wide' && (key === 'growth' || key === 'size')) {

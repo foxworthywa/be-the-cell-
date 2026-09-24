@@ -24,18 +24,47 @@ function randomPayload(r) {
   };
 }
 
-test('L-8: the spec examples have the right shape', () => {
+test('L-8: the spec examples have the right shape (format BTC2: predictions are not scored)', () => {
   const c = CODE.encode({ level: '12', variantSeed: CODE.decodeSeed('7K2Q9C'), G: 1, E: 100, P: 75, D: [1, 2], X: 1, flags: 2,
     attempt: 1, runs: 2, engine: '1.1.0', content: 1, digest: '3f9a0b' });
-  assert.match(c, /^BTC1-12-7K2Q9C-G1E100P75D12X1-F02-A1N2-R110C1-3F9A0B-[0-9A-HJKMNP-TV-Z]{7}$/);
+  assert.match(c, /^BTC2-12-7K2Q9C-G1E100P75D12X1-F02-A1N2-R110C1-3F9A0B-[0-9A-HJKMNP-TV-Z]{7}$/);
   const p = CODE.encode({ level: 'P0', variantSeed: 0, G: 1, E: null, P: null, D: [1, 1], X: 0, flags: 0, attempt: 1, runs: 1,
     engine: '1.1.0', content: 1, digest: '000000' });
-  assert.match(p, /^BTC1-P0-000000-G1ENAPNAD11X0-F00-A1N1-R110C1-000000-/);
+  assert.match(p, /^BTC2-P0-000000-G1ENAPNAD11X0-F00-A1N1-R110C1-000000-/);
   const d = CODE.decode(p);
   assert.equal(d.ok, true);
-  assert.equal(d.total, null, 'the Prologue has no total');
+  assert.equal(d.format, 2);
+  assert.equal(d.total, null, 'the opening has no total');
   assert.equal(CODE.decode(c).total, S.total({ G: 1, E: 1, P: 0.75, D: [1, 2] }));
-  assert.equal(CODE.decode(c).total, 85, 'the §5.9 example: 40 + 20 + 15 + 10');
+  assert.equal(CODE.decode(c).total, 85, 'PROLOGUE §1.4: 45 + 25 + 15, whatever P was');
+  // A level in the new pattern reports P as NA; its total is the same.
+  const n = CODE.encode({ level: '12', variantSeed: 5, G: 1, E: 80, P: null, D: [2, 2], X: 0, flags: 0, attempt: 1, runs: 1,
+    engine: '1.1.0', content: 3, digest: 'abcdef' });
+  assert.match(n, /-G1E80PNAD22X0-/);
+  assert.equal(CODE.decode(n).total, 95, '45 + 25 × 0.8 + 30');
+  assert.equal(S.total({ G: 0, E: 1, P: 1, D: [2, 2] }), 30, 'without the goal only the Explain part counts');
+});
+
+test('L-8: codes of the first format (BTC1) still decode, with the old weights and a warning', () => {
+  const payload = { level: '12', variantSeed: CODE.decodeSeed('7K2Q9C'), G: 1, E: 100, P: 75, D: [1, 2], X: 1, flags: 2,
+    attempt: 1, runs: 2, engine: '1.1.0', content: 1, digest: '3f9a0b' };
+  const old = CODE.encode(payload, { format: 'BTC1' });
+  assert.match(old, /^BTC1-12-7K2Q9C-G1E100P75D12X1-F02-A1N2-R110C1-3F9A0B-[0-9A-HJKMNP-TV-Z]{7}$/);
+  const d = CODE.decode(old);
+  assert.equal(d.ok, true);
+  assert.equal(d.format, 1);
+  assert.equal(d.old, true);
+  assert.equal(d.total, 85, 'the old §5.9 example: 40 + 20 + 15 + 10');
+  assert.equal(d.total, S.totalV1({ G: 1, E: 1, P: 0.75, D: [1, 2] }));
+  const oldP = CODE.decode(CODE.encode({ level: 'P0', variantSeed: 0, G: 1, E: null, P: null, D: [1, 1], X: 0, flags: 0, attempt: 1, runs: 1,
+    engine: '1.1.0', content: 1, digest: '000000' }, { format: 'BTC1' }));
+  assert.equal(oldP.total, null);
+  // The same payload in the two formats is two different codes, each with its own checksum.
+  assert.notEqual(old.slice(5), CODE.encode(payload).slice(5));
+  const rows = CODE.analyse([{ student: 'A', code: old }, { student: 'B', code: CODE.encode(Object.assign({}, payload, { variantSeed: 9 })) }], {});
+  assert.ok(rows[0].warnings.some((w) => /older code format \(BTC1\)/.test(w)), rows[0].warnings.join('; '));
+  assert.ok(!rows[1].warnings.some((w) => /older code format/.test(w)));
+  assert.equal(CODE.findCode('my code ' + old.toLowerCase()), old);
 });
 
 test('L-8: encode/decode round trip for 1,000 random payloads', () => {

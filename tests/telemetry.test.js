@@ -33,7 +33,12 @@ const SAMPLES = {
   run_start: { speed: 60 }, run_end: { reason: 'goal', ticks: 812 }, cmd: { seq: 3, type: 'setPromoter', args: { gene: 'lacY', level: 4 }, ok: true },
   speed: { s: 600 }, pause: {}, resume: {}, tab: { name: 'graphs' }, focus: { gene: 'lacY' }, reveal: { gene: 'ptsG', letter: 'C' }, goal: {},
   flag: { id: 'SHOTGUN', evidence: { tick: 20 } }, debrief: { id: 'd1', option: 1, correct: false, try: 1 }, echo: { screen: 1 }, card: { id: 'mrna' },
-  score: { G: 1, E: 1, P: 0.5, D: [1, 2], X: 0, total: 80 }, code: { code: 'BTC1-…', action: 'copied' }, download: { kind: 'run' }, error: { msg: 'x' },
+  score: { G: 1, E: 1, P: 0.5, D: [1, 2], X: 0, total: 80 }, code: { code: 'BTC2-…', action: 'copied' }, download: { kind: 'run' }, error: { msg: 'x' },
+  // The teaching-first redesign (docs/PROLOGUE.md §9).
+  guess: { id: 'g1', option: 2, cause: false, step: 'w1' }, activity: { id: 'c4', i: 5, value: 'U', expected: 'U', match: true },
+  step: { id: 'h7', action: 'gate', gate: 'firstMRNA', tick: 311 }, zoom: { from: 'cell', to: 'gene', via: 'segment' },
+  rung: { id: 'a4', action: 'closer', via: 'pinch' }, watch_mrna: { id: 4412, made: 19.6, lifetime_s: 260 }, introduce: { readout: 'counter.mRNA' },
+  ui_mode: { mode: 'all' }, about: { row: 'insulin-from-bacteria' },
 };
 
 test('L-9: every event type has a schema, and events made by log() fit it', () => {

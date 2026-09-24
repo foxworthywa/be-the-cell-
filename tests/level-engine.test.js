@@ -11,10 +11,12 @@ const { BTC, Cell, HOUR, LAMBDA_REF, avg, lam, fmt } = H;
 const STRAINS = ['m1-lab', 'm2-l11', 'm2-lac'];
 const events = (c, type) => c.takeEvents().filter((e) => e.type === type);
 
-test('R-E1: the engine is 1.1.0 and the golden scenario is pinned to it', () => {
-  assert.equal(BTC.ENGINE_VERSION, '1.1.0');
-  assert.equal(require('./golden.json').engineVersion, '1.1.0');
-  for (const id of Object.keys(BTC.presets)) assert.equal(BTC.presets[id].engineVersion, '1.1.0', id);
+test('R-E1: the engine is 1.1.1 and the golden scenario is pinned to it; the patch changed no physics (golden hash of 1.1.0)', () => {
+  assert.equal(BTC.ENGINE_VERSION, '1.1.1');
+  assert.equal(require('./golden.json').engineVersion, '1.1.1');
+  // 1.1.1 adds observe-only view fields and cell.detail() (PROLOGUE.md §7, OB-3): the golden hash is 1.1.0's.
+  assert.equal(require('./golden.json').hash, '2a00ef8a0cbafc18');
+  for (const id of Object.keys(BTC.presets)) assert.equal(BTC.presets[id].engineVersion, '1.1.1', id);
 });
 
 test('R-E2: start "birth" loads a newborn (V ≈ 1 fL, one gene copy) for every strain; it replicates ≥ 45 min and divides ≥ 90 min later at reference growth', (t) => {

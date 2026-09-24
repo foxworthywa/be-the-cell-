@@ -95,6 +95,7 @@ const GLOBAL_NAME = {
   'btc-genome': 'genome', 'btc-queue': 'queue', 'btc-regulation': 'regulation', 'btc-expression': 'expression', 'btc-metabolism': 'metabolism',
   'btc-growth': 'growth', 'btc-commands': 'commands', 'btc-events': 'events', 'btc-observe': 'observe', 'btc-cell': 'Cell',
   'btc-replay': 'replay', 'btc-dots': 'dots', 'btc-recorder': 'Recorder', 'btc-narrate': 'narrate',
+  'btc-seq': 'seq', 'btc-seqdata': 'seqdata', 'btc-mrnawatch': 'MRNAWatch', 'btc-fold': 'machineFold', 'btc-closeup': 'closeup',
 };
 
 test('b-1: each file loads through require and in a bare context with only `self`, defining BTC.<name>', () => {

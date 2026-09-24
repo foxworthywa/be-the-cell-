@@ -7,7 +7,9 @@
  *
  * The level supplies the words through def.hud(variant, monitorState):
  * {goal: {text, short?, progress: 0..1|null, done, gauge?}, timer: {text, short?}, counter: {text, short, over?}}.
- * Under 400 px of width the counter (and the goal and timer, when they have one) show their short forms; the
+ * Under 400 px of width the counter (and the goal and timer, when they have one) show their short forms. From 400
+ * to 599 px the goal keeps its long form (its words) and the timer, counter and action take their short ones, so
+ * the goal chip is never squeezed to a stub by the other two (it was about 100 px at 480 px before). The
  * short counter keeps one word of unit ("2/3 tests", "32/32 mRNA", "1/2 changes"), and counter.over (past par)
  * marks it in the warning colour, with "over par" in its long form.
  * A goal with a gauge {lo, hi, max, value} (1.4) draws a band gauge along the chip's
@@ -33,7 +35,7 @@
   'use strict';
 
   const G = C.game.hud;
-  const NARROW = 400;
+  const NARROW = 400, MID = 600;
 
   /**
    * The strings the HUD shows for a model (pure; L-13): the counter's short form under
@@ -42,12 +44,12 @@
   function texts(model, width, mode) {
     const m = model || {};
     const goal = m.goal || { text: '', progress: null, done: false };
-    const narrow = width < NARROW;
+    const narrow = width < NARROW, mid = width < MID;
     let goalText = (narrow && goal.short) || goal.text || '';
     if (mode === 'met') goalText = G.goalMet;
     else if (mode === 'continue') goalText = G.continue;
     const act = m.action || null;
-    const actionText = act ? (typeof act.progress === 'number' ? F.fill(G.running, { pct: act.progress }) + ' · ' + G.stop : (narrow && act.short) || act.text) : '';
+    const actionText = act ? (typeof act.progress === 'number' ? F.fill(G.running, { pct: act.progress }) + ' · ' + G.stop : (mid && act.short) || act.text) : '';
     return {
       action: act ? { id: act.id, text: actionText, label: typeof act.progress === 'number' ? F.fill(G.runningLabel, { pct: act.progress }) : act.text, running: typeof act.progress === 'number' } : null,
       sub: !narrow && width >= 1000 && goal.sub && mode !== 'met' && mode !== 'continue' ? goal.sub : '',
@@ -57,8 +59,8 @@
         lo: Math.max(0, Math.min(1, goal.gauge.lo / goal.gauge.max)), hi: Math.max(0, Math.min(1, goal.gauge.hi / goal.gauge.max)),
         value: Math.max(0, Math.min(1, goal.gauge.value / goal.gauge.max)),
       } : null,
-      timer: (m.timer && ((narrow && m.timer.short) || m.timer.text)) || '',
-      counter: m.counter && !(narrow && act) ? (narrow && m.counter.short ? m.counter.short : m.counter.text) : '',
+      timer: (m.timer && ((mid && m.timer.short) || m.timer.text)) || '',
+      counter: m.counter && !(narrow && act) ? (mid && m.counter.short ? m.counter.short : m.counter.text) : '',
       // Over par: the long form says so in words; both forms are marked (a colour on top of the numbers).
       over: !!(m.counter && m.counter.over),
       label: F.fill(G.taskLabel, { text: goal.text || '' }),
@@ -140,5 +142,6 @@
 
   Hud.texts = texts;
   Hud.NARROW = NARROW;
+  Hud.MID = MID;
   return Hud;
 });

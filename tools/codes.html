@@ -77,8 +77,14 @@
 <script src="../src/shared/btc-dots.js"></script>
 <script src="../src/shared/btc-recorder.js"></script>
 <script src="../src/shared/btc-narrate.js"></script>
+<script src="../src/shared/btc-seq.js"></script>
+<script src="../src/shared/btc-seqdata.js"></script>
+<script src="../src/shared/btc-mrnawatch.js"></script>
+<script src="../src/shared/btc-fold.js"></script>
+<script src="../src/shared/btc-closeup.js"></script>
 <script src="../src/game/btc-level-kit.js"></script>
 <script src="../src/game/btc-misconceptions.js"></script>
+<script src="../src/game/btc-watch.js"></script>
 <script src="../src/levels/btc-level-constants.js"></script>
 <script src="../src/levels/btc-level-1-1.js"></script>
 <script src="../src/levels/btc-level-1-2.js"></script>
@@ -97,12 +103,14 @@
   <h1>Be the Cell completion codes</h1>
   <p class="muted">Paste codes, one per line, or choose (or drop) a Canvas "Student analysis" CSV. Everything stays in this browser.</p>
   <label for="codes" class="muted">Codes or CSV text</label>
-  <textarea id="codes" spellcheck="false" autocomplete="off" placeholder="BTC1-12-7K2Q9C-G1E100P75D12X1-F02-A1N2-R110C1-3F9A0B-4NQ8ZR1"></textarea>
+  <textarea id="codes" spellcheck="false" autocomplete="off" placeholder="BTC2-12-7K2Q9C-G1E100PNAD12X1-F02-A1N2-R110C1-3F9A0B-4NQ8ZR1"></textarea>
   <div class="row">
     <button id="decode" class="primary" type="button">Decode</button>
     <label class="file">Choose a CSV…<input id="csv" type="file" accept=".csv,.txt,text/csv,text/plain"></label>
     <button id="download" type="button" disabled>Download CSV</button>
   </div>
+  <p class="muted">Total = 45 × goal met + 25 × efficiency (with the goal) + 30 × explain answers right first time. Guesses and predictions are reported but not scored.
+    Codes starting BTC1 come from an earlier build: they are totalled with the old weights (predictions counted) and marked.</p>
   <p id="summary" class="summary" aria-live="polite"></p>
   <div class="table-wrap" id="wrap" hidden><table id="table"></table></div>
   <div class="key muted" id="key"></div>
@@ -131,8 +139,8 @@
   var rows = [];
   // Warnings (duplicates, overrides, other engines) sit next to Valid, so they are on screen without scrolling the table.
   var COLS = [['student', 'Student'], ['valid', 'Valid'], ['warnings', 'Warnings'], ['level', 'Level'], ['variant', 'Variant'], ['variantValues', 'Variant values'],
-    ['G', 'Goal met'], ['E', 'Efficiency'], ['P', 'Prediction'], ['D', 'Debrief right first time'], ['total', 'Total'], ['expert', 'Expert met'],
-    ['attempt', 'Attempt'], ['runs', 'Runs'], ['flags', 'Flags'], ['engine', 'Engine'], ['content', 'Content version'], ['code', 'Code']];
+    ['G', 'Goal met'], ['E', 'Efficiency'], ['P', 'Prediction'], ['D', 'Explain (debrief) right first time'], ['total', 'Total'], ['expert', 'Expert met'],
+    ['attempt', 'Attempt'], ['runs', 'Runs'], ['flags', 'Flags'], ['engine', 'Engine'], ['content', 'Content version'], ['format', 'Code format'], ['code', 'Code']];
   var WRAP = { flags: 1, warnings: 1, variantValues: 1 };
   function el(tag, cls, text) { var e = document.createElement(tag); if (cls) e.className = cls; if (text !== undefined) e.textContent = text; return e; }
   function render() {

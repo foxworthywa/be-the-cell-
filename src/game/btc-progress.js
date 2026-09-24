@@ -3,7 +3,8 @@
  * Be the Cell: progress, attempts, cards and the level autosave (LEVELS §4.2, §4.4).
  *
  *   btc.progress.v1        {v:1, deviceSeed, created, playerTag: null, cards: {id: true}, prologueSeen,
- *                           lastLevel, levels: {id: {completed, results: [Result], current: CurrentRef|null}}}
+ *                           lastLevel, levels: {id: {completed, results: [Result], current: CurrentRef|null}},
+ *                           introduced?: {readoutId: true}}
  *   btc.level.autosave.v1  {engineVersion, build, levelId, attempt, variantSeed, phase, runs, answers, design,
  *                           monitor, snapshot, textIndex, …} (one level at a time)
  *
@@ -149,6 +150,20 @@
       return added;
     }
     cardIds() { return Object.keys(this.data.cards); }
+
+    /**
+     * Readouts already introduced to this student (docs/PROLOGUE.md §5.2): a tiered screen points at a
+     * readout with its sentence only the first time it appears. Kept in the progress, so it holds across levels.
+     */
+    introduced(id) { return !!(this.data.introduced && this.data.introduced[id]); }
+    markIntroduced(id) {
+      this.sync();
+      if (!this.data.introduced || typeof this.data.introduced !== 'object') this.data.introduced = {};
+      if (this.data.introduced[id]) return false;
+      this.data.introduced[id] = true;
+      this.save();
+      return true;
+    }
 
     // --- the level autosave ---------------------------------------------------------
     saveLevel(obj) {

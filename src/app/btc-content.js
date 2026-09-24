@@ -168,7 +168,7 @@
       tagline: 'A game about genes and proteins, in which you are in charge of a cell. In principle.',
     },
 
-    tabs: { cell: 'Cell', genes: 'Genes', medium: 'Medium', graphs: 'Graphs' },
+    tabs: { cell: 'Cell', genes: 'Genes', medium: 'Medium', graphs: 'Graphs', graph: 'Graph' },
 
     // Status strip (LAB_UI §6).
     status: {
@@ -181,6 +181,10 @@
       measuring: 'doubling: measuring…', growthLabel: 'Growth: {text}. Open the growth graph.',
       deviceLimit: 'device limit: {label}',
       speedLabel: 'Speed {label}, {gloss}. Change speed.',
+      // The tiered screens (docs/PROLOGUE.md §5.2): growth and sugar as words, not numbers.
+      growthWords: { normal: 'growing normally', slow: 'growing slowly', arrested: 'not growing' },
+      sugarIn: 'sugar in: {w}', sugarWords: { plenty: 'plenty', some: 'some', trickle: 'a trickle', none: 'none' },
+      energyLabel: 'Energy (ATP) {word}.', growthWordLabel: 'Growth: {text}.', sugarLabel: 'Sugar coming in: {w}.',
     },
 
     // Speed sheet (LAB_UI §6): sim seconds per real second.
@@ -462,6 +466,35 @@
       exportTitle: 'Be the Cell data',
     },
 
+    // The tiered screens (docs/PROLOGUE.md §5): readouts added a few at a time, each introduced once.
+    tiers: {
+      // The sentence that introduces each readout the first time it appears (§5.2, exact; {proteins} is the plural noun).
+      readouts: {
+        'counter.mRNA': 'This counts the mRNA copies of this gene in the cell right now.',
+        'counter.protein': 'This counts the finished {proteins} in the cell.',
+        'counter.made': 'This counts every copy made since the start, including ones already broken down.',
+        legend: 'Each dot stands for many molecules. This line says how many.',
+        'status.energy': 'This bar is the cell\'s energy, its ATP. It runs low when too little sugar gets in.',
+        'status.growth': 'This says how fast the cell is growing now.',
+        'readout.sugarIn': 'This says how much sugar is getting into the cell.',
+        'graph.protein': 'This line is the number of {proteins} over time.',
+        'graph.target': 'The dashed line is the number you are aiming for.',
+        'graph.zone': 'Inside the shaded zone the cell has enough {proteins}, and not more than it can use.',
+        'counter.rates': 'These count how fast {proteins} are made and how fast they are cut up.',
+        'control.dial': 'This dial sets how often RNA polymerase starts copying the gene: ×2 is twice as often as ×1.',
+        'bands.phases': 'The shaded bands show which sugars were outside at each time.',
+        'status.doubling': 'This is how long the cell takes to double in size.',
+      },
+      counters: { mRNA: 'mRNA copies', made: 'copies made', rates: 'made {a} a minute · cut up {b} a minute' },
+      onoff: { off: 'Off', on: 'On', label: 'Switch the {name} gene off or on', choose: 'Choose a gene to watch' },
+      graph: { title: '{Proteins} over time', twoTitle: 'Proteins over time', empty: 'The line starts when the cell runs.' },
+      allControls: 'All controls', allControlsLabel: 'All controls: every graph, readout and option of the lab',
+      drugs: 'Drugs', drugsShow: 'Show the drugs', drugsHide: 'Hide the drugs',
+      older: 'An older version of this level. It still shows every readout, and it will be redone in the new style.',
+      olderChip: 'older version',
+      next: 'Next',
+    },
+
     // Level screens (LEVELS §5.2–5.9).
     game: {
       levels: 'Levels', levelsLabel: 'Back to the level list',
@@ -498,7 +531,17 @@
         right: 'matched', wrong: 'did not match',
       },
       demo: { continue: 'Continue to your run' },
-      debrief: { title: 'Debrief', questionOf: 'Question {i} of {n}', notQuite: 'Not quite', right: 'Right.' },
+      // Explain (PROLOGUE §1.4): nothing is marked with a cross; a first wrong tap is answered with what happens.
+      debrief: { title: 'Explain', questionOf: 'Question {i} of {n}', actually: 'Here is what actually happens: {fb}', pickAnother: 'Pick another.', yes: 'Yes. {fb}' },
+      // The Watch step (PROLOGUE §1.4, §2.4.3): guesses are never marked right or wrong.
+      watch: {
+        stepOf: 'Step {i} of {n}', see: 'See what happens', guessTitle: 'Your guess',
+        guessNote: 'A guess, not a test. Nothing is marked right or wrong; the cell shows what happens.',
+        happened: 'What happened: {fb}', youGuessed: 'You guessed: {option}',
+        waiting: 'Watching the cell…', paused: 'Run the cell to see it happen.', run: 'Run',
+        act: 'Use the switch below the cell.', actZoom: 'Use the Cell, Gene and Protein buttons on the cell.',
+        speedUp: 'Speed up', lookCloser: 'Look closer', label: 'Guide',
+      },
       question: { title: 'A question' },
       result: {
         title: 'Result', met: 'Goal met', notMet: 'Goal not met: {reason}',
@@ -516,7 +559,8 @@
       complete: {
         title: 'Level complete',
         goalMet: 'Goal met', goalNotMet: 'Goal not met', efficiency: 'Efficiency {v}', prediction: 'Prediction {v}',
-        debrief: 'Debrief {a} of {b} right first time', expert: 'Expert {v}', expertOf: 'Expert {a} of {b}', total: 'Total {v}', notScored: 'Not scored',
+        predictionNotScored: 'Prediction {v} (not scored)',
+        debrief: 'Explain {a} of {b} right first time', expert: 'Expert {v}', expertOf: 'Expert {a} of {b}', total: 'Total {v}', notScored: 'Not scored',
         codeLabel: 'Completion code', copy: 'Copy code', share: 'Share', copied: 'Copied. Paste it into the Canvas quiz.',
         copyFailed: 'Press and hold the code to copy it.', keep: 'Paste your code into Canvas now; this device may not keep it.',
         canvas: 'Paste it into the Canvas quiz for this level.',

@@ -725,6 +725,111 @@ body:not([data-layout="compact"]) .dz-parts { flex-wrap: nowrap; }
 .lv-sub { margin-top: 2px; }
 .lv-working { font-weight: 600; }
 
+/* ---- tiered screens (docs/PROLOGUE.md §5): the status readouts, big counters, the Off/On switch, the simple graph ---- */
+.status.is-one-row { grid-template-rows: 46px; }
+.st-growth-word, .st-sugar { color: var(--muted); white-space: nowrap; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.status.is-tiered .st-row2 { gap: 10px; }
+/* Three words on a phone's second row: energy, growth, sugar in (12 px, the gauge a little shorter), so all three fit at 360 px. */
+body[data-layout="compact"] .status.is-tiered .st-row2 { font-size: 12px; }
+body[data-layout="compact"] .status.is-tiered .gauge { width: 40px; }
+body[data-layout="compact"] .status.is-tiered .st-atp { gap: 4px; }
+body[data-layout="compact"] .status.is-tiered .st-sugar { margin-left: auto; }
+.status.no-gen .st-sep { display: none !important; }
+body[data-layout="wide"] .st-growth-word, body[data-layout="wide"] .st-sugar { font-size: 15px; }
+body[data-legend="short"] .legend-full { display: none; }
+body[data-legend="short"] .legend-short { display: block; }
+.focusbar.is-tiered { padding: 2px 12px 4px; }
+.tb-head {
+  width: 100%; display: grid; grid-template-columns: auto minmax(0, 1fr) auto; grid-template-areas: "chip title change" "counters counters counters";
+  align-items: center; column-gap: 8px; row-gap: 2px; padding: 4px 0 2px; border: 0; background: none; text-align: left; color: var(--ink);
+}
+.tb-head.is-button { min-height: 44px; }
+.tb-chip { grid-area: chip; width: 8px; height: 18px; }
+.tb-title { grid-area: title; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-weight: 600; font-size: 14px; }
+.tb-title .sym { font-size: 13px; }
+.tb-head .fb-change { grid-area: change; }
+.tb-head > .tb-counters { grid-area: counters; }
+.tb-counters { grid-area: counters; display: grid; grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr); gap: 10px; min-width: 0; }
+.tb-counter { display: flex; flex-direction: column; min-width: 0; line-height: 1.15; }
+.tb-num { font-size: 22px; font-weight: 700; white-space: nowrap; }
+.tb-label { font-size: 13px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.tb-counter.is-rates .tb-num { font-size: 14px; font-weight: 600; white-space: normal; }
+.tb-ctrl { padding-top: 4px; }
+/* Wider screens: the counters keep their own width, with the switch beside them. */
+body:not([data-layout="compact"]) .focusbar.is-tiered { display: flex; align-items: flex-end; gap: 24px; padding-bottom: 6px; }
+body:not([data-layout="compact"]) .focusbar.is-tiered .tb-head { flex: 0 1 auto; width: auto; min-width: 0; }
+body:not([data-layout="compact"]) .focusbar.is-tiered .tb-ctrl { flex: 0 1 420px; min-width: 240px; }
+body:not([data-layout="compact"]) .tb-counters { grid-auto-columns: minmax(96px, max-content); justify-content: start; gap: 32px; }
+/* Short screens: the name, the counts and the change mark on one line (the height of the M1 focus bar). */
+body[data-short] .tb-head { grid-template-areas: "chip title counters change"; grid-template-columns: auto minmax(0, 1fr) auto auto; min-height: 44px; padding: 0; }
+body[data-short] .tb-counters { grid-auto-columns: auto; gap: 10px; }
+body[data-short] .tb-counter { flex-direction: row; align-items: baseline; gap: 4px; }
+body[data-short] .tb-num { font-size: 16px; }
+body[data-short] .tb-label { font-size: 12px; max-width: 86px; }
+body[data-short] .tb-head .fb-change-word { display: none; }
+.card-cost.is-simple { justify-content: flex-end; }
+.btn.drugs-fold { margin-bottom: 18px; justify-content: center; font-weight: 600; }
+/* The single simple graph (its pane has nothing else). */
+.sg-figure { display: flex; flex-direction: column; }
+.sg-wrap { height: min(50vh, 360px); }
+body[data-layout="wide"] #pane-graphs .sg-figure { height: 100%; }
+body[data-layout="wide"] #pane-graphs .sg-wrap { flex: 1 1 auto; height: auto; min-height: 150px; }
+.sg-keys { display: flex; flex-wrap: wrap; gap: 4px 16px; font-size: 13px; color: var(--ink); margin-top: 4px; }
+.sg-key { display: inline-flex; align-items: center; gap: 6px; }
+.sg-swatch-target { border-top-color: var(--ink); }
+.sg-swatch-zone { display: inline-block; width: 18px; height: 10px; border-radius: 2px; background: var(--good); opacity: .35; }
+body[data-layout="wide"][data-nographs]:not([data-cellonly]) #app { grid-template-rows: auto auto auto minmax(0, 1fr) auto 0; }
+/* A tier without the Genes and Medium panels (the Cell and the Graph only): no right column on a laptop. */
+body[data-layout="wide"][data-nopanel]:not([data-cellonly]) #app {
+  grid-template-columns: minmax(0, 1fr); grid-template-rows: auto auto minmax(0, 58fr) auto minmax(0, 42fr);
+  grid-template-areas: "status" "hud" "stage" "narr" "graphs";
+}
+body[data-layout="wide"][data-nopanel] #paneltabs, body[data-layout="wide"][data-nopanel] #pane-genes, body[data-layout="wide"][data-nopanel] #pane-medium { display: none; }
+/* The lab's "All controls" switch: in the Medium panel on a phone, in the status strip on a laptop. */
+.lab-mode-row { display: flex; justify-content: flex-end; margin: 0 0 8px; }
+body[data-layout="wide"] .lab-mode-row { display: none; }
+.btn.lab-switch { min-height: 44px; display: inline-flex; align-items: center; gap: 10px; padding: 0 14px 0 10px; font-size: 15px; }
+.lab-switch-track { position: relative; flex: none; width: 36px; height: 20px; border-radius: 10px; background: var(--muted-fill); box-shadow: inset 0 0 0 1px var(--line); }
+.lab-switch-knob { position: absolute; top: 2px; left: 2px; width: 16px; height: 16px; border-radius: 50%; background: var(--panel); box-shadow: 0 1px 2px rgba(0, 0, 0, .35); transition: left 150ms; }
+.lab-switch.is-on .lab-switch-track { background: var(--accent); }
+.lab-switch.is-on .lab-switch-knob { left: 18px; }
+.btn.st-lab-switch { display: none; }
+body[data-layout="wide"] .btn.st-lab-switch:not([hidden]) { display: inline-flex; margin-left: auto; }
+/* An older level (not yet redone in the new pattern) says so on its task card. */
+.lv-older { font-size: 14px !important; color: var(--muted); padding: 6px 10px; border-left: 4px solid var(--line); background: var(--bg); border-radius: 6px; }
+/* Explain: a tried option shows what actually happens, without a cross. */
+.lv-option.is-tried { border-color: var(--muted); box-shadow: inset 0 0 0 1px var(--muted); background: var(--panel); cursor: default; }
+.lv-pick { color: var(--accent); font-weight: 600; }
+/* The guide (PROLOGUE §2.4.3, §5.2): a callout over the cell view, and a ring on what it is about. */
+.guide {
+  position: fixed; z-index: 18;
+  background: var(--panel); color: var(--ink); border: 1px solid var(--line); border-left: 4px solid var(--accent); border-radius: 12px;
+  padding: 5px 8px 6px 12px; box-shadow: 0 4px 18px rgba(0, 0, 0, .18); display: flex; flex-direction: column; gap: 2px;
+}
+.gd-head { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
+.gd-who { font-size: 12px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); }
+.gd-who.is-you { color: var(--accent); }
+.gd-count { font-size: 12px; color: var(--muted); }
+.gd-line { font-size: 16px; line-height: 1.35; }
+.gd-foot { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 4px 8px; }
+.gd-extra { flex: 1 1 180px; display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.gd-extra[hidden] + .gd-actions { margin-left: auto; }
+.gd-extra-line { font-size: 15px; line-height: 1.3; }
+.gd-extra-line.is-cause { font-weight: 600; }
+.gd-extra-line.is-guessed, .gd-extra-line.is-wait, .gd-extra-line.is-hint { color: var(--muted); }
+.gd-extra-line.is-note { color: var(--warn-ink); font-weight: 600; }
+.gd-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 8px; margin-left: auto; }
+.btn.gd-btn { min-height: 44px; padding: 0 16px; }
+.guide-ring {
+  position: fixed; z-index: 17; pointer-events: none; border-radius: 12px; border: 3px solid var(--accent);
+  box-shadow: 0 0 0 2px var(--panel); animation: gd-pulse 1.6s ease-in-out infinite;
+}
+.guide-ring.is-point { border-radius: 50%; }
+@keyframes gd-pulse { 0%, 100% { opacity: 1; } 50% { opacity: .45; } }
+.lv-guess .lv-line-small { color: var(--muted); }
+.lv-fb-line { font-size: 15px !important; }
+.lv-fb-line.is-guessed { color: var(--muted); }
+
 @media (hover: hover) {
   .btn:hover, .chip:hover, .speed-chip:hover { border-color: var(--muted); }
 }
@@ -750,8 +855,14 @@ body[data-reduced-motion] * { transition-duration: 0s !important; animation: non
 <script src="src/shared/btc-dots.js"></script>
 <script src="src/shared/btc-recorder.js"></script>
 <script src="src/shared/btc-narrate.js"></script>
+<script src="src/shared/btc-seq.js"></script>
+<script src="src/shared/btc-seqdata.js"></script>
+<script src="src/shared/btc-mrnawatch.js"></script>
+<script src="src/shared/btc-fold.js"></script>
+<script src="src/shared/btc-closeup.js"></script>
 <script src="src/game/btc-level-kit.js"></script>
 <script src="src/game/btc-misconceptions.js"></script>
+<script src="src/game/btc-watch.js"></script>
 <script src="src/levels/btc-level-constants.js"></script>
 <script src="src/levels/btc-level-1-1.js"></script>
 <script src="src/levels/btc-level-1-2.js"></script>
@@ -772,8 +883,10 @@ body[data-reduced-motion] * { transition-duration: 0s !important; animation: non
 <script src="src/app/btc-loop.js"></script>
 <script src="src/app/btc-cellgeom.js"></script>
 <script src="src/app/btc-controls.js"></script>
+<script src="src/app/btc-tiers.js"></script>
 <script src="src/app/btc-cellview.js"></script>
 <script src="src/app/btc-plot.js"></script>
+<script src="src/app/btc-simplegraph.js"></script>
 <script src="src/app/btc-status.js"></script>
 <script src="src/app/btc-genes-panel.js"></script>
 <script src="src/app/btc-medium-panel.js"></script>
@@ -784,7 +897,11 @@ body[data-reduced-motion] * { transition-duration: 0s !important; animation: non
 <script src="src/app/btc-hud.js"></script>
 <script src="src/app/btc-sketch.js"></script>
 <script src="src/app/btc-designer.js"></script>
+<script src="src/app/btc-geneview.js"></script>
+<script src="src/app/btc-machine.js"></script>
+<script src="src/app/btc-zoom.js"></script>
 <script src="src/app/btc-prologue.js"></script>
+<script src="src/app/btc-guide.js"></script>
 <script src="src/app/btc-level-ui.js"></script>
 <script src="src/app/btc-app.js"></script>
 </head>
